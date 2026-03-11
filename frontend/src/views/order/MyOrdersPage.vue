@@ -64,6 +64,12 @@
 
 <script>
 import { cancelOrder, getMyOrders, getOrderDetail } from '../../api/order'
+import {
+  auditResultLabel as auditResultLabelDict,
+  orderStatusLabel as orderStatusLabelDict,
+  orderTypeLabel as orderTypeLabelDict,
+  sampleTestingStatusLabel as sampleTestingStatusLabelDict
+} from '../../utils/dicts'
 
 export default {
   props: {
@@ -111,43 +117,16 @@ export default {
       await this.load()
     },
     orderTypeLabel(value) {
-      const mapping = {
-        MACHINE: '上机预约',
-        SAMPLE: '送样预约'
-      }
-      return mapping[value] || value || '-'
+      return orderTypeLabelDict(value)
     },
     orderStatusLabel(value) {
-      const mapping = {
-        PENDING_AUDIT: '待审核',
-        WAITING_USE: '待使用',
-        IN_USE: '使用中',
-        WAITING_RECEIVE: '待接样',
-        TESTING: '测试中',
-        WAITING_RESULT: '待结果确认',
-        WAITING_SETTLEMENT: '待结算',
-        COMPLETED: '已完成',
-        REJECTED: '已驳回',
-        CANCELED: '已取消'
-      }
-      return mapping[value] || value || '-'
+      return orderStatusLabelDict(value)
     },
     auditResultLabel(value) {
-      const mapping = {
-        PASS: '通过',
-        REJECT: '驳回',
-        PENDING: '待审核'
-      }
-      return mapping[value] || value || '-'
+      return auditResultLabelDict(value)
     },
     sampleTestingStatusLabel(value) {
-      const mapping = {
-        WAITING_RECEIVE: '待接样',
-        TESTING: '测试中',
-        WAITING_RESULT: '待结果确认',
-        COMPLETED: '已完成'
-      }
-      return mapping[value] || value || '-'
+      return sampleTestingStatusLabelDict(value)
     }
   }
 }

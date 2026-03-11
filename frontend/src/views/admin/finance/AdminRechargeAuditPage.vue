@@ -14,11 +14,11 @@
         <el-table-column prop="remark" label="备注" />
         <el-table-column label="操作" width="180">
           <template #default="{ row }">
-            <div v-if="row.status === 'PENDING'" style="display: flex; gap: 8px;">
+            <div v-if="row.status === 'PENDING'" class="action-wrap">
               <el-button link type="primary" @click="audit(row, 'APPROVE')">通过</el-button>
               <el-button link type="danger" @click="audit(row, 'REJECT')">驳回</el-button>
             </div>
-            <span v-else style="color: var(--muted);">已处理</span>
+            <span v-else class="handled-text">已处理</span>
           </template>
         </el-table-column>
       </el-table>
@@ -30,6 +30,7 @@
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { auditRecharge, getRechargeOrders } from '../../../api/account'
+import { rechargeStatusLabel, rechargeStatusTagType } from '../../../utils/dicts'
 
 export default {
   data() {
@@ -62,21 +63,22 @@ export default {
       await this.load()
     },
     statusLabel(value) {
-      const mapping = {
-        PENDING: '待审核',
-        PASS: '已通过',
-        REJECT: '已驳回'
-      }
-      return mapping[value] || value || '-'
+      return rechargeStatusLabel(value)
     },
     statusTagType(value) {
-      const mapping = {
-        PENDING: 'warning',
-        PASS: 'success',
-        REJECT: 'danger'
-      }
-      return mapping[value] || 'info'
+      return rechargeStatusTagType(value)
     }
   }
 }
 </script>
+
+<style scoped>
+.action-wrap {
+  display: flex;
+  gap: 8px;
+}
+
+.handled-text {
+  color: var(--muted);
+}
+</style>

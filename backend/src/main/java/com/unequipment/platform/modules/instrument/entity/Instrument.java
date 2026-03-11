@@ -2,6 +2,7 @@ package com.unequipment.platform.modules.instrument.entity;
 
 import com.unequipment.platform.common.model.BaseEntity;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -13,6 +14,15 @@ public class Instrument extends BaseEntity {
     private String instrumentName;
     private String model;
     private String brand;
+    private String assetNo;
+    private String manufacturer;
+    private String supplier;
+    private String originCountry;
+    private LocalDate purchaseDate;
+    private LocalDate productionDate;
+    private String equipmentSource;
+    private String serviceContactName;
+    private String serviceContactPhone;
     private Long categoryId;
     private Long departmentId;
     private Long ownerUserId;
@@ -34,6 +44,11 @@ public class Instrument extends BaseEntity {
     private String usageDesc;
     private String sampleDesc;
     private String noticeText;
+    private String technicalSpecs;
+    private String mainFunctions;
+    private String serviceContent;
+    private String userNotice;
+    private String chargeStandard;
     private Integer isHot;
     private Integer sortNo;
 

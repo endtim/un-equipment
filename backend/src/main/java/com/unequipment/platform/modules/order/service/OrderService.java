@@ -1,11 +1,14 @@
 package com.unequipment.platform.modules.order.service;
 
 import com.unequipment.platform.common.exception.BizException;
+import com.unequipment.platform.common.exception.ErrorCodes;
+import com.unequipment.platform.common.util.BizNoGenerator;
 import com.unequipment.platform.modules.content.service.MessageService;
 import com.unequipment.platform.modules.finance.service.FinanceService;
 import com.unequipment.platform.modules.instrument.entity.Instrument;
 import com.unequipment.platform.modules.instrument.service.InstrumentService;
 import com.unequipment.platform.modules.log.service.OperationLogService;
+import com.unequipment.platform.modules.order.assembler.OrderAssembler;
 import com.unequipment.platform.modules.order.dto.AuditRequest;
 import com.unequipment.platform.modules.order.dto.MachineReservationRequest;
 import com.unequipment.platform.modules.order.dto.OrderActionRequest;
@@ -18,15 +21,22 @@ import com.unequipment.platform.modules.order.repository.AuditRecordRepository;
 import com.unequipment.platform.modules.order.repository.ReservationOrderRepository;
 import com.unequipment.platform.modules.order.repository.SampleOrderRepository;
 import com.unequipment.platform.modules.order.repository.UsageRecordRepository;
+import com.unequipment.platform.modules.order.vo.OrderDetailVO;
+import com.unequipment.platform.modules.order.vo.OrderSummaryVO;
+import com.unequipment.platform.modules.order.vo.ReservedSlotVO;
 import com.unequipment.platform.modules.system.entity.SysUser;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,6 +46,41 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class OrderService {
 
+    private static final String TYPE_MACHINE = "MACHINE";
+    private static final String TYPE_SAMPLE = "SAMPLE";
+    private static final String ACTION_AUDIT = "AUDIT";
+    private static final String ACTION_CHECK_IN = "CHECK_IN";
+    private static final String ACTION_RECEIVE_SAMPLE = "RECEIVE_SAMPLE";
+    private static final String ACTION_UPLOAD_RESULT = "UPLOAD_RESULT";
+    private static final String ACTION_FINISH_USE = "FINISH_USE";
+    private static final String ACTION_SETTLE = "SETTLE";
+    private static final String ACTION_CANCEL = "CANCEL";
+
+    private static final Map<String, Set<String>> ACTION_ALLOWED_STATUS;
+    private static final Map<String, Set<String>> ACTION_ALLOWED_TYPE;
+
+    static {
+        Map<String, Set<String>> statusMap = new HashMap<>();
+        statusMap.put(ACTION_AUDIT, setOf("PENDING_AUDIT"));
+        statusMap.put(ACTION_CHECK_IN, setOf("WAITING_USE"));
+        statusMap.put(ACTION_RECEIVE_SAMPLE, setOf("WAITING_RECEIVE"));
+        statusMap.put(ACTION_UPLOAD_RESULT, setOf("TESTING"));
+        statusMap.put(ACTION_FINISH_USE, setOf("IN_USE"));
+        statusMap.put(ACTION_SETTLE, setOf("WAITING_SETTLEMENT"));
+        statusMap.put(ACTION_CANCEL, setOf("PENDING_AUDIT", "APPROVED", "WAITING_USE", "WAITING_RECEIVE"));
+        ACTION_ALLOWED_STATUS = Collections.unmodifiableMap(statusMap);
+
+        Map<String, Set<String>> typeMap = new HashMap<>();
+        typeMap.put(ACTION_AUDIT, setOf(TYPE_MACHINE, TYPE_SAMPLE));
+        typeMap.put(ACTION_CHECK_IN, setOf(TYPE_MACHINE));
+        typeMap.put(ACTION_RECEIVE_SAMPLE, setOf(TYPE_SAMPLE));
+        typeMap.put(ACTION_UPLOAD_RESULT, setOf(TYPE_SAMPLE));
+        typeMap.put(ACTION_FINISH_USE, setOf(TYPE_MACHINE));
+        typeMap.put(ACTION_SETTLE, setOf(TYPE_MACHINE, TYPE_SAMPLE));
+        typeMap.put(ACTION_CANCEL, setOf(TYPE_MACHINE, TYPE_SAMPLE));
+        ACTION_ALLOWED_TYPE = Collections.unmodifiableMap(typeMap);
+    }
+
     private final ReservationOrderRepository orderRepository;
     private final SampleOrderRepository sampleOrderRepository;
     private final UsageRecordRepository usageRecordRepository;
@@ -44,16 +89,16 @@ public class OrderService {
     private final FinanceService financeService;
     private final MessageService messageService;
     private final OperationLogService operationLogService;
+    private final OrderAssembler orderAssembler;
 
     @Transactional
     public ReservationOrder createMachineOrder(SysUser user, MachineReservationRequest request) {
         Instrument instrument = instrumentService.getById(request.getInstrumentId());
         instrumentService.ensureReservable(instrument);
-        if (!request.getReservedEnd().isAfter(request.getReservedStart())) {
-            throw new BizException("reserved time range is invalid");
-        }
+        instrumentService.ensureOrderTypeSupported(instrument, TYPE_MACHINE, user);
+        instrumentService.validateMachineReserveWindow(instrument, request.getReservedStart(), request.getReservedEnd());
         if (orderRepository.countMachineConflict(instrument.getId(), request.getReservedEnd(), request.getReservedStart()) > 0) {
-            throw new BizException("reservation time conflicts with existing order");
+            throw new BizException(ErrorCodes.ORDER_TIME_CONFLICT, "reservation time conflicts with existing order");
         }
 
         BigDecimal hours = BigDecimal.valueOf(Duration.between(request.getReservedStart(), request.getReservedEnd()).toMinutes())
@@ -61,7 +106,7 @@ public class OrderService {
         BigDecimal amount = nullSafe(instrument.getPriceInternal()).multiply(hours);
         financeService.ensureEnoughBalance(user, amount);
 
-        ReservationOrder order = buildBaseOrder(user, instrument, "MACHINE");
+        ReservationOrder order = buildBaseOrder(user, instrument, TYPE_MACHINE);
         order.setReserveStart(request.getReservedStart());
         order.setReserveEnd(request.getReservedEnd());
         order.setReserveMinutes((int) Duration.between(request.getReservedStart(), request.getReservedEnd()).toMinutes());
@@ -79,10 +124,12 @@ public class OrderService {
     public ReservationOrder createSampleOrder(SysUser user, SampleReservationRequest request) {
         Instrument instrument = instrumentService.getById(request.getInstrumentId());
         instrumentService.ensureReservable(instrument);
+        instrumentService.ensureOrderTypeSupported(instrument, TYPE_SAMPLE, user);
         BigDecimal amount = nullSafe(instrument.getPriceExternal()).multiply(BigDecimal.valueOf(request.getSampleCount()));
         financeService.ensureEnoughBalance(user, amount);
 
-        ReservationOrder order = buildBaseOrder(user, instrument, "SAMPLE");
+        ReservationOrder order = buildBaseOrder(user, instrument, TYPE_SAMPLE);
+        order.setReserveMinutes(0);
         order.setEstimatedAmount(amount);
         order.setFinalAmount(amount);
         order.setRemark(request.getRemark());
@@ -109,13 +156,14 @@ public class OrderService {
     public ReservationOrder audit(Long orderId, SysUser auditor, AuditRequest request) {
         ReservationOrder order = getOrder(orderId);
         assertManageable(order, auditor);
-        if (!"PENDING_AUDIT".equals(order.getOrderStatus())) {
-            throw new BizException("order is not pending audit");
+        assertActionAllowed(order, ACTION_AUDIT);
+        if (!"APPROVE".equalsIgnoreCase(request.getAction()) && !"REJECT".equalsIgnoreCase(request.getAction())) {
+            throw new BizException(ErrorCodes.ORDER_INVALID_ACTION, "invalid audit action");
         }
 
         if ("APPROVE".equalsIgnoreCase(request.getAction())) {
             order.setAuditStatus("PASS");
-            order.setOrderStatus("MACHINE".equals(order.getOrderType()) ? "WAITING_USE" : "WAITING_RECEIVE");
+            order.setOrderStatus(TYPE_MACHINE.equals(order.getOrderType()) ? "WAITING_USE" : "WAITING_RECEIVE");
             order.setApproveTime(LocalDateTime.now());
             messageService.send(simpleUser(order.getUserId()), "Order approved", "Your order was approved.");
         } else {
@@ -134,9 +182,7 @@ public class OrderService {
     public ReservationOrder checkIn(Long orderId, SysUser operator) {
         ReservationOrder order = getOrder(orderId);
         assertManageable(order, operator);
-        if (!"MACHINE".equals(order.getOrderType()) || !"WAITING_USE".equals(order.getOrderStatus())) {
-            throw new BizException("order cannot check in");
-        }
+        assertActionAllowed(order, ACTION_CHECK_IN);
         order.setOrderStatus("IN_USE");
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
@@ -169,16 +215,14 @@ public class OrderService {
     public ReservationOrder receiveSample(Long orderId, SysUser operator) {
         ReservationOrder order = getOrder(orderId);
         assertManageable(order, operator);
-        if (!"SAMPLE".equals(order.getOrderType()) || !"WAITING_RECEIVE".equals(order.getOrderStatus())) {
-            throw new BizException("order cannot receive sample");
-        }
+        assertActionAllowed(order, ACTION_RECEIVE_SAMPLE);
         order.setOrderStatus("TESTING");
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
 
         SampleOrder sampleOrder = sampleOrderRepository.findByOrderId(orderId);
         if (sampleOrder == null) {
-            throw new BizException("sample detail missing");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "sample detail missing");
         }
         sampleOrder.setReceiveStatus("RECEIVED");
         sampleOrder.setTestingStatus("TESTING");
@@ -195,15 +239,13 @@ public class OrderService {
     public ReservationOrder uploadSampleResult(Long orderId, SysUser operator, OrderActionRequest request) {
         ReservationOrder order = getOrder(orderId);
         assertManageable(order, operator);
-        if (!"SAMPLE".equals(order.getOrderType()) || !"TESTING".equals(order.getOrderStatus())) {
-            throw new BizException("order cannot upload result");
-        }
+        assertActionAllowed(order, ACTION_UPLOAD_RESULT);
         SampleOrder sampleOrder = sampleOrderRepository.findByOrderId(orderId);
         if (sampleOrder == null) {
-            throw new BizException("sample detail missing");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "sample detail missing");
         }
         sampleOrder.setResultSummary(request.getComment());
-        sampleOrder.setTestingStatus("WAITING_RESULT");
+        sampleOrder.setTestingStatus("RESULT_UPLOADED");
         sampleOrder.setUpdateTime(LocalDateTime.now());
         sampleOrderRepository.update(sampleOrder);
         order.setOrderStatus("WAITING_SETTLEMENT");
@@ -218,12 +260,10 @@ public class OrderService {
     public ReservationOrder finishMachine(Long orderId, SysUser operator, OrderActionRequest request) {
         ReservationOrder order = getOrder(orderId);
         assertManageable(order, operator);
-        if (!"MACHINE".equals(order.getOrderType()) || !"IN_USE".equals(order.getOrderStatus())) {
-            throw new BizException("order cannot finish");
-        }
+        assertActionAllowed(order, ACTION_FINISH_USE);
         UsageRecord usage = usageRecordRepository.findByOrderId(orderId);
         if (usage == null) {
-            throw new BizException("usage record missing");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "usage record missing");
         }
         usage.setEndTime(LocalDateTime.now());
         if (usage.getStartTime() != null) {
@@ -245,9 +285,7 @@ public class OrderService {
     public ReservationOrder settle(Long orderId, SysUser operator) {
         ReservationOrder order = getOrder(orderId);
         assertManageable(order, operator);
-        if (!"WAITING_SETTLEMENT".equals(order.getOrderStatus())) {
-            throw new BizException("order is not waiting settlement");
-        }
+        assertActionAllowed(order, ACTION_SETTLE);
         financeService.deductForOrder(order);
         order.setSettlementStatus("CONFIRMED");
         order.setPayStatus("PAID");
@@ -265,10 +303,16 @@ public class OrderService {
     public ReservationOrder cancel(Long orderId, SysUser user) {
         ReservationOrder order = getOrder(orderId);
         if (!order.getUserId().equals(user.getId())) {
-            throw new BizException("cannot cancel others order");
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "cannot cancel others order");
         }
-        if ("COMPLETED".equals(order.getOrderStatus()) || "CANCELED".equals(order.getOrderStatus())) {
-            throw new BizException("order cannot be canceled");
+        assertActionAllowed(order, ACTION_CANCEL);
+        if ("PAID".equalsIgnoreCase(order.getPayStatus())
+            && !"REFUNDED".equalsIgnoreCase(order.getPayStatus())) {
+            financeService.refundForOrder(order, "Order canceled by user");
+            order.setPayStatus("REFUNDED");
+            order.setSettlementStatus("REFUNDED");
+        } else {
+            order.setSettlementStatus("VOID");
         }
         order.setOrderStatus("CANCELED");
         order.setCancelReason("Canceled by user");
@@ -280,44 +324,46 @@ public class OrderService {
         return getOrder(orderId);
     }
 
-    public List<Map<String, Object>> myOrders(SysUser user) {
-        return orderRepository.findByUserId(user.getId()).stream().map(this::toView).collect(Collectors.toList());
+    public List<OrderSummaryVO> myOrders(SysUser user) {
+        return orderAssembler.toSummaryList(orderRepository.findByUserId(user.getId()));
     }
 
-    public Map<String, Object> detail(Long orderId, SysUser user) {
+    public OrderDetailVO detail(Long orderId, SysUser user) {
         ReservationOrder order = getOrder(orderId);
         assertVisible(order, user);
-        Map<String, Object> result = toView(order);
-        result.put("auditRecords", auditRecordRepository.findByOrderId(orderId));
         UsageRecord usage = usageRecordRepository.findByOrderId(orderId);
-        if (usage != null) {
-            result.put("usageRecord", usage);
-        }
         SampleOrder sampleOrder = sampleOrderRepository.findByOrderId(orderId);
-        if (sampleOrder != null) {
-            result.put("sampleDetail", sampleOrder);
-        }
-        return result;
+        return orderAssembler.toDetail(order, auditRecordRepository.findByOrderId(orderId), usage, sampleOrder);
     }
 
-    public List<Map<String, Object>> allOrders(SysUser user) {
-        return orderRepository.findAll().stream()
+    public List<OrderSummaryVO> allOrders(SysUser user) {
+        return orderAssembler.toSummaryList(orderRepository.findAll().stream()
             .filter(order -> canView(order, user))
-            .map(this::toView)
+            .collect(Collectors.toList()));
+    }
+
+    public List<ReservedSlotVO> listMachineReservedSlots(Long instrumentId, LocalDate date) {
+        instrumentService.getById(instrumentId);
+        LocalDate targetDate = date == null ? LocalDate.now() : date;
+        LocalDateTime dayStart = targetDate.atStartOfDay();
+        LocalDateTime dayEnd = dayStart.plusDays(1);
+        return orderRepository.findMachineReservedSlots(instrumentId, dayStart, dayEnd).stream()
+            .map(order -> orderAssembler.toReservedSlot(order, dayStart, dayEnd))
             .collect(Collectors.toList());
     }
 
     public ReservationOrder getOrder(Long orderId) {
         ReservationOrder order = orderRepository.findById(orderId);
         if (order == null) {
-            throw new BizException("order not found");
+            throw new BizException(ErrorCodes.ORDER_NOT_FOUND, "order not found");
         }
         return order;
     }
 
     private ReservationOrder buildBaseOrder(SysUser user, Instrument instrument, String orderType) {
         ReservationOrder order = new ReservationOrder();
-        order.setOrderNo(orderType + "-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")));
+        String orderPrefix = TYPE_MACHINE.equals(orderType) ? "ORDM" : "ORDS";
+        order.setOrderNo(BizNoGenerator.next(orderPrefix));
         order.setOrderType(orderType);
         order.setUserId(user.getId());
         order.setInstrumentId(instrument.getId());
@@ -325,6 +371,7 @@ public class OrderService {
         order.setOwnerUserId(instrument.getOwnerUserId());
         order.setContactName(user.getRealName());
         order.setContactPhone(user.getPhone() == null ? "-" : user.getPhone());
+        order.setReserveMinutes(0);
         order.setOrderStatus("PENDING_AUDIT");
         order.setAuditStatus("PENDING");
         order.setPayStatus("UNPAID");
@@ -353,22 +400,6 @@ public class OrderService {
         auditRecordRepository.insert(auditRecord);
     }
 
-    private Map<String, Object> toView(ReservationOrder order) {
-        Map<String, Object> result = new HashMap<>();
-        result.put("id", order.getId());
-        result.put("orderNo", order.getOrderNo());
-        result.put("orderType", order.getOrderType());
-        result.put("status", order.getOrderStatus());
-        result.put("instrumentName", order.getInstrumentName());
-        result.put("userName", order.getUserName());
-        result.put("reservedStart", order.getReserveStart());
-        result.put("reservedEnd", order.getReserveEnd());
-        result.put("amount", order.getFinalAmount());
-        result.put("remark", order.getRemark());
-        result.put("createdAt", order.getCreateTime());
-        return result;
-    }
-
     private BigDecimal nullSafe(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }
@@ -381,13 +412,13 @@ public class OrderService {
 
     private void assertManageable(ReservationOrder order, SysUser user) {
         if (!canManage(order, user)) {
-            throw new BizException("permission denied for this order");
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "permission denied for this order");
         }
     }
 
     private void assertVisible(ReservationOrder order, SysUser user) {
         if (!canView(order, user)) {
-            throw new BizException("cannot access this order");
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "cannot access this order");
         }
     }
 
@@ -413,5 +444,20 @@ public class OrderService {
 
     private boolean hasRole(SysUser user, String roleCode) {
         return user != null && roleCode.equalsIgnoreCase(user.getPrimaryRoleCode());
+    }
+
+    private void assertActionAllowed(ReservationOrder order, String action) {
+        Set<String> allowedTypes = ACTION_ALLOWED_TYPE.getOrDefault(action, Collections.emptySet());
+        if (!allowedTypes.contains(order.getOrderType())) {
+            throw new BizException(ErrorCodes.ORDER_TYPE_NOT_ALLOWED, "action is not allowed for this order type");
+        }
+        Set<String> allowedStatuses = ACTION_ALLOWED_STATUS.getOrDefault(action, Collections.emptySet());
+        if (!allowedStatuses.contains(order.getOrderStatus())) {
+            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "order status does not allow this action");
+        }
+    }
+
+    private static Set<String> setOf(String... values) {
+        return Collections.unmodifiableSet(new HashSet<>(Arrays.asList(values)));
     }
 }

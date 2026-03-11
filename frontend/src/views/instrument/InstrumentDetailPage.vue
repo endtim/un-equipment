@@ -7,9 +7,27 @@
         <div class="hero-desc">{{ detail.description || '暂无仪器简介。' }}</div>
         <div class="hero-tags">
           <el-tag :type="statusTagType(detail.status)" size="small">{{ statusLabel }}</el-tag>
-          <el-tag size="small">{{ modeLabel(detail.openMode) }}</el-tag>
+          <el-tag size="small">{{ openModeLabel(detail.openMode) }}</el-tag>
           <el-tag v-if="Number(detail.needAudit) === 1" size="small" type="warning">需审核</el-tag>
           <el-tag v-if="Number(detail.requireTraining) === 1" size="small" type="info">需培训</el-tag>
+        </div>
+        <div class="metrics-row">
+          <div class="metric-item">
+            <strong>{{ detail.metrics?.reserveCount || 0 }}</strong>
+            <span>预约次数</span>
+          </div>
+          <div class="metric-item">
+            <strong>{{ detail.metrics?.reserveUserCount || 0 }}</strong>
+            <span>预约人数</span>
+          </div>
+          <div class="metric-item">
+            <strong>{{ detail.metrics?.totalUsageMinutes || 0 }}</strong>
+            <span>累计机时(分钟)</span>
+          </div>
+          <div class="metric-item">
+            <strong>{{ detail.metrics?.sampleCount || 0 }}</strong>
+            <span>样品数量</span>
+          </div>
         </div>
       </div>
       <div class="hero-side">
@@ -47,6 +65,16 @@
             <el-descriptions-item label="放置地点">{{ detail.location || '-' }}</el-descriptions-item>
             <el-descriptions-item label="品牌型号">{{ detail.brand || '-' }} {{ detail.model || '' }}</el-descriptions-item>
             <el-descriptions-item label="预约单位">{{ detail.bookingUnit || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="资产编号">{{ detail.assetNo || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="生产厂家">{{ detail.manufacturer || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="供应商">{{ detail.supplier || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="制造国家">{{ detail.originCountry || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="购置日期">{{ detail.purchaseDate || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="生产日期">{{ detail.productionDate || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="设备来源">{{ detail.equipmentSource || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="使用联系人">
+              {{ detail.serviceContactName || '-' }} {{ detail.serviceContactPhone ? `(${detail.serviceContactPhone})` : '' }}
+            </el-descriptions-item>
           </el-descriptions>
         </div>
 
@@ -56,7 +84,7 @@
           <div class="rule-grid">
             <div class="rule-item">
               <span>开放模式</span>
-              <strong>{{ modeLabel(detail.openMode) }}</strong>
+              <strong>{{ openModeLabel(detail.openMode) }}</strong>
             </div>
             <div class="rule-item">
               <span>最短预约</span>
@@ -81,6 +109,31 @@
         <div class="content-card block-card">
           <div class="block-title">送样说明</div>
           <div class="rich-text">{{ detail.sampleDesc || '暂无送样说明。' }}</div>
+        </div>
+
+        <div class="content-card block-card">
+          <div class="block-title">主要技术指标</div>
+          <div class="rich-text">{{ detail.technicalSpecs || '暂无技术指标。' }}</div>
+        </div>
+
+        <div class="content-card block-card">
+          <div class="block-title">主要功能</div>
+          <div class="rich-text">{{ detail.mainFunctions || '暂无功能说明。' }}</div>
+        </div>
+
+        <div class="content-card block-card">
+          <div class="block-title">服务内容</div>
+          <div class="rich-text">{{ detail.serviceContent || '暂无服务内容。' }}</div>
+        </div>
+
+        <div class="content-card block-card">
+          <div class="block-title">用户须知</div>
+          <div class="rich-text">{{ detail.userNotice || detail.noticeText || '暂无用户须知。' }}</div>
+        </div>
+
+        <div class="content-card block-card">
+          <div class="block-title">收费标准说明</div>
+          <div class="rich-text">{{ detail.chargeStandard || '暂无收费说明。' }}</div>
         </div>
 
         <div class="content-card block-card">
@@ -117,6 +170,30 @@
             </el-button>
           </div>
 
+          <div v-if="activeReserve === 'machine'" class="reserved-slot-panel">
+            <div class="reserved-slot-header">
+              <span class="reserved-slot-title">已预约时间段</span>
+              <el-date-picker
+                v-model="slotDate"
+                type="date"
+                value-format="YYYY-MM-DD"
+                format="YYYY-MM-DD"
+                placeholder="选择日期"
+                style="width: 170px;"
+                @change="loadReservedSlots"
+              />
+            </div>
+            <div v-loading="reservedSlotsLoading" class="reserved-slot-body">
+              <div v-if="reservedSlots.length === 0" class="empty-text">当天暂无已预约记录</div>
+              <div v-else class="reserved-slot-list">
+                <div v-for="item in reservedSlots" :key="`${item.orderId}-${item.text}`" class="reserved-slot-item">
+                  <span>{{ item.text }}</span>
+                  <el-tag size="small" type="warning">{{ item.statusLabel || '已占用' }}</el-tag>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <el-form v-if="activeReserve === 'machine'" :model="machineForm" label-position="top">
             <el-form-item label="预约开始时间">
               <el-date-picker v-model="machineForm.reservedStart" type="datetime" style="width: 100%;" />
@@ -139,10 +216,25 @@
         </div>
 
         <div class="content-card reserve-card">
+          <div class="block-title">运行状态</div>
+          <div class="runtime-status">
+            <el-tag :type="detail.runtimeStatus?.available ? 'success' : 'danger'" size="small">
+              {{ detail.runtimeStatus?.available ? '可预约' : '不可预约' }}
+            </el-tag>
+            <div class="runtime-text">
+              {{ detail.runtimeStatus?.reason || '当前状态正常，可按开放规则预约。' }}
+            </div>
+            <div v-if="detail.runtimeStatus?.recoverTime" class="runtime-text">
+              预计恢复时间：{{ detail.runtimeStatus.recoverTime }}
+            </div>
+          </div>
+        </div>
+
+        <div class="content-card reserve-card">
           <div class="block-title">预约提示</div>
           <ul class="tip-list">
             <li>预约前请确认登录状态、仪器状态和开放时段。</li>
-            <li>需审核仪器提交后进入待审核流程。</li>
+            <li>需审核仪器提交后将进入待审核流程。</li>
             <li>若仪器维护、停用或故障，系统将禁止预约。</li>
             <li>提交成功后可在用户中心查看订单进度。</li>
           </ul>
@@ -154,8 +246,9 @@
 
 <script>
 import dayjs from 'dayjs'
-import { getInstrumentDetail } from '../../api/instrument'
+import { getInstrumentDetail, getInstrumentReservedSlots } from '../../api/instrument'
 import { createMachineReservation, createSampleReservation } from '../../api/order'
+import { openModeLabel } from '../../utils/dicts'
 
 export default {
   props: ['id'],
@@ -163,6 +256,9 @@ export default {
     return {
       detail: null,
       activeReserve: 'machine',
+      slotDate: dayjs().format('YYYY-MM-DD'),
+      reservedSlots: [],
+      reservedSlotsLoading: false,
       machineForm: {
         reservedStart: '',
         reservedEnd: ''
@@ -205,16 +301,86 @@ export default {
       if (this.canReserve) {
         return ''
       }
-      return '当前仪器处于停用、维护或未开放状态，暂不可预约。'
+      return this.detail?.runtimeStatus?.reason || '当前仪器处于停用、维护或未开放状态，暂不可预约。'
+    }
+  },
+  watch: {
+    'machineForm.reservedStart'(value) {
+      if (!value) {
+        return
+      }
+      const nextDate = dayjs(value).format('YYYY-MM-DD')
+      if (nextDate && nextDate !== this.slotDate) {
+        this.slotDate = nextDate
+        this.loadReservedSlots()
+      }
     }
   },
   async created() {
     await this.load()
   },
   methods: {
+    openModeLabel,
     async load() {
       this.detail = await getInstrumentDetail(this.id)
       this.activeReserve = this.preferredReserveMode
+      await this.loadReservedSlots()
+    },
+    async loadReservedSlots() {
+      if (!this.detail || !this.supportsMachine || !this.slotDate) {
+        this.reservedSlots = []
+        return
+      }
+      this.reservedSlotsLoading = true
+      try {
+        const list = await getInstrumentReservedSlots(this.id, this.slotDate)
+        this.reservedSlots = (list || [])
+          .map(item => this.normalizeReservedSlot(item))
+          .filter(item => item.startAt && item.endAt)
+      } catch (error) {
+        this.reservedSlots = []
+      } finally {
+        this.reservedSlotsLoading = false
+      }
+    },
+    normalizeReservedSlot(item) {
+      const startAt = this.resolveDateTime(item.reservedStart, item.startTime)
+      const endAt = this.resolveDateTime(item.reservedEnd, item.endTime)
+      const startText = startAt ? dayjs(startAt).format('HH:mm') : ''
+      const endText = endAt ? dayjs(endAt).format('HH:mm') : ''
+      return {
+        ...item,
+        startAt,
+        endAt,
+        text: item.text || `${startText} - ${endText} 已占用`,
+        statusLabel: item.statusLabel || '已占用'
+      }
+    },
+    resolveDateTime(dateTimeValue, timeValue) {
+      if (dateTimeValue) {
+        const parsed = dayjs(dateTimeValue)
+        if (parsed.isValid()) {
+          return parsed.toDate()
+        }
+      }
+      if (!timeValue || !this.slotDate) {
+        return null
+      }
+      const normalizedTime = String(timeValue).slice(0, 8)
+      const parsed = dayjs(`${this.slotDate} ${normalizedTime}`)
+      return parsed.isValid() ? parsed.toDate() : null
+    },
+    hasReservedSlotConflict(start, end) {
+      const startAt = dayjs(start)
+      const endAt = dayjs(end)
+      if (!startAt.isValid() || !endAt.isValid()) {
+        return false
+      }
+      return this.reservedSlots.some(slot => {
+        const slotStart = dayjs(slot.startAt)
+        const slotEnd = dayjs(slot.endAt)
+        return startAt.isBefore(slotEnd) && endAt.isAfter(slotStart)
+      })
     },
     goBack() {
       const query = { ...this.$route.query }
@@ -229,6 +395,23 @@ export default {
       this.activeReserve = mode
     },
     async submitMachine() {
+      if (!this.machineForm.reservedStart || !this.machineForm.reservedEnd) {
+        this.$message.warning('请选择预约开始时间和结束时间')
+        return
+      }
+      if (!dayjs(this.machineForm.reservedEnd).isAfter(dayjs(this.machineForm.reservedStart))) {
+        this.$message.warning('预约时间范围无效，请重新选择')
+        return
+      }
+      const formDate = dayjs(this.machineForm.reservedStart).format('YYYY-MM-DD')
+      if (formDate !== this.slotDate) {
+        this.slotDate = formDate
+        await this.loadReservedSlots()
+      }
+      if (this.hasReservedSlotConflict(this.machineForm.reservedStart, this.machineForm.reservedEnd)) {
+        this.$message.error('所选时间段与已有预约冲突，请重新选择')
+        return
+      }
       try {
         await createMachineReservation({
           instrumentId: this.detail.id,
@@ -238,7 +421,7 @@ export default {
         this.$message.success('上机预约已提交')
         this.$router.push('/center/orders')
       } catch (error) {
-        // 错误提示统一由请求拦截器处理，页面侧避免未捕获异常。
+        // 错误提示由请求拦截器统一处理
       }
     },
     async submitSample() {
@@ -251,16 +434,8 @@ export default {
         this.$message.success('送样预约已提交')
         this.$router.push('/center/orders')
       } catch (error) {
-        // 错误提示统一由请求拦截器处理，页面侧避免未捕获异常。
+        // 错误提示由请求拦截器统一处理
       }
-    },
-    modeLabel(value) {
-      const mapping = {
-        MACHINE: '仅支持上机',
-        SAMPLE: '仅支持送样',
-        BOTH: '支持上机/送样'
-      }
-      return mapping[value] || '支持上机预约'
     },
     statusTagType(status) {
       return status === 'NORMAL' ? 'success' : 'danger'
@@ -311,6 +486,30 @@ export default {
   gap: 10px;
   flex-wrap: wrap;
   margin-top: 16px;
+}
+
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.metric-item {
+  background: #f8fbff;
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+}
+
+.metric-item strong {
+  display: block;
+  color: #cc4b00;
+  font-size: 20px;
+}
+
+.metric-item span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .hero-side {
@@ -439,6 +638,48 @@ export default {
   margin: 14px 0 18px;
 }
 
+.reserved-slot-panel {
+  border: 1px solid var(--line);
+  background: #f8fbff;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.reserved-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.reserved-slot-title {
+  color: #1e4278;
+  font-weight: 600;
+}
+
+.reserved-slot-body {
+  margin-top: 10px;
+  min-height: 56px;
+}
+
+.reserved-slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reserved-slot-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: #fff;
+  border: 1px solid #e3ebf5;
+}
+
 .tip-list {
   margin: 0;
   padding-left: 18px;
@@ -446,10 +687,22 @@ export default {
   line-height: 2;
 }
 
+.runtime-status {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.runtime-text {
+  color: #45566f;
+  line-height: 1.8;
+}
+
 @media (max-width: 1100px) {
   .detail-grid,
   .detail-hero,
-  .rule-grid {
+  .rule-grid,
+  .metrics-row {
     grid-template-columns: 1fr;
     display: grid;
   }

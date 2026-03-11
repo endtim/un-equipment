@@ -1,6 +1,7 @@
 package com.unequipment.platform.modules.system.service;
 
 import com.unequipment.platform.common.exception.BizException;
+import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.modules.finance.entity.Account;
 import com.unequipment.platform.modules.finance.repository.AccountRepository;
 import com.unequipment.platform.modules.system.dto.LoginRequest;
@@ -37,19 +38,12 @@ public class AuthService {
     public Map<String, Object> login(LoginRequest request) {
         SysUser user = userRepository.findByUsername(request.getUsername());
         if (user == null || !"ENABLED".equalsIgnoreCase(user.getStatus())) {
-            throw new BizException("username or password is invalid");
+            throw new BizException(ErrorCodes.AUTH_INVALID_CREDENTIALS, "username or password is invalid");
         }
         String storedPassword = user.getPassword();
         boolean validPassword = storedPassword != null && passwordEncoder.matches(request.getPassword(), storedPassword);
-        if (!validPassword && storedPassword != null && !storedPassword.startsWith("$2")) {
-            // legacy plain-text password compatibility: login once then upgrade to BCrypt hash
-            validPassword = storedPassword.equals(request.getPassword());
-            if (validPassword) {
-                userRepository.updatePassword(user.getId(), passwordEncoder.encode(request.getPassword()), LocalDateTime.now());
-            }
-        }
         if (!validPassword) {
-            throw new BizException("username or password is invalid");
+            throw new BizException(ErrorCodes.AUTH_INVALID_CREDENTIALS, "username or password is invalid");
         }
         userRepository.updateLastLoginTime(user.getId(), LocalDateTime.now());
         Map<String, Object> result = new HashMap<>();
@@ -61,11 +55,11 @@ public class AuthService {
     @Transactional
     public Map<String, Object> register(RegisterRequest request) {
         if (userRepository.findByUsername(request.getUsername()) != null) {
-            throw new BizException("username already exists");
+            throw new BizException(ErrorCodes.AUTH_USERNAME_EXISTS, "username already exists");
         }
         SysDepartment department = departmentRepository.findFirst();
         if (department == null) {
-            throw new BizException("department seed data missing");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "department seed data missing");
         }
         SysUser user = new SysUser();
         user.setUsername(request.getUsername());

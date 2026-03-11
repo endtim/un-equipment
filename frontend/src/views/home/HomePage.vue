@@ -19,11 +19,13 @@
           <div class="user-line"><span>账号</span><span>{{ user.username }}</span></div>
           <div class="user-line"><span>角色</span><span>{{ roleLabel }}</span></div>
           <div class="user-line"><span>部门</span><span>{{ user.departmentName || '-' }}</span></div>
-          <el-button type="primary" class="full" @click="$router.push('/center')">进入用户中心</el-button>
-          <el-button v-if="isAdmin" class="full" @click="$router.push('/admin')">进入管理平台</el-button>
+          <div class="login-actions">
+            <el-button type="primary" class="full" @click="$router.push('/center')">进入用户中心</el-button>
+            <el-button v-if="isAdmin" class="full" @click="$router.push('/admin')">进入管理平台</el-button>
+          </div>
         </template>
         <template v-else>
-          <div class="login-text">请登录后进行预约、送样、充值和订单跟踪。</div>
+          <div class="login-text">请登录后进行预约、送样、充值和订单追踪。</div>
           <el-button type="primary" class="full" @click="$router.push('/login')">登录平台</el-button>
         </template>
       </div>
@@ -104,17 +106,25 @@
         <div class="panel-head"><h3>最新预约信息</h3></div>
         <div v-for="item in latestReservations" :key="item.id" class="latest-row">
           <div>{{ item.instrument }}</div>
-          <div class="list-time">{{ item.user }} · {{ item.time }}</div>
+          <div class="list-time">{{ item.user }} | {{ item.time }}</div>
         </div>
       </div>
     </section>
 
     <section>
-      <div class="panel-head" style="margin-bottom: 12px;"><h3>热门仪器</h3><span @click="$router.push('/instruments')">更多</span></div>
+      <div class="panel-head" style="margin-bottom: 12px;">
+        <h3>热门仪器</h3>
+        <span @click="$router.push('/instruments')">更多</span>
+      </div>
       <div class="hot-grid">
-        <div v-for="item in hotInstruments" :key="item.id || item.instrumentName" class="content-card hot-card" @click="openInstrument(item)">
+        <div
+          v-for="item in hotInstruments"
+          :key="item.id || item.instrumentName"
+          class="content-card hot-card"
+          @click="openInstrument(item)"
+        >
           <div class="hot-name">{{ item.instrumentName }}</div>
-          <div class="hot-meta">{{ item.categoryName || '-' }} · {{ item.location || '-' }}</div>
+          <div class="hot-meta">{{ item.categoryName || '-' }} | {{ item.location || '-' }}</div>
           <div class="hot-price">
             <span>校内 {{ formatAmount(item.priceInternal || item.machinePricePerHour) }}</span>
             <span>校外 {{ formatAmount(item.priceExternal || item.samplePricePerItem) }}</span>
@@ -145,7 +155,7 @@ export default {
         { name: '材料学院开放平台', value: 9 }
       ],
       fallbackReservations: [
-        { id: 1, instrument: '超高效液相色谱仪', user: '药学院 李老师', time: '今天 14:20' },
+        { id: 1, instrument: '高效液相色谱仪', user: '药学院 李老师', time: '今天 14:20' },
         { id: 2, instrument: '扫描电子显微镜', user: '材料学院 陈同学', time: '今天 13:40' },
         { id: 3, instrument: '激光共聚焦显微镜', user: '生命学院 王老师', time: '今天 11:05' },
         { id: 4, instrument: '高分辨质谱仪', user: '食品学院 赵老师', time: '今天 09:30' },
@@ -297,9 +307,19 @@ export default {
   margin-bottom: 14px;
 }
 
+.login-actions {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .full {
   width: 100%;
-  margin-top: 10px;
+  margin-top: 0;
+  margin-left: 0 !important;
+  display: block;
+  height: 38px;
 }
 
 .panel {

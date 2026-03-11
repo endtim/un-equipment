@@ -17,4 +17,6 @@ public class OperationLog {
     private String resultMsg;
     private Long bizId;
     private LocalDateTime createTime;
+
+    private String operatorName;
 }

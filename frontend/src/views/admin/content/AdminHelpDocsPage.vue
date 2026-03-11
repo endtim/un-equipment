@@ -1,32 +1,14 @@
 <template>
   <div class="admin-page">
-    <div class="content-card admin-card">
-      <h3 class="admin-card-title">{{ helpForm.id ? '编辑帮助文档' : '发布帮助文档' }}</h3>
-      <el-form ref="helpFormRef" :model="helpForm" :rules="helpRules" label-position="top">
-        <el-form-item label="文档标题" prop="title">
-          <el-input v-model="helpForm.title" maxlength="100" show-word-limit />
-        </el-form-item>
-        <el-form-item label="摘要" prop="summary">
-          <el-input v-model="helpForm.summary" type="textarea" :rows="3" maxlength="255" show-word-limit />
-        </el-form-item>
-        <el-form-item label="正文内容" prop="content">
-          <el-input v-model="helpForm.content" type="textarea" :rows="6" />
-        </el-form-item>
-        <div class="admin-form-actions">
-          <el-button type="primary" @click="submitHelpDoc">保存</el-button>
-          <el-button v-if="helpForm.id" @click="resetHelpDoc">取消</el-button>
-        </div>
-      </el-form>
-    </div>
-
     <div class="content-card admin-table-card">
-      <div class="admin-toolbar" style="margin-bottom: 14px;">
+      <div class="admin-toolbar">
         <el-input v-model="query.keyword" placeholder="搜索帮助文档标题" clearable />
         <el-select v-model="query.publishStatus" clearable placeholder="发布状态">
           <el-option label="已发布" value="PUBLISHED" />
           <el-option label="草稿" value="DRAFT" />
         </el-select>
         <el-button type="primary" @click="search">查询</el-button>
+        <el-button type="primary" plain @click="openCreate">发布文档</el-button>
       </div>
       <el-table :data="helpDocs" border>
         <el-table-column prop="title" label="标题" min-width="220" />
@@ -37,22 +19,47 @@
         </el-table-column>
         <el-table-column label="操作" width="140">
           <template #default="{ row }">
-            <el-button link @click="editHelpDoc(row)">编辑</el-button>
+            <el-button link @click="openEdit(row)">编辑</el-button>
             <el-button link type="danger" @click="removeHelpDoc(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
-      <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
+      <div class="admin-pagination">
         <el-pagination
           background
-          layout="prev, pager, next, total"
+          layout="total, sizes, prev, pager, next"
           :current-page="query.pageNum"
           :page-size="query.pageSize"
+          :page-sizes="pageSizeOptions"
           :total="total"
+          @size-change="changePageSize"
           @current-change="changePage"
         />
       </div>
     </div>
+
+    <el-dialog
+      v-model="dialogVisible"
+      :title="form.id ? '编辑帮助文档' : '发布帮助文档'"
+      width="760px"
+      destroy-on-close
+    >
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
+        <el-form-item label="文档标题" prop="title">
+          <el-input v-model="form.title" maxlength="100" show-word-limit />
+        </el-form-item>
+        <el-form-item label="摘要" prop="summary">
+          <el-input v-model="form.summary" type="textarea" :rows="3" maxlength="255" show-word-limit />
+        </el-form-item>
+        <el-form-item label="正文内容" prop="content">
+          <el-input v-model="form.content" type="textarea" :rows="8" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="closeDialog">取消</el-button>
+        <el-button type="primary" @click="submitHelpDoc">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -60,7 +67,7 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createHelpDoc, deleteHelpDoc, getAdminHelpDocPage, updateHelpDoc } from '../../../api/admin'
 
-function defaultHelpForm() {
+function defaultForm() {
   return { id: null, title: '', summary: '', content: '', publishStatus: 'PUBLISHED' }
 }
 
@@ -69,24 +76,22 @@ export default {
     return {
       helpDocs: [],
       total: 0,
+      pageSizeOptions: [10, 20, 50, 100],
+      dialogVisible: false,
       query: {
         keyword: '',
         publishStatus: '',
         pageNum: 1,
         pageSize: 10
       },
-      helpForm: defaultHelpForm(),
-      helpRules: {
+      form: defaultForm(),
+      rules: {
         title: [
           { required: true, message: '请输入文档标题', trigger: 'blur' },
           { min: 2, max: 100, message: '标题长度为 2-100 个字符', trigger: 'blur' }
         ],
-        summary: [
-          { max: 255, message: '摘要最多 255 个字符', trigger: 'blur' }
-        ],
-        content: [
-          { required: true, message: '请输入文档内容', trigger: 'blur' }
-        ]
+        summary: [{ max: 255, message: '摘要最多 255 个字符', trigger: 'blur' }],
+        content: [{ required: true, message: '请输入文档内容', trigger: 'blur' }]
       }
     }
   },
@@ -127,23 +132,35 @@ export default {
       this.query.pageNum = pageNum
       await this.load()
     },
-    editHelpDoc(row) {
-      this.helpForm = { ...row }
+    async changePageSize(pageSize) {
+      this.query.pageSize = pageSize
+      this.query.pageNum = 1
+      await this.load()
     },
-    resetHelpDoc() {
-      this.helpForm = defaultHelpForm()
-      this.$refs.helpFormRef && this.$refs.helpFormRef.clearValidate()
+    openCreate() {
+      this.form = defaultForm()
+      this.dialogVisible = true
+    },
+    openEdit(row) {
+      this.form = { ...row }
+      this.dialogVisible = true
+    },
+    closeDialog() {
+      this.dialogVisible = false
+      this.$nextTick(() => {
+        this.$refs.formRef && this.$refs.formRef.clearValidate()
+      })
     },
     async submitHelpDoc() {
-      await this.$refs.helpFormRef.validate()
-      if (this.helpForm.id) {
-        await updateHelpDoc(this.helpForm.id, this.helpForm)
+      await this.$refs.formRef.validate()
+      if (this.form.id) {
+        await updateHelpDoc(this.form.id, this.form)
         ElMessage.success('帮助文档已更新')
       } else {
-        await createHelpDoc(this.helpForm)
+        await createHelpDoc(this.form)
         ElMessage.success('帮助文档已发布')
       }
-      this.resetHelpDoc()
+      this.closeDialog()
       await this.load()
     },
     async removeHelpDoc(row) {
@@ -153,19 +170,28 @@ export default {
       await this.load()
     },
     publishStatusLabel(value) {
-      const mapping = {
-        PUBLISHED: '已发布',
-        DRAFT: '草稿'
-      }
+      const mapping = { PUBLISHED: '已发布', DRAFT: '草稿' }
       return mapping[value] || value || '-'
     },
     publishTagType(value) {
-      const mapping = {
-        PUBLISHED: 'success',
-        DRAFT: 'info'
-      }
+      const mapping = { PUBLISHED: 'success', DRAFT: 'info' }
       return mapping[value] || 'info'
     }
   }
 }
 </script>
+
+<style scoped>
+.admin-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.admin-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+</style>

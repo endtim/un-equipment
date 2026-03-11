@@ -8,7 +8,6 @@ import com.unequipment.platform.modules.instrument.entity.Instrument;
 import com.unequipment.platform.modules.instrument.entity.InstrumentAttachment;
 import com.unequipment.platform.modules.instrument.entity.InstrumentCategory;
 import com.unequipment.platform.modules.instrument.entity.InstrumentOpenRule;
-import com.unequipment.platform.modules.instrument.repository.InstrumentRepository;
 import com.unequipment.platform.modules.instrument.service.InstrumentService;
 import com.unequipment.platform.modules.system.entity.SysUser;
 import com.unequipment.platform.security.CurrentUser;
@@ -30,22 +29,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class InstrumentAdminController {
 
     private final InstrumentService instrumentService;
-    private final InstrumentRepository instrumentRepository;
 
     @GetMapping
-    public ApiResponse<PageResponse<Instrument>> list(
+    public ApiResponse<PageResponse<java.util.Map<String, Object>>> list(
         @RequestParam(required = false) String keyword,
         @RequestParam(required = false) String status,
         @RequestParam(required = false) Long categoryId,
         @RequestParam(defaultValue = "1") int pageNum,
         @RequestParam(defaultValue = "10") int pageSize) {
-        int offset = Math.max(pageNum - 1, 0) * pageSize;
-        return ApiResponse.success(new PageResponse<>(
-            instrumentRepository.findPageByCondition(keyword, status, categoryId, offset, pageSize),
-            instrumentRepository.countPageByCondition(keyword, status, categoryId),
-            pageNum,
-            pageSize
-        ));
+        return ApiResponse.success(instrumentService.page(keyword, categoryId, status, pageNum, pageSize));
     }
 
     @GetMapping("/categories")

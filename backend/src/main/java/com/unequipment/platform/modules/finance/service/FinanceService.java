@@ -1,6 +1,8 @@
 package com.unequipment.platform.modules.finance.service;
 
 import com.unequipment.platform.common.exception.BizException;
+import com.unequipment.platform.common.exception.ErrorCodes;
+import com.unequipment.platform.common.util.BizNoGenerator;
 import com.unequipment.platform.modules.content.service.MessageService;
 import com.unequipment.platform.modules.log.service.OperationLogService;
 import com.unequipment.platform.modules.finance.dto.RechargeAuditRequest;
@@ -54,7 +56,7 @@ public class FinanceService {
     @Transactional
     public RechargeOrder submitRecharge(SysUser user, RechargeRequest request) {
         RechargeOrder order = new RechargeOrder();
-        order.setRechargeNo("RCG-" + System.currentTimeMillis());
+        order.setRechargeNo(BizNoGenerator.next("RCG"));
         order.setUserId(user.getId());
         order.setAmount(request.getAmount());
         order.setPayMethod("OFFLINE");
@@ -72,27 +74,24 @@ public class FinanceService {
     public RechargeOrder auditRecharge(Long id, RechargeAuditRequest request, SysUser auditor) {
         RechargeOrder order = rechargeOrderRepository.findById(id);
         if (order == null) {
-            throw new BizException("recharge order not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "recharge order not found");
         }
         if (!canManageUserResource(order.getUserId(), auditor)) {
-            throw new BizException("permission denied for this recharge order");
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "permission denied for this recharge order");
         }
-        if (!"PENDING".equals(order.getStatus())) {
-            throw new BizException("recharge order already processed");
-        }
-
         SysUser notifyUser = new SysUser();
         notifyUser.setId(order.getUserId());
+        LocalDateTime now = LocalDateTime.now();
         if ("APPROVE".equalsIgnoreCase(request.getAction())) {
-            order.setStatus("PASS");
             Account account = getAccount(order.getUserId());
             BigDecimal before = account.getBalance();
-            account.setBalance(before.add(order.getAmount()));
-            account.setTotalRecharge(nullSafe(account.getTotalRecharge()).add(order.getAmount()));
-            account.setUpdateTime(LocalDateTime.now());
-            accountRepository.update(account);
+            int updated = accountRepository.increaseBalanceForRecharge(account.getId(), order.getAmount(), now);
+            if (updated <= 0) {
+                throw new BizException(ErrorCodes.BIZ_ERROR, "account update failed");
+            }
             recordTransaction(order.getUserId(), null, order.getId(), order.getAmount(), "RECHARGE", "IN",
-                before, account.getBalance(), "Recharge approved");
+                before, before.add(order.getAmount()), "Recharge approved");
+            order.setStatus("PASS");
             messageService.send(notifyUser, "Recharge approved", "Your recharge request has been approved.");
         } else {
             order.setStatus("REJECT");
@@ -101,32 +100,38 @@ public class FinanceService {
         }
 
         order.setAuditUserId(auditor == null ? null : auditor.getId());
-        order.setAuditTime(LocalDateTime.now());
-        order.setUpdateTime(LocalDateTime.now());
-        rechargeOrderRepository.update(order);
+        order.setAuditTime(now);
+        order.setUpdateTime(now);
+        int changed = rechargeOrderRepository.updateIfPending(
+            order.getId(),
+            order.getStatus(),
+            order.getRemark(),
+            order.getAuditUserId(),
+            order.getAuditTime(),
+            order.getUpdateTime()
+        );
+        if (changed <= 0) {
+            throw new BizException(ErrorCodes.BIZ_ERROR, "recharge order already processed");
+        }
         operationLogService.save(auditor, "FINANCE", "AUDIT_RECHARGE", "rechargeId:" + id + ":" + order.getStatus());
-        return order;
+        return rechargeOrderRepository.findById(id);
     }
 
     @Transactional
     public void deductForOrder(ReservationOrder order) {
         Account account = getAccount(order.getUserId());
         BigDecimal amount = settlementAmount(order);
-        if (account.getBalance().compareTo(amount) < 0) {
-            throw new BizException("insufficient balance");
+        BigDecimal before = account.getBalance();
+        int changed = accountRepository.decreaseBalanceForConsume(account.getId(), amount, LocalDateTime.now());
+        if (changed <= 0) {
+            throw new BizException(ErrorCodes.FINANCE_INSUFFICIENT_BALANCE, "insufficient balance");
         }
 
-        BigDecimal before = account.getBalance();
-        account.setBalance(before.subtract(amount));
-        account.setTotalConsume(nullSafe(account.getTotalConsume()).add(amount));
-        account.setUpdateTime(LocalDateTime.now());
-        accountRepository.update(account);
-
         recordTransaction(order.getUserId(), order.getId(), null, amount.negate(), "CONSUME", "OUT",
-            before, account.getBalance(), "Order settlement");
+            before, before.subtract(amount), "Order settlement");
 
         SettlementRecord settlement = new SettlementRecord();
-        settlement.setSettlementNo("SET-" + System.currentTimeMillis());
+        settlement.setSettlementNo(BizNoGenerator.next("SET"));
         settlement.setOrderId(order.getId());
         settlement.setUserId(order.getUserId());
         settlement.setInstrumentId(order.getInstrumentId());
@@ -147,11 +152,12 @@ public class FinanceService {
         Account account = getAccount(order.getUserId());
         BigDecimal amount = settlementAmount(order);
         BigDecimal before = account.getBalance();
-        account.setBalance(before.add(amount));
-        account.setUpdateTime(LocalDateTime.now());
-        accountRepository.update(account);
+        int changed = accountRepository.increaseBalanceForRefund(account.getId(), amount, LocalDateTime.now());
+        if (changed <= 0) {
+            throw new BizException(ErrorCodes.BIZ_ERROR, "refund failed");
+        }
         recordTransaction(order.getUserId(), order.getId(), null, amount, "REFUND", "IN",
-            before, account.getBalance(), reason);
+            before, before.add(amount), reason);
         operationLogService.save(null, "FINANCE", "REFUND_ORDER", "orderId:" + order.getId());
     }
 
@@ -168,21 +174,21 @@ public class FinanceService {
     public Account getAccount(Long userId) {
         Account account = accountRepository.findByUserId(userId);
         if (account == null) {
-            throw new BizException("account not found");
+            throw new BizException(ErrorCodes.FINANCE_ACCOUNT_NOT_FOUND, "account not found");
         }
         return account;
     }
 
     public void ensureEnoughBalance(SysUser user, BigDecimal amount) {
         if (getAccount(user).getBalance().compareTo(amount) < 0) {
-            throw new BizException("insufficient balance");
+            throw new BizException(ErrorCodes.FINANCE_INSUFFICIENT_BALANCE, "insufficient balance");
         }
     }
 
     private void recordTransaction(Long userId, Long orderId, Long rechargeId, BigDecimal amount, String txnType,
                                    String inoutType, BigDecimal before, BigDecimal after, String remark) {
         TransactionRecord record = new TransactionRecord();
-        record.setTxnNo("TXN-" + System.currentTimeMillis());
+        record.setTxnNo(BizNoGenerator.next("TXN"));
         record.setUserId(userId);
         record.setOrderId(orderId);
         record.setRechargeId(rechargeId);

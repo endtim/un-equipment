@@ -1,8 +1,8 @@
 <template>
   <div class="admin-page">
     <div class="content-card admin-table-card">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-        <h3 class="admin-card-title" style="margin: 0;">{{ title }}</h3>
+      <div class="page-head">
+        <h3 class="admin-card-title page-title">{{ title }}</h3>
         <el-tag>{{ orderType === 'MACHINE' ? '上机流程' : '送样流程' }}</el-tag>
       </div>
       <el-table :data="orders" border>
@@ -17,7 +17,7 @@
         <el-table-column prop="amount" label="金额" width="120" />
         <el-table-column label="操作" min-width="360">
           <template #default="{ row }">
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <div class="action-wrap">
               <el-button v-if="row.status === 'PENDING_AUDIT'" link type="primary" @click="audit(row, 'APPROVE')">审核通过</el-button>
               <el-button v-if="row.status === 'PENDING_AUDIT'" link type="danger" @click="audit(row, 'REJECT')">驳回</el-button>
               <el-button v-if="row.orderType === 'MACHINE' && row.status === 'WAITING_USE'" link @click="checkIn(row)">签到</el-button>
@@ -36,6 +36,10 @@
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  orderStatusLabel as orderStatusLabelDict,
+  orderStatusTagType as orderStatusTagTypeDict
+} from '../../../utils/dicts'
 import {
   auditOrder,
   checkInOrder,
@@ -117,33 +121,30 @@ export default {
       }
     },
     statusLabel(value) {
-      const mapping = {
-        PENDING_AUDIT: '待审核',
-        WAITING_USE: '待使用',
-        IN_USE: '使用中',
-        WAITING_RECEIVE: '待接样',
-        TESTING: '测试中',
-        WAITING_SETTLEMENT: '待结算',
-        COMPLETED: '已完成',
-        REJECTED: '已驳回',
-        CANCELED: '已取消'
-      }
-      return mapping[value] || value || '-'
+      return orderStatusLabelDict(value)
     },
     statusTagType(value) {
-      const mapping = {
-        PENDING_AUDIT: 'warning',
-        WAITING_USE: 'info',
-        IN_USE: 'primary',
-        WAITING_RECEIVE: 'info',
-        TESTING: 'primary',
-        WAITING_SETTLEMENT: 'warning',
-        COMPLETED: 'success',
-        REJECTED: 'danger',
-        CANCELED: 'info'
-      }
-      return mapping[value] || 'info'
+      return orderStatusTagTypeDict(value)
     }
   }
 }
 </script>
+
+<style scoped>
+.page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.page-title {
+  margin: 0;
+}
+
+.action-wrap {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+</style>

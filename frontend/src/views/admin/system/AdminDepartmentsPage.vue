@@ -1,7 +1,38 @@
 <template>
   <div class="admin-page">
-    <div class="content-card admin-card">
-      <h3 class="admin-card-title">{{ form.id ? '编辑部门' : '新增部门' }}</h3>
+    <div class="content-card admin-table-card">
+      <div class="admin-toolbar">
+        <div class="admin-card-title admin-card-title--tight">部门列表</div>
+        <el-button type="primary" @click="openCreate">新增部门</el-button>
+      </div>
+      <el-table :data="departments" border>
+        <el-table-column prop="deptName" label="部门名称" min-width="180" />
+        <el-table-column prop="deptCode" label="部门编码" width="150" />
+        <el-table-column prop="phone" label="联系电话" width="140" />
+        <el-table-column prop="email" label="邮箱" min-width="180" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'">
+              {{ row.status === 'ENABLED' ? '启用' : '禁用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="140">
+          <template #default="{ row }">
+            <el-button link @click="openEdit(row)">编辑</el-button>
+            <el-button link type="danger" @click="remove(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="departments.length === 0" description="暂无部门数据" class="admin-empty" />
+    </div>
+
+    <el-dialog
+      v-model="dialogVisible"
+      :title="form.id ? '编辑部门' : '新增部门'"
+      width="760px"
+      destroy-on-close
+    >
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <div class="grid-3">
           <el-form-item label="部门名称" prop="deptName">
@@ -19,46 +50,24 @@
             <el-input v-model="form.email" maxlength="100" />
           </el-form-item>
           <el-form-item label="状态" prop="status">
-            <el-select v-model="form.status" style="width: 100%;">
+            <el-select v-model="form.status" class="full-width">
               <el-option label="启用" value="ENABLED" />
               <el-option label="禁用" value="DISABLED" />
             </el-select>
           </el-form-item>
           <el-form-item label="排序" prop="sortNo">
-            <el-input-number v-model="form.sortNo" :min="0" style="width: 100%;" />
+            <el-input-number v-model="form.sortNo" :min="0" class="full-width" />
           </el-form-item>
         </div>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" :rows="3" maxlength="255" show-word-limit />
         </el-form-item>
-        <div class="admin-form-actions">
-          <el-button type="primary" @click="submit">保存</el-button>
-          <el-button v-if="form.id" @click="reset">取消</el-button>
-        </div>
       </el-form>
-    </div>
-
-    <div class="content-card admin-table-card">
-      <h3 class="admin-card-title">部门列表</h3>
-      <el-table :data="departments" border>
-        <el-table-column prop="deptName" label="部门名称" min-width="180" />
-        <el-table-column prop="deptCode" label="部门编码" width="150" />
-        <el-table-column prop="phone" label="联系电话" width="140" />
-        <el-table-column prop="email" label="邮箱" min-width="180" />
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'">{{ row.status === 'ENABLED' ? '启用' : '禁用' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="140">
-          <template #default="{ row }">
-            <el-button link @click="edit(row)">编辑</el-button>
-            <el-button link type="danger" @click="remove(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-if="departments.length === 0" description="暂无部门数据" class="admin-empty" />
-    </div>
+      <template #footer>
+        <el-button @click="closeDialog">取消</el-button>
+        <el-button type="primary" @click="submit">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -83,6 +92,7 @@ export default {
   data() {
     return {
       departments: [],
+      dialogVisible: false,
       form: defaultForm(),
       rules: {
         deptName: [
@@ -104,12 +114,19 @@ export default {
     async load() {
       this.departments = await getAdminDepartments()
     },
-    edit(row) {
-      this.form = { ...row }
-    },
-    reset() {
+    openCreate() {
       this.form = defaultForm()
-      this.$refs.formRef && this.$refs.formRef.clearValidate()
+      this.dialogVisible = true
+    },
+    openEdit(row) {
+      this.form = { ...row }
+      this.dialogVisible = true
+    },
+    closeDialog() {
+      this.dialogVisible = false
+      this.$nextTick(() => {
+        this.$refs.formRef && this.$refs.formRef.clearValidate()
+      })
     },
     async submit() {
       await this.$refs.formRef.validate()
@@ -120,7 +137,7 @@ export default {
         await createDepartment(this.form)
         ElMessage.success('部门已创建')
       }
-      this.reset()
+      this.closeDialog()
       await this.load()
     },
     async remove(row) {
@@ -132,3 +149,21 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.admin-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-card-title--tight {
+  margin: 0;
+}
+
+.full-width {
+  width: 100%;
+}
+</style>

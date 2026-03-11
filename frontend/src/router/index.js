@@ -19,6 +19,7 @@ import NoticesPage from '../views/portal/NoticesPage.vue'
 import HelpCenterPage from '../views/portal/HelpCenterPage.vue'
 import CenterDashboardPage from '../views/center/CenterDashboardPage.vue'
 import AdminUsersPage from '../views/admin/system/AdminUsersPage.vue'
+import AdminRolesPage from '../views/admin/system/AdminRolesPage.vue'
 import AdminDepartmentsPage from '../views/admin/system/AdminDepartmentsPage.vue'
 import AdminCategoriesPage from '../views/admin/instrument/AdminCategoriesPage.vue'
 import AdminInstrumentsPage from '../views/admin/instrument/AdminInstrumentsPage.vue'
@@ -213,6 +214,16 @@ const router = createRouter({
           }
         },
         {
+          path: 'roles',
+          component: AdminRolesPage,
+          meta: {
+            title: '角色管理',
+            description: '维护角色基础信息和编码规则。',
+            pageType: 'operation',
+            breadcrumb: ['管理平台', '系统管理', '角色管理']
+          }
+        },
+        {
           path: 'departments',
           component: AdminDepartmentsPage,
           meta: {
@@ -267,7 +278,7 @@ const router = createRouter({
           component: AdminRechargeAuditPage,
           meta: {
             title: '充值审核',
-            description: '审核用户充值申请并同步账户余额变化。',
+            description: '审核用户充值申请并同步账户余额变更。',
             pageType: 'operation',
             breadcrumb: ['管理平台', '业务处理', '充值审核']
           }

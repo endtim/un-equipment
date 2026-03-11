@@ -20,4 +20,10 @@ public interface SampleOrderRepository {
 
     @Update("update biz_sample_order set sample_name=#{sampleName}, sample_count=#{sampleCount}, sample_type=#{sampleType}, sample_spec=#{sampleSpec}, test_requirement=#{testRequirement}, danger_flag=#{dangerFlag}, danger_desc=#{dangerDesc}, receive_status=#{receiveStatus}, received_time=#{receivedTime}, receiver_user_id=#{receiverUserId}, testing_status=#{testingStatus}, result_summary=#{resultSummary}, update_time=#{updateTime} where id=#{id}")
     int update(SampleOrder sampleOrder);
+
+    @Select("select ifnull(sum(s.sample_count), 0) "
+        + "from biz_sample_order s "
+        + "join biz_reservation_order o on o.id = s.order_id "
+        + "where o.instrument_id = #{instrumentId} and o.deleted = 0")
+    long sumSampleCountByInstrumentId(Long instrumentId);
 }

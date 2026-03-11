@@ -1,6 +1,7 @@
 package com.unequipment.platform.modules.system.service;
 
 import com.unequipment.platform.common.exception.BizException;
+import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.modules.log.service.OperationLogService;
 import com.unequipment.platform.modules.system.entity.SysDepartment;
 import com.unequipment.platform.modules.system.entity.SysRole;
@@ -33,7 +34,7 @@ public class SystemAdminService {
         assertAdmin(operator);
         SysRole role = id == null ? new SysRole() : roleRepository.findById(id);
         if (id != null && role == null) {
-            throw new BizException("role not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "role not found");
         }
         role.setRoleName(request.getRoleName());
         role.setRoleCode(request.getRoleCode());
@@ -56,7 +57,7 @@ public class SystemAdminService {
         assertAdmin(operator);
         SysDepartment department = id == null ? new SysDepartment() : departmentRepository.findById(id);
         if (department == null) {
-            throw new BizException("department not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "department not found");
         }
         department.setParentId(request.getParentId());
         department.setDeptName(request.getDeptName());
@@ -86,12 +87,14 @@ public class SystemAdminService {
         assertUserManagePermission(id, request, operator);
         SysUser user = id == null ? new SysUser() : userRepository.findById(id);
         if (id != null && user == null) {
-            throw new BizException("user not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "user not found");
         }
         user.setUsername(id == null ? request.getUsername() : user.getUsername());
         if (id == null) {
-            String rawPassword = StringUtils.hasText(request.getPassword()) ? request.getPassword() : "123456";
-            user.setPassword(passwordEncoder.encode(rawPassword));
+            if (!StringUtils.hasText(request.getPassword())) {
+                throw new BizException(ErrorCodes.INVALID_REQUEST, "password is required when creating user");
+            }
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
         } else if (StringUtils.hasText(request.getPassword())) {
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
@@ -126,7 +129,7 @@ public class SystemAdminService {
     public void deleteDepartment(Long id, SysUser operator) {
         assertAdmin(operator);
         if (departmentRepository.findById(id) == null) {
-            throw new BizException("department not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "department not found");
         }
         departmentRepository.softDelete(id, operator == null ? null : operator.getId(), LocalDateTime.now());
         operationLogService.save(operator, "SYSTEM", "DELETE_DEPARTMENT", "departmentId:" + id);
@@ -136,7 +139,7 @@ public class SystemAdminService {
     public void deleteRole(Long id, SysUser operator) {
         assertAdmin(operator);
         if (roleRepository.findById(id) == null) {
-            throw new BizException("role not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "role not found");
         }
         roleRepository.softDelete(id, LocalDateTime.now());
         operationLogService.save(operator, "SYSTEM", "DELETE_ROLE", "roleId:" + id);
@@ -146,13 +149,13 @@ public class SystemAdminService {
     public void deleteUser(Long id, SysUser operator) {
         SysUser target = userRepository.findById(id);
         if (target == null) {
-            throw new BizException("user not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "user not found");
         }
         if (!hasRole(operator, "ADMIN")) {
             if (!hasRole(operator, "DEPT_MANAGER")
                 || target.getDepartmentId() == null
                 || !target.getDepartmentId().equals(operator.getDepartmentId())) {
-                throw new BizException("permission denied");
+                throw new BizException(ErrorCodes.PERMISSION_DENIED, "permission denied");
             }
         }
         userRoleRepository.deleteByUserId(id);
@@ -163,7 +166,7 @@ public class SystemAdminService {
     private void bindUserRole(Long userId, String roleCode) {
         SysRole role = roleRepository.findByRoleCode(roleCode);
         if (role == null) {
-            throw new BizException("role not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "role not found");
         }
         userRoleRepository.deleteByUserId(userId);
         SysUserRole userRole = new SysUserRole();
@@ -178,27 +181,27 @@ public class SystemAdminService {
             return;
         }
         if (!hasRole(operator, "DEPT_MANAGER")) {
-            throw new BizException("permission denied");
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "permission denied");
         }
         Long targetDeptId = request.getDepartmentId();
         if (id != null) {
             SysUser target = userRepository.findById(id);
             if (target == null) {
-                throw new BizException("user not found");
+                throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "user not found");
             }
             targetDeptId = target.getDepartmentId();
         }
         if (targetDeptId == null || operator.getDepartmentId() == null || !targetDeptId.equals(operator.getDepartmentId())) {
-            throw new BizException("cannot manage users from other departments");
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "cannot manage users from other departments");
         }
         if ("ADMIN".equalsIgnoreCase(request.getPrimaryRoleCode())) {
-            throw new BizException("cannot assign admin role");
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "cannot assign admin role");
         }
     }
 
     private void assertAdmin(SysUser operator) {
         if (!hasRole(operator, "ADMIN")) {
-            throw new BizException("admin permission required");
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "admin permission required");
         }
     }
 

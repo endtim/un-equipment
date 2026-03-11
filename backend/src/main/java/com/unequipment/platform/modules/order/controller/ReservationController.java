@@ -5,8 +5,11 @@ import com.unequipment.platform.modules.order.dto.MachineReservationRequest;
 import com.unequipment.platform.modules.order.dto.OrderActionRequest;
 import com.unequipment.platform.modules.order.dto.SampleReservationRequest;
 import com.unequipment.platform.modules.order.service.OrderService;
+import com.unequipment.platform.modules.order.vo.OrderDetailVO;
+import com.unequipment.platform.modules.order.vo.OrderSummaryVO;
 import com.unequipment.platform.modules.system.entity.SysUser;
 import com.unequipment.platform.security.CurrentUser;
+import java.util.List;
 import javax.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,12 +37,12 @@ public class ReservationController {
     }
 
     @GetMapping("/my")
-    public ApiResponse<?> myOrders(@CurrentUser SysUser user) {
+    public ApiResponse<List<OrderSummaryVO>> myOrders(@CurrentUser SysUser user) {
         return ApiResponse.success(orderService.myOrders(user));
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<?> detail(@PathVariable Long id, @CurrentUser SysUser user) {
+    public ApiResponse<OrderDetailVO> detail(@PathVariable Long id, @CurrentUser SysUser user) {
         return ApiResponse.success(orderService.detail(id, user));
     }
 

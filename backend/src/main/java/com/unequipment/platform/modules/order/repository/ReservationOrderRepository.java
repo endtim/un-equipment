@@ -34,6 +34,12 @@ public interface ReservationOrderRepository {
         + "where o.user_id = #{userId} and o.deleted = 0 order by o.create_time desc")
     List<ReservationOrder> findByUserId(Long userId);
 
+    @Select("select count(1) from biz_reservation_order where instrument_id = #{instrumentId} and deleted = 0")
+    long countByInstrumentId(Long instrumentId);
+
+    @Select("select count(distinct user_id) from biz_reservation_order where instrument_id = #{instrumentId} and deleted = 0")
+    long countDistinctUsersByInstrumentId(Long instrumentId);
+
     @Select("select count(1) from biz_reservation_order "
         + "where instrument_id = #{instrumentId} and order_type = 'MACHINE' and deleted = 0 "
         + "and order_status in ('PENDING_AUDIT', 'APPROVED', 'WAITING_USE', 'IN_USE') "

@@ -20,4 +20,7 @@ public interface UsageRecordRepository {
 
     @Update("update biz_usage_record set checkin_time=#{checkinTime}, start_time=#{startTime}, end_time=#{endTime}, actual_minutes=#{actualMinutes}, abnormal_flag=#{abnormalFlag}, abnormal_desc=#{abnormalDesc}, owner_confirm_user_id=#{ownerConfirmUserId}, owner_confirm_time=#{ownerConfirmTime}, update_time=#{updateTime} where id=#{id}")
     int update(UsageRecord usageRecord);
+
+    @Select("select ifnull(sum(actual_minutes), 0) from biz_usage_record where instrument_id = #{instrumentId}")
+    long sumActualMinutesByInstrumentId(Long instrumentId);
 }

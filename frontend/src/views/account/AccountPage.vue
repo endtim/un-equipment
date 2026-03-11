@@ -57,6 +57,12 @@
 
 <script>
 import { getMyAccount, submitRecharge } from '../../api/account'
+import {
+  inoutTypeLabel as inoutTypeLabelDict,
+  rechargeStatusLabel as rechargeStatusLabelDict,
+  rechargeStatusTagType as rechargeStatusTagTypeDict,
+  txnTypeLabel as txnTypeLabelDict
+} from '../../utils/dicts'
 
 export default {
   data() {
@@ -94,40 +100,16 @@ export default {
       return value == null ? '0.00' : Number(value).toFixed(2)
     },
     txnTypeLabel(value) {
-      const mapping = {
-        RECHARGE: '充值',
-        CONSUME: '消费',
-        REFUND: '退款',
-        SETTLEMENT: '结算'
-      }
-      return mapping[value] || value || '-'
+      return txnTypeLabelDict(value)
     },
     inoutTypeLabel(value) {
-      const mapping = {
-        IN: '收入',
-        OUT: '支出'
-      }
-      return mapping[value] || value || '-'
+      return inoutTypeLabelDict(value)
     },
     rechargeStatusLabel(value) {
-      const mapping = {
-        PENDING: '待审核',
-        PASS: '已通过',
-        REJECT: '已驳回',
-        APPROVED: '已通过',
-        REJECTED: '已驳回'
-      }
-      return mapping[value] || value || '-'
+      return rechargeStatusLabelDict(value)
     },
     rechargeTagType(value) {
-      const mapping = {
-        PENDING: 'warning',
-        PASS: 'success',
-        REJECT: 'danger',
-        APPROVED: 'success',
-        REJECTED: 'danger'
-      }
-      return mapping[value] || 'info'
+      return rechargeStatusTagTypeDict(value)
     }
   }
 }

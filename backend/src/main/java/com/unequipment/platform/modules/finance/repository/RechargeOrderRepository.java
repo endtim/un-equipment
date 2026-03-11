@@ -1,10 +1,12 @@
 package com.unequipment.platform.modules.finance.repository;
 
 import com.unequipment.platform.modules.finance.entity.RechargeOrder;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
@@ -27,4 +29,12 @@ public interface RechargeOrderRepository {
 
     @Update("update biz_recharge_order set status=#{status}, remark=#{remark}, audit_user_id=#{auditUserId}, audit_time=#{auditTime}, update_time=#{updateTime} where id=#{id}")
     int update(RechargeOrder rechargeOrder);
+
+    @Update("update biz_recharge_order set status=#{status}, remark=#{remark}, audit_user_id=#{auditUserId}, audit_time=#{auditTime}, update_time=#{updateTime} where id=#{id} and status='PENDING'")
+    int updateIfPending(@Param("id") Long id,
+                        @Param("status") String status,
+                        @Param("remark") String remark,
+                        @Param("auditUserId") Long auditUserId,
+                        @Param("auditTime") LocalDateTime auditTime,
+                        @Param("updateTime") LocalDateTime updateTime);
 }

@@ -13,22 +13,22 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BizException.class)
     public ApiResponse<Void> handleBiz(BizException ex) {
-        return ApiResponse.error(400, ex.getMessage());
+        return ApiResponse.error(ex.getCode(), ex.getMessage());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ApiResponse<Void> handleValid(MethodArgumentNotValidException ex) {
         FieldError error = ex.getBindingResult().getFieldError();
-        return ApiResponse.error(400, error == null ? "invalid request" : error.getDefaultMessage());
+        return ApiResponse.error(ErrorCodes.INVALID_REQUEST, error == null ? "invalid request" : error.getDefaultMessage());
     }
 
     @ExceptionHandler({ConstraintViolationException.class, HttpMessageNotReadableException.class})
     public ApiResponse<Void> handleBadRequest(Exception ex) {
-        return ApiResponse.error(400, "invalid request");
+        return ApiResponse.error(ErrorCodes.INVALID_REQUEST, "invalid request");
     }
 
     @ExceptionHandler(Exception.class)
     public ApiResponse<Void> handleDefault(Exception ex) {
-        return ApiResponse.error(500, ex.getMessage());
+        return ApiResponse.error(ErrorCodes.INTERNAL_ERROR, "internal server error");
     }
 }

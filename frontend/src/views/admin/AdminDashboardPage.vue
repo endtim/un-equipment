@@ -2,14 +2,14 @@
   <div class="admin-page">
     <div class="grid-3">
       <div v-for="card in cards" :key="card.label" class="content-card admin-card">
-        <div style="color: var(--muted);">{{ card.label }}</div>
-        <div style="font-size: 32px; font-weight: 800; margin-top: 8px;">{{ card.value }}</div>
+        <div class="metric-label">{{ card.label }}</div>
+        <div class="metric-value">{{ card.value }}</div>
       </div>
     </div>
 
     <div class="content-card admin-card">
       <h3 class="admin-card-title">快捷入口</h3>
-      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+      <div class="quick-actions">
         <el-button type="primary" @click="$router.push('/admin/orders/machine')">上机订单</el-button>
         <el-button @click="$router.push('/admin/orders/sample')">送样订单</el-button>
         <el-button @click="$router.push('/admin/recharges')">充值审核</el-button>
@@ -24,20 +24,20 @@
     <div class="grid-3">
       <div class="content-card admin-card">
         <h3 class="admin-card-title">部门分布</h3>
-        <div v-for="(value, key) in overview.departmentDistribution || {}" :key="key" style="padding: 8px 0;">
+        <div v-for="(value, key) in overview.departmentDistribution || {}" :key="key" class="list-row">
           {{ key }}：{{ value }}
         </div>
       </div>
       <div class="content-card admin-card">
         <h3 class="admin-card-title">热门仪器</h3>
-        <div v-for="item in overview.topInstruments || []" :key="item.key" style="padding: 8px 0;">
+        <div v-for="item in overview.topInstruments || []" :key="item.key" class="list-row">
           {{ item.key }}：{{ item.value }}
         </div>
       </div>
       <div class="content-card admin-card">
         <h3 class="admin-card-title">收入概况</h3>
-        <div style="padding: 8px 0;">累计收入：{{ formatAmount(overview.incomeAmount) }}</div>
-        <div style="padding: 8px 0;">完成服务：{{ overview.completionCount || 0 }}</div>
+        <div class="list-row">累计收入：{{ formatAmount(overview.incomeAmount) }}</div>
+        <div class="list-row">完成服务：{{ overview.completionCount || 0 }}</div>
       </div>
     </div>
   </div>
@@ -68,3 +68,25 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.metric-label {
+  color: var(--muted);
+}
+
+.metric-value {
+  font-size: 32px;
+  font-weight: 800;
+  margin-top: 8px;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.list-row {
+  padding: 8px 0;
+}
+</style>

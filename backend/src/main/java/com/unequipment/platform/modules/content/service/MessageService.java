@@ -1,6 +1,7 @@
 package com.unequipment.platform.modules.content.service;
 
 import com.unequipment.platform.common.exception.BizException;
+import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.modules.content.entity.UserMessage;
 import com.unequipment.platform.modules.content.repository.UserMessageRepository;
 import com.unequipment.platform.modules.system.entity.SysUser;
@@ -32,7 +33,7 @@ public class MessageService {
 
     public void markRead(SysUser user, Long id) {
         if (userMessageRepository.findByIdAndUserId(id, user.getId()) == null) {
-            throw new BizException("message not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "message not found");
         }
         userMessageRepository.markRead(id, user.getId(), LocalDateTime.now());
     }

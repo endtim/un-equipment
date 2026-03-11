@@ -11,29 +11,35 @@ import org.apache.ibatis.annotations.Select;
 @Mapper
 public interface OperationLogRepository {
 
-    @Select("select * from sys_operation_log order by create_time desc, id desc")
+    @Select("select l.*, u.real_name as operator_name "
+        + "from sys_operation_log l "
+        + "left join sys_user u on u.id = l.user_id "
+        + "order by l.create_time desc, l.id desc")
     List<OperationLog> findAll();
 
     @Select("<script>"
-        + "select * from sys_operation_log where 1 = 1 "
+        + "select l.*, u.real_name as operator_name "
+        + "from sys_operation_log l "
+        + "left join sys_user u on u.id = l.user_id "
+        + "where 1 = 1 "
         + "<if test='moduleName != null and moduleName != \"\"'>"
-        + "and module_name = #{moduleName} "
+        + "and l.module_name = #{moduleName} "
         + "</if>"
         + "<if test='keyword != null and keyword != \"\"'>"
-        + "and (action_name like concat('%', #{keyword}, '%') or request_uri like concat('%', #{keyword}, '%')) "
+        + "and (l.action_name like concat('%', #{keyword}, '%') or l.request_uri like concat('%', #{keyword}, '%')) "
         + "</if>"
-        + "order by create_time desc, id desc limit #{offset}, #{pageSize}"
+        + "order by l.create_time desc, l.id desc limit #{offset}, #{pageSize}"
         + "</script>")
     List<OperationLog> findPage(@Param("moduleName") String moduleName, @Param("keyword") String keyword,
                                 @Param("offset") int offset, @Param("pageSize") int pageSize);
 
     @Select("<script>"
-        + "select count(1) from sys_operation_log where 1 = 1 "
+        + "select count(1) from sys_operation_log l where 1 = 1 "
         + "<if test='moduleName != null and moduleName != \"\"'>"
-        + "and module_name = #{moduleName} "
+        + "and l.module_name = #{moduleName} "
         + "</if>"
         + "<if test='keyword != null and keyword != \"\"'>"
-        + "and (action_name like concat('%', #{keyword}, '%') or request_uri like concat('%', #{keyword}, '%')) "
+        + "and (l.action_name like concat('%', #{keyword}, '%') or l.request_uri like concat('%', #{keyword}, '%')) "
         + "</if>"
         + "</script>")
     long countPage(@Param("moduleName") String moduleName, @Param("keyword") String keyword);

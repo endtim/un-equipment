@@ -2,33 +2,33 @@
   <div class="admin-page">
     <div class="grid-3">
       <div v-for="card in cards" :key="card.label" class="content-card admin-card">
-        <div style="color: var(--muted);">{{ card.label }}</div>
-        <div style="font-size: 30px; font-weight: 700; margin-top: 8px; color: var(--primary);">{{ card.value }}</div>
+        <div class="metric-label">{{ card.label }}</div>
+        <div class="metric-value">{{ card.value }}</div>
       </div>
     </div>
     <div class="grid-3">
       <div class="content-card admin-card">
         <h3 class="admin-card-title">部门预约分布</h3>
-        <div v-for="(value, key) in overview.departmentDistribution || {}" :key="key" style="padding: 8px 0;">
+        <div v-for="(value, key) in overview.departmentDistribution || {}" :key="key" class="list-row">
           {{ key }}：{{ value }}
         </div>
       </div>
       <div class="content-card admin-card">
         <h3 class="admin-card-title">热门仪器排行</h3>
-        <div v-for="item in overview.topInstruments || []" :key="item.key" style="padding: 8px 0;">
+        <div v-for="item in overview.topInstruments || []" :key="item.key" class="list-row">
           {{ item.key }}：{{ item.value }}
         </div>
       </div>
       <div class="content-card admin-card">
         <h3 class="admin-card-title">汇总信息</h3>
-        <div style="padding: 8px 0;">部门数量：{{ overview.departmentCount || 0 }}</div>
-        <div style="padding: 8px 0;">完成订单：{{ overview.completionCount || 0 }}</div>
-        <div style="padding: 8px 0;">收入金额：{{ formatAmount(overview.incomeAmount) }}</div>
+        <div class="list-row">部门数量：{{ overview.departmentCount || 0 }}</div>
+        <div class="list-row">完成订单：{{ overview.completionCount || 0 }}</div>
+        <div class="list-row">收入金额：{{ formatAmount(overview.incomeAmount) }}</div>
       </div>
     </div>
     <div class="content-card admin-card">
       <h3 class="admin-card-title">订单趋势</h3>
-      <div v-for="(value, key) in overview.orderTrend || {}" :key="key" style="padding: 8px 0;">
+      <div v-for="(value, key) in overview.orderTrend || {}" :key="key" class="list-row">
         {{ key }}：{{ value }}
       </div>
     </div>
@@ -60,3 +60,20 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.metric-label {
+  color: var(--muted);
+}
+
+.metric-value {
+  font-size: 30px;
+  font-weight: 700;
+  margin-top: 8px;
+  color: var(--primary);
+}
+
+.list-row {
+  padding: 8px 0;
+}
+</style>

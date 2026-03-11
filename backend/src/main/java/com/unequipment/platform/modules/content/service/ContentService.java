@@ -2,6 +2,7 @@ package com.unequipment.platform.modules.content.service;
 
 import com.unequipment.platform.common.api.PageResponse;
 import com.unequipment.platform.common.exception.BizException;
+import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.modules.content.entity.HelpDoc;
 import com.unequipment.platform.modules.content.entity.Notice;
 import com.unequipment.platform.modules.content.repository.HelpDocRepository;
@@ -61,7 +62,7 @@ public class ContentService {
     @Transactional
     public void deleteNotice(Long id) {
         if (noticeRepository.findById(id) == null) {
-            throw new BizException("notice not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "notice not found");
         }
         noticeRepository.softDelete(id, LocalDateTime.now());
         operationLogService.save(null, "CONTENT", "DELETE_NOTICE", "noticeId:" + id);
@@ -70,7 +71,7 @@ public class ContentService {
     @Transactional
     public void deleteHelpDoc(Long id) {
         if (helpDocRepository.findById(id) == null) {
-            throw new BizException("help doc not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "help doc not found");
         }
         helpDocRepository.softDelete(id, LocalDateTime.now());
         operationLogService.save(null, "CONTENT", "DELETE_HELP_DOC", "helpDocId:" + id);

@@ -71,9 +71,6 @@ export default {
     showBreadcrumb() {
       return this.pageMeta.showBreadcrumb !== false && Array.isArray(this.pageMeta.breadcrumb)
     },
-    showPageHeader() {
-      return true
-    },
     breadcrumbItems() {
       const raw = this.pageMeta.breadcrumb || []
       return raw.map((label, index) => ({
@@ -120,32 +117,35 @@ export default {
 
 <style scoped>
 .center-shell {
-  padding: 20px 0 32px;
+  padding: 14px 0 24px;
   display: grid;
   grid-template-columns: 250px minmax(0, 1fr);
-  gap: 18px;
+  gap: 14px;
 }
 
 .center-sidebar {
-  padding: 20px;
+  padding: 14px 12px;
   align-self: start;
-  position: static;
+  position: sticky;
+  top: 10px;
+  max-height: calc(100vh - 20px);
+  overflow: auto;
 }
 
 .center-brand {
-  padding-bottom: 16px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--line);
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .center-brand__kicker {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .center-brand__title {
-  margin-top: 6px;
-  font-size: 24px;
+  margin-top: 4px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--primary);
 }
@@ -155,14 +155,14 @@ export default {
 }
 
 .center-page-header {
-  margin-bottom: 18px;
-  padding: 18px 22px;
-  min-height: 116px;
+  margin-bottom: 14px;
+  padding: 14px 18px;
+  min-height: 96px;
 }
 
 .center-page-title {
-  margin-top: 10px;
-  font-size: 28px;
+  margin-top: 8px;
+  font-size: 24px;
   font-weight: 700;
   color: #17427e;
 }
@@ -176,11 +176,11 @@ export default {
 .center-nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .center-actions {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .logout-btn {
@@ -188,12 +188,14 @@ export default {
 }
 
 .center-nav-item {
-  padding: 11px 14px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
   cursor: pointer;
   color: #36506f;
   background: #f8fbff;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .center-nav-item.active {
@@ -209,6 +211,8 @@ export default {
 
   .center-sidebar {
     position: static;
+    max-height: none;
+    overflow: visible;
   }
 }
 </style>

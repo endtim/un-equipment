@@ -20,20 +20,15 @@
 </template>
 
 <script>
+import { userRoleLabel as userRoleLabelDict } from '../../utils/dicts'
+
 export default {
   computed: {
     user() {
       return this.$store.state.user || {}
     },
     roleLabel() {
-      const mapping = {
-        ADMIN: '平台管理员',
-        INSTRUMENT_OWNER: '仪器负责人',
-        DEPT_MANAGER: '部门管理员',
-        INTERNAL_USER: '校内用户',
-        EXTERNAL_USER: '校外用户'
-      }
-      return mapping[this.user.roleCode] || this.user.roleCode || '-'
+      return userRoleLabelDict(this.user.roleCode)
     },
     cards() {
       return [

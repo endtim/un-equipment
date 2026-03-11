@@ -3,7 +3,7 @@
     <div class="hero-card login-card">
       <div class="section-title">用户登录</div>
       <el-alert
-        title="演示账号可使用：admin / owner_zhang / teacher_wang，默认密码 123456"
+        title="演示账号：admin / owner_zhang / teacher_wang"
         type="info"
         :closable="false"
         style="margin-bottom: 18px;"
@@ -28,8 +28,8 @@ export default {
   data() {
     return {
       form: {
-        username: 'teacher_wang',
-        password: '123456'
+        username: '',
+        password: ''
       },
       rules: {
         username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],

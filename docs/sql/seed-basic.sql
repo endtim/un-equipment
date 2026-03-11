@@ -49,10 +49,10 @@ SELECT id INTO @dept_mat  FROM sys_department WHERE dept_code = 'MAT_COLLEGE' LI
 INSERT INTO sys_user
 (username, password, real_name, user_type, user_no, gender, phone, email, avatar_url, auth_type, department_id, unit_name, title_name, status, last_login_time, remark, create_time, update_time, deleted)
 VALUES
-('admin', '123456', '系统管理员', 'INTERNAL', 'U0001', 'M', '13900000001', 'admin@demo.edu.cn', NULL, 'LOCAL', @dept_test, '分析测试中心', '管理员', 'ENABLED', NULL, 'SEED', NOW(), NOW(), 0),
-('owner_zhang', '123456', '张老师', 'INTERNAL', 'U0002', 'M', '13900000002', 'owner_zhang@demo.edu.cn', NULL, 'LOCAL', @dept_chem, '化学化工学院', '仪器平台主管', 'ENABLED', NULL, 'SEED', NOW(), NOW(), 0),
-('teacher_wang', '123456', '王老师', 'INTERNAL', 'U0003', 'F', '13900000003', 'teacher_wang@demo.edu.cn', NULL, 'LOCAL', @dept_mat, '材料科学学院', '讲师', 'ENABLED', NULL, 'SEED', NOW(), NOW(), 0),
-('external_li', '123456', '李工', 'EXTERNAL', 'U0004', 'M', '13900000004', 'external_li@demo.com', NULL, 'LOCAL', @dept_test, '校外合作单位', '工程师', 'ENABLED', NULL, 'SEED', NOW(), NOW(), 0)
+('admin', '$2b$10$QuyNHFfR/NYgQEwFqdHblezl5iFBBytD2O/0vkoZZbiLqxdAMEBiC', '系统管理员', 'INTERNAL', 'U0001', 'M', '13900000001', 'admin@demo.edu.cn', NULL, 'LOCAL', @dept_test, '分析测试中心', '管理员', 'ENABLED', NULL, 'SEED', NOW(), NOW(), 0),
+('owner_zhang', '$2b$10$QuyNHFfR/NYgQEwFqdHblezl5iFBBytD2O/0vkoZZbiLqxdAMEBiC', '张老师', 'INTERNAL', 'U0002', 'M', '13900000002', 'owner_zhang@demo.edu.cn', NULL, 'LOCAL', @dept_chem, '化学化工学院', '仪器平台主管', 'ENABLED', NULL, 'SEED', NOW(), NOW(), 0),
+('teacher_wang', '$2b$10$QuyNHFfR/NYgQEwFqdHblezl5iFBBytD2O/0vkoZZbiLqxdAMEBiC', '王老师', 'INTERNAL', 'U0003', 'F', '13900000003', 'teacher_wang@demo.edu.cn', NULL, 'LOCAL', @dept_mat, '材料科学学院', '讲师', 'ENABLED', NULL, 'SEED', NOW(), NOW(), 0),
+('external_li', '$2b$10$QuyNHFfR/NYgQEwFqdHblezl5iFBBytD2O/0vkoZZbiLqxdAMEBiC', '李工', 'EXTERNAL', 'U0004', 'M', '13900000004', 'external_li@demo.com', NULL, 'LOCAL', @dept_test, '校外合作单位', '工程师', 'ENABLED', NULL, 'SEED', NOW(), NOW(), 0)
 ON DUPLICATE KEY UPDATE
 password = VALUES(password),
 real_name = VALUES(real_name),
@@ -121,14 +121,23 @@ SELECT id INTO @cat_spectrum FROM biz_instrument_category WHERE category_code = 
 SELECT id INTO @cat_micro FROM biz_instrument_category WHERE category_code = 'MICROSCOPY' LIMIT 1;
 
 INSERT INTO biz_instrument
-(instrument_no, instrument_name, model, brand, category_id, department_id, owner_user_id, location, status, open_mode, open_status, support_external, need_audit, require_training, booking_unit, price_internal, price_external, min_reserve_minutes, max_reserve_minutes, step_minutes, cover_url, intro, usage_desc, sample_desc, notice_text, is_hot, sort_no, create_time, update_time, deleted)
+(instrument_no, instrument_name, model, brand, asset_no, manufacturer, supplier, origin_country, purchase_date, production_date, equipment_source, service_contact_name, service_contact_phone, category_id, department_id, owner_user_id, location, status, open_mode, open_status, support_external, need_audit, require_training, booking_unit, price_internal, price_external, min_reserve_minutes, max_reserve_minutes, step_minutes, cover_url, intro, usage_desc, sample_desc, notice_text, technical_specs, main_functions, service_content, user_notice, charge_standard, is_hot, sort_no, create_time, update_time, deleted)
 VALUES
-('INS-1001', '高效液相色谱仪', 'LC-20A', 'Shimadzu', @cat_spectrum, @dept_chem, @u_owner, '化工楼A201', 'NORMAL', 'BOTH', 1, 1, 1, 0, 'HOUR', 120.00, 200.00, 60, 480, 30, 'https://example.com/cover/hplc.jpg', 'SEED-HPLC', '预约前请完成培训登记', '支持送样测试，结果48小时内回传', '请提前24小时预约', 1, 1, NOW(), NOW(), 0),
-('INS-1002', '扫描电子显微镜', 'SU5000', 'Hitachi', @cat_micro, @dept_mat, @u_owner, '材料楼B305', 'NORMAL', 'BOTH', 1, 1, 1, 1, 'HOUR', 180.00, 260.00, 60, 360, 30, 'https://example.com/cover/sem.jpg', 'SEED-SEM', '使用前需通过上机培训', '支持危险样品申报', '请按规范提交样品信息', 1, 2, NOW(), NOW(), 0)
+('INS-1001', '高效液相色谱仪', 'LC-20A', 'Shimadzu', 'ASSET-1001', '岛津', '江西仪器供应中心', '日本', '2019-06-01', '2019-03-15', '购置', '张老师', '13900000002', @cat_spectrum, @dept_chem, @u_owner, '化工楼A201', 'NORMAL', 'BOTH', 1, 1, 1, 0, 'HOUR', 120.00, 200.00, 60, 480, 30, 'https://example.com/cover/hplc.jpg', 'SEED-HPLC', '预约前请完成培训登记', '支持送样测试，结果48小时内回传', '请提前24小时预约', '适用于有机物分离分析，检测灵敏度高，稳定性好。', '用于样品成分分离、定量分析和方法开发。', '提供上机测试与送样检测两种服务。', '请按预约时段到场，规范使用并完成登记。', '校内120元/小时，校外200元/小时，送样按项目协商。', 1, 1, NOW(), NOW(), 0),
+('INS-1002', '扫描电子显微镜', 'SU5000', 'Hitachi', 'ASSET-1002', '日立', '江西精测设备有限公司', '日本', '2020-09-10', '2020-07-20', '购置', '李工程师', '13900000011', @cat_micro, @dept_mat, @u_owner, '材料楼B305', 'NORMAL', 'BOTH', 1, 1, 1, 1, 'HOUR', 180.00, 260.00, 60, 360, 30, 'https://example.com/cover/sem.jpg', 'SEED-SEM', '使用前需通过上机培训', '支持危险样品申报', '请按规范提交样品信息', '分辨率高，支持多倍率成像和元素分析扩展。', '用于材料形貌观察、缺陷分析和微结构表征。', '提供预约上机、送样检测及结果解读。', '危险样品需提前申报并按安全规范提交。', '校内180元/小时，校外260元/小时。', 1, 2, NOW(), NOW(), 0)
 ON DUPLICATE KEY UPDATE
 instrument_name = VALUES(instrument_name),
 model = VALUES(model),
 brand = VALUES(brand),
+asset_no = VALUES(asset_no),
+manufacturer = VALUES(manufacturer),
+supplier = VALUES(supplier),
+origin_country = VALUES(origin_country),
+purchase_date = VALUES(purchase_date),
+production_date = VALUES(production_date),
+equipment_source = VALUES(equipment_source),
+service_contact_name = VALUES(service_contact_name),
+service_contact_phone = VALUES(service_contact_phone),
 category_id = VALUES(category_id),
 department_id = VALUES(department_id),
 owner_user_id = VALUES(owner_user_id),
@@ -150,6 +159,11 @@ intro = VALUES(intro),
 usage_desc = VALUES(usage_desc),
 sample_desc = VALUES(sample_desc),
 notice_text = VALUES(notice_text),
+technical_specs = VALUES(technical_specs),
+main_functions = VALUES(main_functions),
+service_content = VALUES(service_content),
+user_notice = VALUES(user_notice),
+charge_standard = VALUES(charge_standard),
 is_hot = VALUES(is_hot),
 sort_no = VALUES(sort_no),
 deleted = 0,

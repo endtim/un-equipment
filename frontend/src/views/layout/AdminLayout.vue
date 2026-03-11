@@ -6,7 +6,7 @@
           <div class="admin-brand__kicker">后台工作区</div>
           <div class="admin-brand__title">管理平台</div>
         </div>
-        <div class="admin-nav-group" v-for="group in groups" :key="group.label">
+        <div v-for="group in groups" :key="group.key" class="admin-nav-group">
           <div class="admin-group-title">{{ group.label }}</div>
           <div
             v-for="item in group.items"
@@ -44,52 +44,60 @@
 </template>
 
 <script>
+const ADMIN_GROUPS = [
+  {
+    key: 'workbench',
+    label: '工作台',
+    items: [
+      { label: '后台首页', path: '/admin' },
+      { label: '统计报表', path: '/admin/stats' },
+      { label: '日志审计', path: '/admin/logs' }
+    ]
+  },
+  {
+    key: 'system',
+    label: '系统管理',
+    items: [
+      { label: '用户管理', path: '/admin/users' },
+      { label: '角色管理', path: '/admin/roles' },
+      { label: '部门管理', path: '/admin/departments' }
+    ]
+  },
+  {
+    key: 'instrument',
+    label: '仪器管理',
+    items: [
+      { label: '仪器分类', path: '/admin/categories' },
+      { label: '仪器管理', path: '/admin/instruments' }
+    ]
+  },
+  {
+    key: 'business',
+    label: '业务处理',
+    items: [
+      { label: '上机订单', path: '/admin/orders/machine' },
+      { label: '送样订单', path: '/admin/orders/sample' },
+      { label: '充值审核', path: '/admin/recharges' },
+      { label: '结算管理', path: '/admin/settlements' }
+    ]
+  },
+  {
+    key: 'content',
+    label: '内容管理',
+    items: [
+      { label: '公告管理', path: '/admin/notices' },
+      { label: '帮助文档', path: '/admin/help-docs' }
+    ]
+  }
+]
+
 export default {
   computed: {
     user() {
       return this.$store.state.user
     },
     groups() {
-      return [
-        {
-          label: '工作台',
-          items: [
-            { label: '后台首页', path: '/admin' },
-            { label: '统计报表', path: '/admin/stats' },
-            { label: '日志审计', path: '/admin/logs' }
-          ]
-        },
-        {
-          label: '系统管理',
-          items: [
-            { label: '用户管理', path: '/admin/users' },
-            { label: '部门管理', path: '/admin/departments' }
-          ]
-        },
-        {
-          label: '仪器管理',
-          items: [
-            { label: '仪器分类', path: '/admin/categories' },
-            { label: '仪器管理', path: '/admin/instruments' }
-          ]
-        },
-        {
-          label: '业务处理',
-          items: [
-            { label: '上机订单', path: '/admin/orders/machine' },
-            { label: '送样订单', path: '/admin/orders/sample' },
-            { label: '充值审核', path: '/admin/recharges' },
-            { label: '结算管理', path: '/admin/settlements' }
-          ]
-        },
-        {
-          label: '内容管理',
-          items: [
-            { label: '公告管理', path: '/admin/notices' },
-            { label: '帮助文档', path: '/admin/help-docs' }
-          ]
-        }
-      ]
+      return ADMIN_GROUPS
     },
     pageMeta() {
       return this.$route.meta || {}
@@ -101,16 +109,40 @@ export default {
       return this.pageMeta.description || ''
     },
     showBreadcrumb() {
-      return this.pageMeta.showBreadcrumb !== false && Array.isArray(this.pageMeta.breadcrumb)
+      return this.pageMeta.showBreadcrumb !== false
     },
     showPageHeader() {
       return this.pageMeta.pageType && this.pageMeta.pageType !== 'entry'
     },
+    currentNav() {
+      const currentPath = this.$route.path
+      let bestMatch = null
+      this.groups.forEach(group => {
+        group.items.forEach(item => {
+          if (currentPath === item.path || currentPath.startsWith(`${item.path}/`)) {
+            if (!bestMatch || item.path.length > bestMatch.item.path.length) {
+              bestMatch = { group, item }
+            }
+          }
+        })
+      })
+      return bestMatch
+    },
     breadcrumbItems() {
+      if (this.currentNav) {
+        const { group, item } = this.currentNav
+        const groupEntry = group.items[0]
+        return [
+          { label: '管理平台', to: this.$route.path === '/admin' ? null : '/admin' },
+          { label: group.label, to: groupEntry.path === item.path ? null : groupEntry.path },
+          { label: item.label, to: null }
+        ]
+      }
+
       const raw = this.pageMeta.breadcrumb || []
       return raw.map((label, index) => ({
         label,
-        to: this.resolveBreadcrumbTo(index, raw.length)
+        to: index === raw.length - 1 ? null : index === 0 ? '/admin' : null
       }))
     }
   },
@@ -121,32 +153,6 @@ export default {
     },
     isActive(item) {
       return this.$route.path === item.path || this.$route.path.startsWith(`${item.path}/`)
-    },
-    resolveBreadcrumbTo(index, total) {
-      if (index >= total - 1) {
-        return null
-      }
-      if (index === 0) {
-        return '/admin'
-      }
-      if (index === 1) {
-        if (this.$route.path.startsWith('/admin/users') || this.$route.path.startsWith('/admin/departments')) {
-          return '/admin/users'
-        }
-        if (this.$route.path.startsWith('/admin/categories') || this.$route.path.startsWith('/admin/instruments')) {
-          return '/admin/instruments'
-        }
-        if (this.$route.path.startsWith('/admin/orders') || this.$route.path.startsWith('/admin/recharges') || this.$route.path.startsWith('/admin/settlements')) {
-          return '/admin/orders/machine'
-        }
-        if (this.$route.path.startsWith('/admin/notices') || this.$route.path.startsWith('/admin/help-docs')) {
-          return '/admin/notices'
-        }
-        if (this.$route.path.startsWith('/admin/stats') || this.$route.path.startsWith('/admin/logs')) {
-          return '/admin/stats'
-        }
-      }
-      return null
     }
   }
 }
@@ -154,32 +160,33 @@ export default {
 
 <style scoped>
 .admin-shell {
-  padding: 20px 0 32px;
+  padding: 14px 0 24px;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
-  gap: 18px;
+  gap: 14px;
 }
 
 .admin-sidebar {
-  padding: 20px;
+  padding: 12px;
   align-self: start;
-  position: static;
+  position: sticky;
+  top: 10px;
 }
 
 .admin-brand {
-  padding-bottom: 16px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--line);
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .admin-brand__kicker {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .admin-brand__title {
-  margin-top: 6px;
-  font-size: 24px;
+  margin-top: 4px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--primary);
 }
@@ -189,13 +196,13 @@ export default {
 }
 
 .admin-page-header {
-  margin-bottom: 18px;
-  padding: 18px 22px;
+  margin-bottom: 14px;
+  padding: 14px 18px;
 }
 
 .admin-page-title {
-  margin-top: 10px;
-  font-size: 28px;
+  margin-top: 8px;
+  font-size: 24px;
   font-weight: 700;
   color: #17427e;
 }
@@ -207,23 +214,26 @@ export default {
 }
 
 .admin-nav-group + .admin-nav-group {
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 .admin-group-title {
-  font-size: 13px;
+  font-size: 11px;
   color: var(--muted);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  line-height: 1.3;
 }
 
 .admin-nav-item {
-  padding: 11px 14px;
+  padding: 7px 11px;
   border: 1px solid var(--line);
   border-radius: 6px;
   cursor: pointer;
   color: #36506f;
   background: #f8fbff;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 .admin-nav-item.active {
@@ -233,7 +243,7 @@ export default {
 }
 
 .admin-actions {
-  margin-top: 14px;
+  margin-top: 8px;
 }
 
 .logout-btn {

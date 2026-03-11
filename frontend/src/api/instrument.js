@@ -21,3 +21,11 @@ export function getCategories() {
     method: 'get'
   })
 }
+
+export function getInstrumentReservedSlots(id, date) {
+  return request({
+    url: `/api/instruments/${id}/reserved-slots`,
+    method: 'get',
+    params: { date }
+  })
+}

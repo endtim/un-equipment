@@ -3,8 +3,8 @@
     <div class="content-card service-hero">
       <div>
         <div class="service-kicker">预约服务</div>
-        <div class="section-title" style="margin-bottom: 10px;">仪器资源检索</div>
-        <div class="service-desc">支持按关键字、分类与状态筛选仪器，点击卡片可查看详情，也可直接进入预约流程。</div>
+        <div class="section-title service-title">仪器资源检索</div>
+        <div class="service-desc">支持按关键词、分类与状态筛选仪器，点击卡片可查看详情或直接进入预约流程。</div>
       </div>
       <div class="service-summary">
         <div class="summary-number">{{ total }}</div>
@@ -14,16 +14,16 @@
 
     <div class="content-card filter-card">
       <el-form :inline="true" :model="query" class="filter-form">
-        <el-form-item label="关键字">
-          <el-input v-model="query.keyword" placeholder="仪器名称/编号" clearable style="width: 220px;" />
+        <el-form-item label="关键词">
+          <el-input v-model="query.keyword" placeholder="仪器名称/编号" clearable class="filter-input-keyword" />
         </el-form-item>
         <el-form-item label="仪器分类">
-          <el-select v-model="query.categoryId" clearable placeholder="全部分类" style="width: 180px;">
+          <el-select v-model="query.categoryId" clearable placeholder="全部分类" class="filter-select-category">
             <el-option v-for="item in categories" :key="item.id" :label="item.categoryName" :value="item.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="开放状态">
-          <el-select v-model="query.status" clearable placeholder="全部状态" style="width: 160px;">
+          <el-select v-model="query.status" clearable placeholder="全部状态" class="filter-select-status">
             <el-option label="正常开放" value="NORMAL" />
             <el-option label="暂停开放" value="DISABLED" />
           </el-select>
@@ -47,8 +47,8 @@
           <div class="instrument-meta">负责人：{{ item.ownerUserName || '平台管理员' }}</div>
           <div class="instrument-meta">放置地点：{{ item.location || '暂未填写' }}</div>
           <div class="instrument-status-row">
-            <el-tag :type="statusTagType(item.status)" size="small">{{ statusLabel(item.status, item.openStatus) }}</el-tag>
-            <span class="mode-text">{{ modeLabel(item.openMode) }}</span>
+            <el-tag :type="statusTagType(item.status)">{{ statusLabel(item.status, item.openStatus) }}</el-tag>
+            <span class="mode-text">{{ openModeLabel(item.openMode) }}</span>
           </div>
           <div class="price-row">
             <div>机时收费：<strong>{{ formatAmount(item.machinePricePerHour) }}</strong> 元/小时</div>
@@ -64,14 +64,16 @@
       </div>
     </div>
 
-    <div class="content-card" style="padding: 18px; margin-top: 18px;">
-      <div style="display: flex; justify-content: flex-end;">
+    <div class="content-card pagination-card">
+      <div class="pagination-wrap">
         <el-pagination
           background
-          layout="prev, pager, next, total"
+          layout="total, sizes, prev, pager, next"
           :current-page="query.pageNum"
           :page-size="query.pageSize"
+          :page-sizes="pageSizeOptions"
           :total="total"
+          @size-change="changePageSize"
           @current-change="changePage"
         />
       </div>
@@ -81,6 +83,7 @@
 
 <script>
 import { getCategories, getInstruments } from '../../api/instrument'
+import { openModeLabel } from '../../utils/dicts'
 
 function defaultQuery() {
   return {
@@ -96,6 +99,7 @@ export default {
   data() {
     return {
       query: defaultQuery(),
+      pageSizeOptions: [8, 16, 24, 40],
       categories: [],
       list: [],
       total: 0
@@ -106,6 +110,7 @@ export default {
     await this.load()
   },
   methods: {
+    openModeLabel,
     restoreQuery() {
       const q = this.$route.query
       this.query.keyword = q.keyword || ''
@@ -148,6 +153,11 @@ export default {
       this.query.pageNum = pageNum
       await this.load()
     },
+    async changePageSize(pageSize) {
+      this.query.pageSize = pageSize
+      this.query.pageNum = 1
+      await this.load()
+    },
     openDetail(item) {
       this.$router.push({
         path: `/instruments/${item.id}`,
@@ -181,14 +191,6 @@ export default {
         return '暂不可预约'
       }
       return item.openMode === 'SAMPLE' ? '立即送样' : '立即预约'
-    },
-    modeLabel(value) {
-      const mapping = {
-        MACHINE: '仅支持上机',
-        SAMPLE: '仅支持送样',
-        BOTH: '支持上机/送样'
-      }
-      return mapping[value] || '支持预约'
     },
     statusLabel(status, openStatus) {
       if (status !== 'NORMAL' || Number(openStatus || 1) !== 1) {
@@ -231,6 +233,10 @@ export default {
   line-height: 1.8;
 }
 
+.service-title {
+  margin-bottom: 10px;
+}
+
 .service-summary {
   width: 180px;
   text-align: center;
@@ -259,6 +265,18 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 12px;
+}
+
+.filter-input-keyword {
+  width: 220px;
+}
+
+.filter-select-category {
+  width: 180px;
+}
+
+.filter-select-status {
+  width: 160px;
 }
 
 .instrument-grid {
@@ -345,6 +363,16 @@ export default {
 
 .card-actions .el-button {
   flex: 1;
+}
+
+.pagination-card {
+  padding: 18px;
+  margin-top: 18px;
+}
+
+.pagination-wrap {
+  display: flex;
+  justify-content: flex-end;
 }
 
 @media (max-width: 1100px) {

@@ -1,16 +1,7 @@
-server:
-  port: 8080
-
-spring:
+local:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:${DB_URL:jdbc:mysql://localhost:3306/instrument_share_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false}}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    username: ${SPRING_DATASOURCE_USERNAME:${DB_USERNAME:root}}
-    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:your_password}}
-
-app:
+    url: jdbc:mysql://localhost:3306/instrument_share_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: root
+    password: your_password_here
   security:
-    token-prefix: Bearer
-    token-header: Authorization
-    jwt-secret: ${APP_JWT_SECRET:please-change-to-a-strong-secret}
-    jwt-expire-seconds: ${APP_JWT_EXPIRE_SECONDS:7200}
+    jwt-secret: please-change-to-a-strong-secret-and-keep-it-private

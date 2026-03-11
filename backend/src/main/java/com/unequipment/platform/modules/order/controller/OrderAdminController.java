@@ -4,8 +4,10 @@ import com.unequipment.platform.common.api.ApiResponse;
 import com.unequipment.platform.modules.order.dto.AuditRequest;
 import com.unequipment.platform.modules.order.dto.OrderActionRequest;
 import com.unequipment.platform.modules.order.service.OrderService;
+import com.unequipment.platform.modules.order.vo.OrderSummaryVO;
 import com.unequipment.platform.modules.system.entity.SysUser;
 import com.unequipment.platform.security.CurrentUser;
+import java.util.List;
 import javax.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,7 +25,7 @@ public class OrderAdminController {
     private final OrderService orderService;
 
     @GetMapping
-    public ApiResponse<?> allOrders(@CurrentUser SysUser user) {
+    public ApiResponse<List<OrderSummaryVO>> allOrders(@CurrentUser SysUser user) {
         return ApiResponse.success(orderService.allOrders(user));
     }
 
