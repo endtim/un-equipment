@@ -10,7 +10,9 @@
         <el-table-column prop="categoryCode" label="分类编码" width="180" />
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'">{{ row.status === 'ENABLED' ? '启用' : '禁用' }}</el-tag>
+            <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'">
+              {{ row.status === 'ENABLED' ? '启用' : '禁用' }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="140">
@@ -75,11 +77,11 @@ export default {
       rules: {
         categoryName: [
           { required: true, message: '请输入分类名称', trigger: 'blur' },
-          { min: 2, max: 100, message: '分类名称长度为 2-100 个字符', trigger: 'blur' }
+          { min: 2, max: 100, message: '分类名称长度为2-100字符', trigger: 'blur' }
         ],
         categoryCode: [
           { required: true, message: '请输入分类编码', trigger: 'blur' },
-          { min: 2, max: 50, message: '分类编码长度为 2-50 个字符', trigger: 'blur' }
+          { min: 2, max: 50, message: '分类编码长度为2-50字符', trigger: 'blur' }
         ]
       }
     }

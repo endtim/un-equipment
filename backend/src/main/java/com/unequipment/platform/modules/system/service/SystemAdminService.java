@@ -47,6 +47,9 @@ public class SystemAdminService {
             roleRepository.insert(role);
         } else {
             roleRepository.update(role);
+            if ("DISABLED".equalsIgnoreCase(role.getStatus())) {
+                userRoleRepository.deleteByRoleId(role.getId());
+            }
         }
         operationLogService.save(operator, "SYSTEM", id == null ? "CREATE_ROLE" : "UPDATE_ROLE", "role:" + role.getRoleCode());
         return role;
@@ -131,6 +134,9 @@ public class SystemAdminService {
         if (departmentRepository.findById(id) == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "department not found");
         }
+        if (userRepository.countByDepartmentId(id) > 0) {
+            throw new BizException(ErrorCodes.BIZ_ERROR, "department still has users, cannot delete");
+        }
         departmentRepository.softDelete(id, operator == null ? null : operator.getId(), LocalDateTime.now());
         operationLogService.save(operator, "SYSTEM", "DELETE_DEPARTMENT", "departmentId:" + id);
     }
@@ -138,8 +144,15 @@ public class SystemAdminService {
     @Transactional
     public void deleteRole(Long id, SysUser operator) {
         assertAdmin(operator);
-        if (roleRepository.findById(id) == null) {
+        SysRole role = roleRepository.findById(id);
+        if (role == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "role not found");
+        }
+        if ("ADMIN".equalsIgnoreCase(role.getRoleCode())) {
+            throw new BizException(ErrorCodes.BIZ_ERROR, "admin role cannot be deleted");
+        }
+        if (userRoleRepository.countByRoleId(id) > 0) {
+            throw new BizException(ErrorCodes.BIZ_ERROR, "role is still assigned to users");
         }
         roleRepository.softDelete(id, LocalDateTime.now());
         operationLogService.save(operator, "SYSTEM", "DELETE_ROLE", "roleId:" + id);

@@ -5,7 +5,6 @@ import com.unequipment.platform.modules.log.entity.OperationLog;
 import com.unequipment.platform.modules.log.repository.OperationLogRepository;
 import com.unequipment.platform.modules.log.vo.OperationLogVO;
 import com.unequipment.platform.modules.system.entity.SysUser;
-import javax.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -13,6 +12,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import javax.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -55,6 +55,8 @@ public class OperationLogService {
         ACTION_LABELS.put("FINISH_MACHINE_ORDER", "结束上机");
         ACTION_LABELS.put("SETTLE_ORDER", "订单结算");
         ACTION_LABELS.put("CANCEL_ORDER", "取消订单");
+        ACTION_LABELS.put("CLOSE_ORDER", "关闭订单");
+        ACTION_LABELS.put("ADJUST_ORDER_AMOUNT", "调整订单金额");
 
         ACTION_LABELS.put("SUBMIT_RECHARGE", "提交充值申请");
         ACTION_LABELS.put("AUDIT_RECHARGE", "审核充值申请");

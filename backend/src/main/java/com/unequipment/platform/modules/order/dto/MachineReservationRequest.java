@@ -19,5 +19,9 @@ public class MachineReservationRequest {
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     private LocalDateTime reservedEnd;
 
+    private String projectName;
+
+    private String purpose;
+
     private String remark;
 }

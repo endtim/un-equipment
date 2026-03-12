@@ -34,7 +34,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" label="操作时间" width="180" />
+        <el-table-column prop="createTime" label="操作时间" width="180" :formatter="formatDateTimeCell" />
       </el-table>
 
       <div class="admin-pagination">
@@ -55,6 +55,7 @@
 
 <script>
 import { getOperationLogs } from '../../api/log'
+import { formatDateTime } from '../../utils/datetime'
 
 export default {
   data() {
@@ -75,6 +76,9 @@ export default {
     await this.load()
   },
   methods: {
+    formatDateTimeCell(row, column, value) {
+      return formatDateTime(value)
+    },
     restoreQuery() {
       const query = this.$route.query || {}
       this.query.moduleName = query.moduleName || ''

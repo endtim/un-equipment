@@ -9,6 +9,8 @@
         <el-select v-model="query.status" clearable placeholder="状态">
           <el-option label="正常" value="NORMAL" />
           <el-option label="停用" value="DISABLED" />
+          <el-option label="维护中" value="MAINTENANCE" />
+          <el-option label="故障" value="FAULT" />
         </el-select>
         <el-button type="primary" @click="search">查询</el-button>
         <el-button type="primary" plain @click="openCreate">新增仪器</el-button>
@@ -16,13 +18,15 @@
       <el-table :data="instruments" border>
         <el-table-column prop="instrumentName" label="仪器名称" min-width="180" />
         <el-table-column prop="instrumentNo" label="仪器编号" width="150" />
+        <el-table-column prop="brand" label="品牌" width="120" />
+        <el-table-column prop="model" label="型号" width="130" />
         <el-table-column prop="categoryName" label="分类" width="140" />
         <el-table-column prop="location" label="位置" min-width="160" />
         <el-table-column label="校内价" width="110">
-          <template #default="{ row }">{{ formatPrice(row.priceInternal || row.machinePricePerHour) }}</template>
+          <template #default="{ row }">{{ formatPrice(row.priceInternal ?? row.machinePricePerHour) }}</template>
         </el-table-column>
         <el-table-column label="校外价" width="110">
-          <template #default="{ row }">{{ formatPrice(row.priceExternal || row.samplePricePerItem) }}</template>
+          <template #default="{ row }">{{ formatPrice(row.priceExternal ?? row.samplePricePerItem) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
@@ -53,7 +57,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="form.id ? '编辑仪器' : '新增仪器'"
-      width="860px"
+      width="900px"
       destroy-on-close
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
@@ -69,44 +73,52 @@
           </el-form-item>
         </div>
         <div class="grid-3">
+          <el-form-item label="品牌" prop="brand">
+            <el-input v-model="form.brand" maxlength="100" />
+          </el-form-item>
+          <el-form-item label="型号" prop="model">
+            <el-input v-model="form.model" maxlength="100" />
+          </el-form-item>
           <el-form-item label="分类" prop="categoryId">
             <el-select v-model="form.categoryId" class="full-width">
               <el-option v-for="item in categories" :key="item.id" :label="item.categoryName" :value="item.id" />
             </el-select>
           </el-form-item>
+        </div>
+        <div class="grid-3">
           <el-form-item label="生产厂家" prop="manufacturer">
             <el-input v-model="form.manufacturer" maxlength="100" />
           </el-form-item>
           <el-form-item label="供应商" prop="supplier">
             <el-input v-model="form.supplier" maxlength="100" />
           </el-form-item>
-        </div>
-        <div class="grid-3">
           <el-form-item label="制造国家" prop="originCountry">
             <el-input v-model="form.originCountry" maxlength="50" />
           </el-form-item>
+        </div>
+        <div class="grid-3">
           <el-form-item label="购置日期" prop="purchaseDate">
             <el-date-picker v-model="form.purchaseDate" type="date" value-format="YYYY-MM-DD" class="full-width" />
           </el-form-item>
           <el-form-item label="生产日期" prop="productionDate">
             <el-date-picker v-model="form.productionDate" type="date" value-format="YYYY-MM-DD" class="full-width" />
           </el-form-item>
+          <el-form-item label="设备来源" prop="equipmentSource">
+            <el-input v-model="form.equipmentSource" maxlength="50" />
+          </el-form-item>
         </div>
         <div class="grid-3">
           <el-form-item label="位置" prop="location">
             <el-input v-model="form.location" maxlength="200" />
           </el-form-item>
-          <el-form-item label="设备来源" prop="equipmentSource">
-            <el-input v-model="form.equipmentSource" maxlength="50" />
-          </el-form-item>
           <el-form-item label="使用联系人" prop="serviceContactName">
             <el-input v-model="form.serviceContactName" maxlength="50" />
           </el-form-item>
-        </div>
-        <div class="grid-3">
           <el-form-item label="联系人电话" prop="serviceContactPhone">
             <el-input v-model="form.serviceContactPhone" maxlength="20" />
           </el-form-item>
+        </div>
+        <div class="grid-3">
           <el-form-item label="仪器状态" prop="status">
             <el-select v-model="form.status" class="full-width">
               <el-option label="正常" value="NORMAL" />
@@ -122,6 +134,12 @@
               <el-option label="上机+送样" value="BOTH" />
             </el-select>
           </el-form-item>
+          <el-form-item label="计费单位" prop="bookingUnit">
+            <el-select v-model="form.bookingUnit" class="full-width">
+              <el-option label="按小时" value="HOUR" />
+              <el-option label="按件" value="ITEM" />
+            </el-select>
+          </el-form-item>
         </div>
         <div class="grid-3">
           <el-form-item label="校内价格(元)" prop="priceInternal">
@@ -130,21 +148,14 @@
           <el-form-item label="校外价格(元)" prop="priceExternal">
             <el-input-number v-model="form.priceExternal" :min="0" :precision="2" class="full-width" />
           </el-form-item>
-          <el-form-item label="计费单位" prop="bookingUnit">
-            <el-select v-model="form.bookingUnit" class="full-width">
-              <el-option label="按小时" value="HOUR" />
-              <el-option label="按样品" value="SAMPLE" />
-              <el-option label="按项目" value="PROJECT" />
-            </el-select>
-          </el-form-item>
-        </div>
-        <div class="grid-3">
           <el-form-item label="开放状态" prop="openStatus">
             <el-select v-model="form.openStatus" class="full-width">
               <el-option label="开放" :value="1" />
               <el-option label="关闭" :value="0" />
             </el-select>
           </el-form-item>
+        </div>
+        <div class="grid-3">
           <el-form-item label="支持校外用户" prop="supportExternal">
             <el-select v-model="form.supportExternal" class="full-width">
               <el-option label="支持" :value="1" />
@@ -157,22 +168,20 @@
               <el-option label="无需审核" :value="0" />
             </el-select>
           </el-form-item>
-        </div>
-        <div class="grid-3">
           <el-form-item label="是否要求培训" prop="requireTraining">
             <el-select v-model="form.requireTraining" class="full-width">
               <el-option label="要求培训" :value="1" />
               <el-option label="无需培训" :value="0" />
             </el-select>
           </el-form-item>
+        </div>
+        <div class="grid-3">
           <el-form-item label="最短预约(分钟)" prop="minReserveMinutes">
             <el-input-number v-model="form.minReserveMinutes" :min="1" :step="1" class="full-width" />
           </el-form-item>
           <el-form-item label="最长预约(分钟)" prop="maxReserveMinutes">
             <el-input-number v-model="form.maxReserveMinutes" :min="1" :step="1" class="full-width" />
           </el-form-item>
-        </div>
-        <div class="grid-3">
           <el-form-item label="时间步长(分钟)" prop="stepMinutes">
             <el-input-number v-model="form.stepMinutes" :min="1" :step="1" class="full-width" />
           </el-form-item>
@@ -226,6 +235,8 @@ function defaultForm() {
     id: null,
     name: '',
     code: '',
+    model: '',
+    brand: '',
     assetNo: '',
     manufacturer: '',
     supplier: '',
@@ -279,7 +290,7 @@ export default {
       rules: {
         name: [
           { required: true, message: '请输入仪器名称', trigger: 'blur' },
-          { min: 2, max: 200, message: '仪器名称长度为 2-200 个字符', trigger: 'blur' }
+          { min: 2, max: 200, message: '仪器名称长度为2-200字符', trigger: 'blur' }
         ],
         categoryId: [{ required: true, message: '请选择分类', trigger: 'change' }],
         serviceContactPhone: [{ pattern: /^[0-9+\-() ]{0,20}$/, message: '联系人电话格式不正确', trigger: 'blur' }],
@@ -355,6 +366,8 @@ export default {
         id: row.id,
         name: row.instrumentName || row.name,
         code: row.instrumentNo || row.code,
+        model: row.model || '',
+        brand: row.brand || '',
         assetNo: row.assetNo || '',
         manufacturer: row.manufacturer || '',
         supplier: row.supplier || '',
@@ -374,15 +387,15 @@ export default {
         mainFunctions: row.mainFunctions || '',
         serviceContent: row.serviceContent || '',
         chargeStandard: row.chargeStandard || '',
-        priceInternal: Number(row.priceInternal || row.machinePricePerHour || 0),
-        priceExternal: Number(row.priceExternal || row.samplePricePerItem || 0),
+        priceInternal: Number(row.priceInternal ?? row.machinePricePerHour ?? 0),
+        priceExternal: Number(row.priceExternal ?? row.samplePricePerItem ?? 0),
         status: row.status || 'NORMAL',
         openMode: row.openMode || 'BOTH',
         openStatus: Number(row.openStatus ?? 1),
         supportExternal: Number(row.supportExternal ?? 1),
         needAudit: Number(row.needAudit ?? 1),
         requireTraining: Number(row.requireTraining ?? 0),
-        bookingUnit: row.bookingUnit || 'HOUR',
+        bookingUnit: ['HOUR', 'ITEM'].includes(row.bookingUnit) ? row.bookingUnit : 'HOUR',
         minReserveMinutes: Number(row.minReserveMinutes || 30),
         maxReserveMinutes: Number(row.maxReserveMinutes || 480),
         stepMinutes: Number(row.stepMinutes || 30)

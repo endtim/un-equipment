@@ -17,7 +17,7 @@
             <el-tag :type="publishTagType(row.publishStatus)">{{ publishStatusLabel(row.publishStatus) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="publishTime" label="发布时间" width="180" />
+        <el-table-column prop="publishTime" label="发布时间" width="180" :formatter="formatDateTimeCell" />
         <el-table-column label="操作" width="140">
           <template #default="{ row }">
             <el-button link @click="openEdit(row)">编辑</el-button>
@@ -67,6 +67,7 @@
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createNotice, deleteNotice, getAdminNoticePage, updateNotice } from '../../../api/admin'
+import { formatDateTime } from '../../../utils/datetime'
 
 function defaultForm() {
   return { id: null, title: '', summary: '', content: '', publishStatus: 'PUBLISHED' }
@@ -101,6 +102,9 @@ export default {
     await this.load()
   },
   methods: {
+    formatDateTimeCell(row, column, value) {
+      return formatDateTime(value)
+    },
     restoreQuery() {
       const query = this.$route.query || {}
       this.query.keyword = query.keyword || ''

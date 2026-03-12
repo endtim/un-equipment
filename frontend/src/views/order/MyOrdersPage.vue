@@ -1,23 +1,40 @@
 <template>
-  <div class="content-card" style="padding: 24px;">
-    <div class="section-title">{{ pageTitle }}</div>
-    <el-table :data="orders" border>
-      <el-table-column prop="orderNo" label="订单编号" width="220" />
-      <el-table-column label="订单类型" width="120">
-        <template #default="{ row }">{{ orderTypeLabel(row.orderType) }}</template>
-      </el-table-column>
-      <el-table-column prop="instrumentName" label="仪器名称" />
-      <el-table-column label="状态" width="160">
-        <template #default="{ row }">{{ orderStatusLabel(row.status) }}</template>
-      </el-table-column>
-      <el-table-column prop="amount" label="金额" width="100" />
-      <el-table-column label="操作" width="200">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-          <el-button v-if="canCancel(row)" link type="danger" @click="cancel(row)">取消</el-button>
+  <div>
+    <div class="grid-3" style="margin-bottom: 14px;">
+      <div v-for="card in summaryCards" :key="card.label" class="content-card" style="padding: 16px 18px;">
+        <div style="color: var(--muted); font-size: 13px;">{{ card.label }}</div>
+        <div style="margin-top: 6px; font-size: 26px; font-weight: 700; color: var(--primary);">{{ card.value }}</div>
+      </div>
+    </div>
+
+    <div class="content-card" style="padding: 24px;">
+      <div class="section-title">{{ pageTitle }}</div>
+      <div class="mode-tip">{{ pageTip }}</div>
+
+      <el-table :data="orders" border>
+        <el-table-column prop="orderNo" label="订单编号" width="220" />
+        <el-table-column v-if="showOrderTypeColumn" label="订单类型" width="120">
+          <template #default="{ row }">{{ orderTypeLabel(row.orderType) }}</template>
+        </el-table-column>
+        <el-table-column prop="instrumentName" label="仪器名称" min-width="160" />
+        <el-table-column v-if="isMachinePage" prop="reservedStart" label="预约开始" width="170" :formatter="formatDateTimeCell" />
+        <el-table-column v-if="isMachinePage" prop="reservedEnd" label="预约结束" width="170" :formatter="formatDateTimeCell" />
+        <el-table-column v-if="isSamplePage" prop="createdAt" label="申请时间" width="170" :formatter="formatDateTimeCell" />
+        <el-table-column label="状态" width="170">
+          <template #default="{ row }">{{ orderStatusLabel(row.status) }}</template>
+        </el-table-column>
+        <el-table-column prop="amount" label="金额" width="110" />
+        <el-table-column label="操作" width="200">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openDetail(row)">详情</el-button>
+            <el-button v-if="canCancel(row)" link type="danger" @click="cancel(row)">取消</el-button>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty :description="emptyText" />
         </template>
-      </el-table-column>
-    </el-table>
+      </el-table>
+    </div>
 
     <el-drawer v-model="detailVisible" title="订单详情" size="40%">
       <template v-if="detail">
@@ -36,7 +53,7 @@
             <el-timeline-item
               v-for="item in detail.auditRecords || []"
               :key="item.id"
-              :timestamp="item.auditTime"
+              :timestamp="formatDateTime(item.auditTime)"
             >
               {{ auditResultLabel(item.auditResult) }} - {{ item.auditOpinion }}
             </el-timeline-item>
@@ -45,9 +62,9 @@
 
         <div v-if="detail.usageRecord" style="margin-top: 20px;">
           <div class="section-title" style="font-size: 18px;">使用记录</div>
-          <div>签到时间：{{ detail.usageRecord.checkinTime || '-' }}</div>
-          <div>开始时间：{{ detail.usageRecord.startTime || '-' }}</div>
-          <div>结束时间：{{ detail.usageRecord.endTime || '-' }}</div>
+          <div>签到时间：{{ formatDateTime(detail.usageRecord.checkinTime) }}</div>
+          <div>开始时间：{{ formatDateTime(detail.usageRecord.startTime) }}</div>
+          <div>结束时间：{{ formatDateTime(detail.usageRecord.endTime) }}</div>
         </div>
 
         <div v-if="detail.sampleDetail" style="margin-top: 20px;">
@@ -70,6 +87,7 @@ import {
   orderTypeLabel as orderTypeLabelDict,
   sampleTestingStatusLabel as sampleTestingStatusLabelDict
 } from '../../utils/dicts'
+import { formatDateTime as formatDateTimeUtil } from '../../utils/datetime'
 
 export default {
   props: {
@@ -86,26 +104,73 @@ export default {
     }
   },
   computed: {
+    isMachinePage() {
+      return this.orderType === 'MACHINE'
+    },
+    isSamplePage() {
+      return this.orderType === 'SAMPLE'
+    },
+    showOrderTypeColumn() {
+      return !this.isMachinePage && !this.isSamplePage
+    },
     pageTitle() {
-      if (this.orderType === 'MACHINE') {
+      if (this.isMachinePage) {
         return '我的上机预约'
       }
-      if (this.orderType === 'SAMPLE') {
+      if (this.isSamplePage) {
         return '我的送样预约'
       }
       return '我的订单'
+    },
+    pageTip() {
+      if (this.isMachinePage) {
+        return '展示上机类预约单，重点关注预约时段和上机进度。'
+      }
+      if (this.isSamplePage) {
+        return '展示送样类预约单，重点关注接样、测试与结果状态。'
+      }
+      return '展示全部订单，可统一查看状态与金额。'
+    },
+    summaryCards() {
+      const total = this.orders.length
+      const waiting = this.orders.filter(item => ['PENDING_AUDIT', 'WAITING_USE', 'WAITING_RECEIVE', 'TESTING'].includes(item.status)).length
+      const completed = this.orders.filter(item => item.status === 'COMPLETED').length
+      const totalAmount = this.orders.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+      return [
+        { label: '订单总数', value: String(total) },
+        { label: '进行中', value: String(waiting) },
+        { label: '累计金额', value: totalAmount.toFixed(2) }
+      ]
+    },
+    emptyText() {
+      if (this.isMachinePage) {
+        return '暂无上机预约数据'
+      }
+      if (this.isSamplePage) {
+        return '暂无送样预约数据'
+      }
+      return '暂无订单数据'
     }
   },
-  async created() {
-    await this.load()
+  watch: {
+    orderType: {
+      immediate: true,
+      async handler() {
+        await this.load()
+      }
+    }
   },
   methods: {
+    formatDateTimeCell(row, column, value) {
+      return this.formatDateTime(value)
+    },
     async load() {
-      const orders = await getMyOrders()
-      this.orders = this.orderType ? orders.filter(item => item.orderType === this.orderType) : orders
+      const params = this.orderType ? { orderType: this.orderType } : undefined
+      const orders = await getMyOrders(params)
+      this.orders = orders
     },
     canCancel(row) {
-      return !['COMPLETED', 'CANCELED'].includes(row.status)
+      return ['PENDING_AUDIT', 'APPROVED', 'WAITING_USE', 'WAITING_RECEIVE'].includes(row.status)
     },
     async openDetail(row) {
       this.detail = await getOrderDetail(row.id)
@@ -127,7 +192,18 @@ export default {
     },
     sampleTestingStatusLabel(value) {
       return sampleTestingStatusLabelDict(value)
+    },
+    formatDateTime(value) {
+      return formatDateTimeUtil(value)
     }
   }
 }
 </script>
+
+<style scoped>
+.mode-tip {
+  margin: 4px 0 14px;
+  color: #6f86a2;
+  font-size: 13px;
+}
+</style>

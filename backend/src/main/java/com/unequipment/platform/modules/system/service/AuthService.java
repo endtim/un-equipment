@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,9 @@ public class AuthService {
     private final AccountRepository accountRepository;
     private final TokenService tokenService;
     private final PasswordEncoder passwordEncoder;
+
+    @Value("${app.auth.default-department-code:TEST_CENTER}")
+    private String defaultDepartmentCode;
 
     public Map<String, Object> login(LoginRequest request) {
         SysUser user = userRepository.findByUsername(request.getUsername());
@@ -57,7 +61,10 @@ public class AuthService {
         if (userRepository.findByUsername(request.getUsername()) != null) {
             throw new BizException(ErrorCodes.AUTH_USERNAME_EXISTS, "username already exists");
         }
-        SysDepartment department = departmentRepository.findFirst();
+        SysDepartment department = departmentRepository.findByDeptCode(defaultDepartmentCode);
+        if (department == null) {
+            department = departmentRepository.findFirst();
+        }
         if (department == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "department seed data missing");
         }

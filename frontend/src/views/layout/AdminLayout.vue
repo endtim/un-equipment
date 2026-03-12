@@ -49,44 +49,44 @@ const ADMIN_GROUPS = [
     key: 'workbench',
     label: '工作台',
     items: [
-      { label: '后台首页', path: '/admin' },
-      { label: '统计报表', path: '/admin/stats' },
-      { label: '日志审计', path: '/admin/logs' }
+      { label: '后台首页', path: '/admin', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] },
+      { label: '统计报表', path: '/admin/stats', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] },
+      { label: '日志审计', path: '/admin/logs', roles: ['ADMIN'] }
     ]
   },
   {
     key: 'system',
     label: '系统管理',
     items: [
-      { label: '用户管理', path: '/admin/users' },
-      { label: '角色管理', path: '/admin/roles' },
-      { label: '部门管理', path: '/admin/departments' }
+      { label: '用户管理', path: '/admin/users', roles: ['ADMIN', 'DEPT_MANAGER'] },
+      { label: '角色管理', path: '/admin/roles', roles: ['ADMIN'] },
+      { label: '部门管理', path: '/admin/departments', roles: ['ADMIN'] }
     ]
   },
   {
     key: 'instrument',
     label: '仪器管理',
     items: [
-      { label: '仪器分类', path: '/admin/categories' },
-      { label: '仪器管理', path: '/admin/instruments' }
+      { label: '仪器分类', path: '/admin/categories', roles: ['ADMIN'] },
+      { label: '仪器管理', path: '/admin/instruments', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] }
     ]
   },
   {
     key: 'business',
     label: '业务处理',
     items: [
-      { label: '上机订单', path: '/admin/orders/machine' },
-      { label: '送样订单', path: '/admin/orders/sample' },
-      { label: '充值审核', path: '/admin/recharges' },
-      { label: '结算管理', path: '/admin/settlements' }
+      { label: '上机订单', path: '/admin/orders/machine', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] },
+      { label: '送样订单', path: '/admin/orders/sample', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] },
+      { label: '充值审核', path: '/admin/recharges', roles: ['ADMIN', 'DEPT_MANAGER'] },
+      { label: '结算管理', path: '/admin/settlements', roles: ['ADMIN', 'DEPT_MANAGER'] }
     ]
   },
   {
     key: 'content',
     label: '内容管理',
     items: [
-      { label: '公告管理', path: '/admin/notices' },
-      { label: '帮助文档', path: '/admin/help-docs' }
+      { label: '公告管理', path: '/admin/notices', roles: ['ADMIN'] },
+      { label: '帮助文档', path: '/admin/help-docs', roles: ['ADMIN'] }
     ]
   }
 ]
@@ -96,8 +96,16 @@ export default {
     user() {
       return this.$store.state.user
     },
+    roleCode() {
+      return this.user?.roleCode || ''
+    },
     groups() {
       return ADMIN_GROUPS
+        .map(group => ({
+          ...group,
+          items: group.items.filter(item => item.roles.includes(this.roleCode))
+        }))
+        .filter(group => group.items.length > 0)
     },
     pageMeta() {
       return this.$route.meta || {}
@@ -152,7 +160,11 @@ export default {
       this.$router.push('/login')
     },
     isActive(item) {
-      return this.$route.path === item.path || this.$route.path.startsWith(`${item.path}/`)
+      const current = this.$route.path
+      if (item.path === '/admin') {
+        return current === '/admin'
+      }
+      return current === item.path || current.startsWith(`${item.path}/`)
     }
   }
 }

@@ -33,14 +33,14 @@
       <div class="hero-side">
         <div class="price-box">
           <div class="price-item">
-            <span>机时收费</span>
-            <strong>{{ formatAmount(detail.machinePricePerHour) }}</strong>
-            <em>元/小时</em>
+            <span>校内价格</span>
+            <strong>{{ formatAmount(detail.priceInternal ?? detail.machinePricePerHour) }}</strong>
+            <em>元/{{ detail.bookingUnit === 'HOUR' ? '小时' : '单位' }}</em>
           </div>
           <div class="price-item">
-            <span>送样收费</span>
-            <strong>{{ formatAmount(detail.samplePricePerItem) }}</strong>
-            <em>元/次</em>
+            <span>校外价格</span>
+            <strong>{{ formatAmount(detail.priceExternal ?? detail.samplePricePerItem) }}</strong>
+            <em>元/{{ detail.bookingUnit === 'HOUR' ? '小时' : '单位' }}</em>
           </div>
         </div>
         <div class="hero-actions">
@@ -225,7 +225,7 @@
               {{ detail.runtimeStatus?.reason || '当前状态正常，可按开放规则预约。' }}
             </div>
             <div v-if="detail.runtimeStatus?.recoverTime" class="runtime-text">
-              预计恢复时间：{{ detail.runtimeStatus.recoverTime }}
+              预计恢复时间：{{ formatDateTime(detail.runtimeStatus.recoverTime) }}
             </div>
           </div>
         </div>
@@ -249,6 +249,7 @@ import dayjs from 'dayjs'
 import { getInstrumentDetail, getInstrumentReservedSlots } from '../../api/instrument'
 import { createMachineReservation, createSampleReservation } from '../../api/order'
 import { openModeLabel } from '../../utils/dicts'
+import { formatDateTime as formatDateTimeUtil } from '../../utils/datetime'
 
 export default {
   props: ['id'],
@@ -261,11 +262,15 @@ export default {
       reservedSlotsLoading: false,
       machineForm: {
         reservedStart: '',
-        reservedEnd: ''
+        reservedEnd: '',
+        projectName: '',
+        purpose: ''
       },
       sampleForm: {
         sampleName: '',
-        sampleCount: 1
+        sampleCount: 1,
+        projectName: '',
+        purpose: ''
       }
     }
   },
@@ -416,7 +421,9 @@ export default {
         await createMachineReservation({
           instrumentId: this.detail.id,
           reservedStart: dayjs(this.machineForm.reservedStart).format('YYYY-MM-DDTHH:mm:ss'),
-          reservedEnd: dayjs(this.machineForm.reservedEnd).format('YYYY-MM-DDTHH:mm:ss')
+          reservedEnd: dayjs(this.machineForm.reservedEnd).format('YYYY-MM-DDTHH:mm:ss'),
+          projectName: this.machineForm.projectName || undefined,
+          purpose: this.machineForm.purpose || undefined
         })
         this.$message.success('上机预约已提交')
         this.$router.push('/center/orders')
@@ -429,7 +436,9 @@ export default {
         await createSampleReservation({
           instrumentId: this.detail.id,
           sampleName: this.sampleForm.sampleName,
-          sampleCount: this.sampleForm.sampleCount
+          sampleCount: this.sampleForm.sampleCount,
+          projectName: this.sampleForm.projectName || undefined,
+          purpose: this.sampleForm.purpose || undefined
         })
         this.$message.success('送样预约已提交')
         this.$router.push('/center/orders')
@@ -442,6 +451,9 @@ export default {
     },
     formatAmount(value) {
       return value == null ? '0.00' : Number(value).toFixed(2)
+    },
+    formatDateTime(value) {
+      return formatDateTimeUtil(value)
     },
     weekLabel(value) {
       const mapping = ['一', '二', '三', '四', '五', '六', '日']

@@ -18,5 +18,9 @@ public class SampleReservationRequest {
     @Min(value = 1, message = "sampleCount must be greater than 0")
     private Integer sampleCount;
 
+    private String projectName;
+
+    private String purpose;
+
     private String remark;
 }

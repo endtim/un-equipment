@@ -4,7 +4,7 @@
       <div>
         <div class="service-kicker">预约服务</div>
         <div class="section-title service-title">仪器资源检索</div>
-        <div class="service-desc">支持按关键词、分类与状态筛选仪器，点击卡片可查看详情或直接进入预约流程。</div>
+        <div class="service-desc">支持按关键字、分类与状态筛选仪器，点击卡片可查看详情或直接进入预约流程。</div>
       </div>
       <div class="service-summary">
         <div class="summary-number">{{ total }}</div>
@@ -51,8 +51,8 @@
             <span class="mode-text">{{ openModeLabel(item.openMode) }}</span>
           </div>
           <div class="price-row">
-            <div>机时收费：<strong>{{ formatAmount(item.machinePricePerHour) }}</strong> 元/小时</div>
-            <div>送样收费：<strong>{{ formatAmount(item.samplePricePerItem) }}</strong> 元/次</div>
+            <div>校内价格：<strong>{{ formatAmount(item.priceInternal ?? item.machinePricePerHour) }}</strong> 元/单位</div>
+            <div>校外价格：<strong>{{ formatAmount(item.priceExternal ?? item.samplePricePerItem) }}</strong> 元/单位</div>
           </div>
           <div class="card-actions">
             <el-button @click="openDetail(item)">查看详情</el-button>

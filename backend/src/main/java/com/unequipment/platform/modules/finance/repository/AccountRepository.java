@@ -2,36 +2,41 @@ package com.unequipment.platform.modules.finance.repository;
 
 import com.unequipment.platform.modules.finance.entity.Account;
 import java.math.BigDecimal;
-import org.apache.ibatis.annotations.Insert;
+import java.time.LocalDateTime;
 import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
-import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface AccountRepository {
 
-    @Select("select * from biz_account where user_id = #{userId} limit 1")
-    Account findByUserId(Long userId);
+    Account findByUserId(@Param("userId") Long userId);
 
-    @Insert("insert into biz_account(user_id, balance, frozen_amount, total_recharge, total_consume, status, create_time, update_time) "
-        + "values(#{userId}, #{balance}, #{frozenAmount}, #{totalRecharge}, #{totalConsume}, #{status}, #{createTime}, #{updateTime})")
-    @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(Account account);
 
-    @Update("update biz_account set balance=#{balance}, frozen_amount=#{frozenAmount}, total_recharge=#{totalRecharge}, total_consume=#{totalConsume}, status=#{status}, update_time=#{updateTime} where id=#{id}")
     int update(Account account);
 
-    @Update("update biz_account set balance = balance + #{amount}, total_recharge = ifnull(total_recharge, 0) + #{amount}, update_time = #{updateTime} where id = #{accountId}")
-    int increaseBalanceForRecharge(@Param("accountId") Long accountId, @Param("amount") BigDecimal amount,
-                                   @Param("updateTime") java.time.LocalDateTime updateTime);
+    int increaseBalanceForRecharge(@Param("accountId") Long accountId,
+                                   @Param("amount") BigDecimal amount,
+                                   @Param("updateTime") LocalDateTime updateTime);
 
-    @Update("update biz_account set balance = balance - #{amount}, total_consume = ifnull(total_consume, 0) + #{amount}, update_time = #{updateTime} where id = #{accountId} and balance >= #{amount}")
-    int decreaseBalanceForConsume(@Param("accountId") Long accountId, @Param("amount") BigDecimal amount,
-                                  @Param("updateTime") java.time.LocalDateTime updateTime);
+    int decreaseBalanceForConsume(@Param("accountId") Long accountId,
+                                  @Param("amount") BigDecimal amount,
+                                  @Param("updateTime") LocalDateTime updateTime);
 
-    @Update("update biz_account set balance = balance + #{amount}, update_time = #{updateTime} where id = #{accountId}")
-    int increaseBalanceForRefund(@Param("accountId") Long accountId, @Param("amount") BigDecimal amount,
-                                 @Param("updateTime") java.time.LocalDateTime updateTime);
+    int increaseBalanceForRefund(@Param("accountId") Long accountId,
+                                 @Param("amount") BigDecimal amount,
+                                 @Param("updateTime") LocalDateTime updateTime);
+
+    int freezeAmountIfAvailable(@Param("accountId") Long accountId,
+                                @Param("amount") BigDecimal amount,
+                                @Param("updateTime") LocalDateTime updateTime);
+
+    int unfreezeAmount(@Param("accountId") Long accountId,
+                       @Param("amount") BigDecimal amount,
+                       @Param("updateTime") LocalDateTime updateTime);
+
+    int consumeWithFreeze(@Param("accountId") Long accountId,
+                          @Param("finalAmount") BigDecimal finalAmount,
+                          @Param("frozenAmount") BigDecimal frozenAmount,
+                          @Param("updateTime") LocalDateTime updateTime);
 }

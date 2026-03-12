@@ -1,8 +1,9 @@
 import request from '../utils/request'
 
-export function getOverview() {
+export function getOverview(params) {
   return request({
     url: '/api/stats/overview',
-    method: 'get'
+    method: 'get',
+    params
   })
 }

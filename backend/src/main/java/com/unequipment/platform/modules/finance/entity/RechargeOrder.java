@@ -21,4 +21,5 @@ public class RechargeOrder {
     private LocalDateTime updateTime;
 
     private String userName;
+    private String auditUserName;
 }

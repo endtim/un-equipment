@@ -22,6 +22,40 @@ export function getRechargeOrders() {
   })
 }
 
+export function getRechargeOrdersPage(params) {
+  return request({
+    url: '/api/admin/finance/recharges/page',
+    method: 'get',
+    params
+  })
+}
+
+export function getReconciliationOverview(params) {
+  return request({
+    url: '/api/admin/finance/reconciliation/overview',
+    method: 'get',
+    params
+  })
+}
+
+export function getReconciliationAnomalies(params) {
+  return request({
+    url: '/api/admin/finance/reconciliation/anomalies',
+    method: 'get',
+    params
+  })
+}
+
+export function exportRechargeOrders(params) {
+  return request({
+    url: '/api/admin/finance/recharges/export',
+    method: 'get',
+    params,
+    responseType: 'blob',
+    rawResponse: true
+  })
+}
+
 export function auditRecharge(id, data) {
   return request({
     url: `/api/admin/finance/recharges/${id}/audit`,

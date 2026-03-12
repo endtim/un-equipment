@@ -4,7 +4,6 @@ import com.unequipment.platform.common.api.PageResponse;
 import com.unequipment.platform.common.exception.BizException;
 import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.common.util.BizNoGenerator;
-import com.unequipment.platform.modules.log.service.OperationLogService;
 import com.unequipment.platform.modules.instrument.dto.InstrumentSaveRequest;
 import com.unequipment.platform.modules.instrument.dto.OpenRuleSaveRequest;
 import com.unequipment.platform.modules.instrument.entity.Instrument;
@@ -19,6 +18,7 @@ import com.unequipment.platform.modules.instrument.repository.InstrumentClosePer
 import com.unequipment.platform.modules.instrument.repository.InstrumentOpenRuleRepository;
 import com.unequipment.platform.modules.instrument.repository.InstrumentRepository;
 import com.unequipment.platform.modules.instrument.repository.MaintenanceRecordRepository;
+import com.unequipment.platform.modules.log.service.OperationLogService;
 import com.unequipment.platform.modules.order.repository.ReservationOrderRepository;
 import com.unequipment.platform.modules.order.repository.SampleOrderRepository;
 import com.unequipment.platform.modules.order.repository.UsageRecordRepository;
@@ -27,9 +27,12 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -38,6 +41,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class InstrumentService {
+    private static final Set<String> INSTRUMENT_STATUS_SET = new HashSet<>(Arrays.asList(
+        "NORMAL", "DISABLED", "MAINTENANCE", "FAULT"
+    ));
+    private static final Set<String> OPEN_MODE_SET = new HashSet<>(Arrays.asList(
+        "MACHINE", "SAMPLE", "BOTH"
+    ));
+    private static final Set<String> BOOKING_UNIT_SET = new HashSet<>(Arrays.asList(
+        "HOUR", "ITEM"
+    ));
 
     private final InstrumentRepository instrumentRepository;
     private final InstrumentCategoryRepository categoryRepository;
@@ -49,6 +61,29 @@ public class InstrumentService {
     private final UsageRecordRepository usageRecordRepository;
     private final SampleOrderRepository sampleOrderRepository;
     private final OperationLogService operationLogService;
+
+    public PageResponse<Map<String, Object>> page(String keyword, Long categoryId, String status,
+                                                  int pageNum, int pageSize, SysUser operator) {
+        assertAdminOrInstrumentManager(operator);
+        int offset = Math.max(pageNum - 1, 0) * pageSize;
+        String roleCode = operator == null ? "INTERNAL_USER" : defaultString(operator.getPrimaryRoleCode(), "INTERNAL_USER");
+        List<Instrument> scopedList;
+        long total;
+        if ("ADMIN".equalsIgnoreCase(roleCode)) {
+            scopedList = instrumentRepository.findPageByCondition(keyword, status, categoryId, offset, pageSize);
+            total = instrumentRepository.countPageByCondition(keyword, status, categoryId);
+        } else {
+            scopedList = instrumentRepository.findPageByScope(keyword, status, categoryId, offset, pageSize,
+                roleCode.toUpperCase(), operator.getId(), operator.getDepartmentId());
+            total = instrumentRepository.countPageByScope(keyword, status, categoryId,
+                roleCode.toUpperCase(), operator.getId(), operator.getDepartmentId());
+        }
+        List<Map<String, Object>> list = scopedList
+            .stream()
+            .map(this::toSummary)
+            .collect(Collectors.toList());
+        return new PageResponse<>(list, total, pageNum, pageSize);
+    }
 
     public PageResponse<Map<String, Object>> page(String keyword, Long categoryId, String status, int pageNum, int pageSize) {
         int offset = Math.max(pageNum - 1, 0) * pageSize;
@@ -77,22 +112,6 @@ public class InstrumentService {
         result.put("departmentName", instrument.getDepartmentName());
         result.put("ownerUserName", instrument.getOwnerUserName());
         result.put("noticeText", instrument.getNoticeText());
-        result.put("model", instrument.getModel());
-        result.put("brand", instrument.getBrand());
-        result.put("assetNo", instrument.getAssetNo());
-        result.put("manufacturer", instrument.getManufacturer());
-        result.put("supplier", instrument.getSupplier());
-        result.put("originCountry", instrument.getOriginCountry());
-        result.put("purchaseDate", instrument.getPurchaseDate());
-        result.put("productionDate", instrument.getProductionDate());
-        result.put("equipmentSource", instrument.getEquipmentSource());
-        result.put("serviceContactName", instrument.getServiceContactName());
-        result.put("serviceContactPhone", instrument.getServiceContactPhone());
-        result.put("technicalSpecs", instrument.getTechnicalSpecs());
-        result.put("mainFunctions", instrument.getMainFunctions());
-        result.put("serviceContent", instrument.getServiceContent());
-        result.put("userNotice", instrument.getUserNotice());
-        result.put("chargeStandard", instrument.getChargeStandard());
         result.put("metrics", buildMetrics(instrument.getId()));
         result.put("runtimeStatus", buildRuntimeStatus(instrument));
         result.put("attachments", attachmentRepository.findByInstrumentId(instrument.getId()));
@@ -105,7 +124,8 @@ public class InstrumentService {
     }
 
     @Transactional
-    public InstrumentCategory saveCategory(Long id, InstrumentCategory request) {
+    public InstrumentCategory saveCategory(Long id, InstrumentCategory request, SysUser operator) {
+        assertAdmin(operator);
         InstrumentCategory category = id == null ? new InstrumentCategory() : categoryRepository.findById(id);
         if (id != null && category == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "category not found");
@@ -123,7 +143,7 @@ public class InstrumentService {
         } else {
             categoryRepository.update(category);
         }
-        operationLogService.save(null, "INSTRUMENT", id == null ? "CREATE_CATEGORY" : "UPDATE_CATEGORY", "category:" + category.getCategoryName());
+        operationLogService.save(operator, "INSTRUMENT", id == null ? "CREATE_CATEGORY" : "UPDATE_CATEGORY", "category:" + category.getCategoryName());
         return category;
     }
 
@@ -134,8 +154,13 @@ public class InstrumentService {
         if (category == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "category not found");
         }
+        if (id != null) {
+            assertInstrumentManagePermission(instrument, operator);
+        }
         instrument.setInstrumentNo(request.getCode() == null ? BizNoGenerator.next("INS") : request.getCode());
         instrument.setInstrumentName(request.getName());
+        instrument.setModel(request.getModel());
+        instrument.setBrand(request.getBrand());
         instrument.setAssetNo(request.getAssetNo());
         instrument.setManufacturer(request.getManufacturer());
         instrument.setSupplier(request.getSupplier());
@@ -159,40 +184,41 @@ public class InstrumentService {
         instrument.setChargeStandard(request.getChargeStandard());
         instrument.setPriceInternal(defaultValue(firstNonNull(request.getPriceInternal(), request.getMachinePricePerHour())));
         instrument.setPriceExternal(defaultValue(firstNonNull(request.getPriceExternal(), request.getSamplePricePerItem())));
-        instrument.setStatus(request.getStatus() == null ? "NORMAL" : request.getStatus());
+        instrument.setStatus(validateInstrumentStatus(defaultString(request.getStatus(), "NORMAL")));
+
         if (id == null) {
             instrument.setDepartmentId(operator.getDepartmentId());
             instrument.setOwnerUserId(operator.getId());
-            instrument.setOpenMode(defaultString(request.getOpenMode(), "BOTH"));
+            instrument.setOpenMode(validateOpenMode(defaultString(request.getOpenMode(), "BOTH")));
             instrument.setOpenStatus(defaultInt(request.getOpenStatus(), 1));
             instrument.setSupportExternal(defaultInt(request.getSupportExternal(), 1));
             instrument.setNeedAudit(defaultInt(request.getNeedAudit(), 1));
             instrument.setRequireTraining(defaultInt(request.getRequireTraining(), 0));
-            instrument.setBookingUnit(defaultString(request.getBookingUnit(), "HOUR"));
+            instrument.setBookingUnit(validateBookingUnit(defaultString(request.getBookingUnit(), "HOUR")));
             instrument.setMinReserveMinutes(defaultInt(request.getMinReserveMinutes(), 30));
             instrument.setMaxReserveMinutes(defaultInt(request.getMaxReserveMinutes(), 480));
             instrument.setStepMinutes(defaultInt(request.getStepMinutes(), 30));
             instrument.setIsHot(0);
             instrument.setSortNo(0);
+            instrument.setCreateTime(LocalDateTime.now());
+            instrument.setDeleted(0);
         } else {
-            instrument.setOpenMode(defaultString(request.getOpenMode(), instrument.getOpenMode()));
+            instrument.setOpenMode(validateOpenMode(defaultString(request.getOpenMode(), instrument.getOpenMode())));
             instrument.setOpenStatus(defaultInt(request.getOpenStatus(), instrument.getOpenStatus()));
             instrument.setSupportExternal(defaultInt(request.getSupportExternal(), instrument.getSupportExternal()));
             instrument.setNeedAudit(defaultInt(request.getNeedAudit(), instrument.getNeedAudit()));
             instrument.setRequireTraining(defaultInt(request.getRequireTraining(), instrument.getRequireTraining()));
-            instrument.setBookingUnit(defaultString(request.getBookingUnit(), instrument.getBookingUnit()));
+            instrument.setBookingUnit(validateBookingUnit(defaultString(request.getBookingUnit(), instrument.getBookingUnit())));
             instrument.setMinReserveMinutes(defaultInt(request.getMinReserveMinutes(), instrument.getMinReserveMinutes()));
             instrument.setMaxReserveMinutes(defaultInt(request.getMaxReserveMinutes(), instrument.getMaxReserveMinutes()));
             instrument.setStepMinutes(defaultInt(request.getStepMinutes(), instrument.getStepMinutes()));
         }
+
         validateReserveRuleConfig(instrument.getMinReserveMinutes(), instrument.getMaxReserveMinutes(), instrument.getStepMinutes());
+        instrument.setUpdateTime(LocalDateTime.now());
         if (id == null) {
-            instrument.setCreateTime(LocalDateTime.now());
-            instrument.setUpdateTime(LocalDateTime.now());
-            instrument.setDeleted(0);
             instrumentRepository.insert(instrument);
         } else {
-            instrument.setUpdateTime(LocalDateTime.now());
             instrumentRepository.update(instrument);
         }
         operationLogService.save(operator, "INSTRUMENT", id == null ? "CREATE_INSTRUMENT" : "UPDATE_INSTRUMENT", "instrument:" + instrument.getInstrumentName());
@@ -200,33 +226,47 @@ public class InstrumentService {
     }
 
     @Transactional
-    public InstrumentOpenRule saveRule(OpenRuleSaveRequest request) {
-        return saveRule(null, request);
+    public InstrumentOpenRule saveRule(OpenRuleSaveRequest request, SysUser operator) {
+        return saveRule(null, request, operator);
     }
 
     @Transactional
-    public InstrumentOpenRule saveRule(Long id, OpenRuleSaveRequest request) {
+    public InstrumentOpenRule saveRule(Long id, OpenRuleSaveRequest request, SysUser operator) {
         Instrument instrument = getById(request.getInstrumentId());
+        assertInstrumentManagePermission(instrument, operator);
         InstrumentOpenRule rule = id == null ? new InstrumentOpenRule() : openRuleRepository.findById(id);
         if (id != null && rule == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "open rule not found");
         }
+        if (id != null && (rule.getInstrumentId() == null || !rule.getInstrumentId().equals(request.getInstrumentId()))) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "instrumentId cannot be changed for existing open rule");
+        }
         Integer weekDay = resolveWeekDay(request);
+        validateWeekDay(weekDay);
         LocalTime startTime = resolveStartTime(request);
         LocalTime endTime = resolveEndTime(request);
         if (!endTime.isAfter(startTime)) {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "open time range is invalid");
         }
+        Integer stepMinutes = defaultInt(request.getStepMinutes(), 30);
+        Integer maxReserveMinutes = defaultInt(request.getMaxReserveMinutes(), 480);
+        validateReserveRuleConfig(stepMinutes, maxReserveMinutes, stepMinutes);
+        if (maxReserveMinutes % stepMinutes != 0) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "open rule maxReserveMinutes must align with stepMinutes");
+        }
         if (request.getEffectiveStartDate() != null && request.getEffectiveEndDate() != null
             && request.getEffectiveEndDate().isBefore(request.getEffectiveStartDate())) {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "effective date range is invalid");
         }
+        assertOpenRuleNoOverlap(id, instrument.getId(), weekDay, startTime, endTime,
+            request.getEffectiveStartDate(), request.getEffectiveEndDate());
+
         rule.setInstrumentId(instrument.getId());
         rule.setWeekDay(weekDay);
         rule.setStartTime(startTime);
         rule.setEndTime(endTime);
-        rule.setMaxReserveMinutes(request.getMaxReserveMinutes() == null ? 480 : request.getMaxReserveMinutes());
-        rule.setStepMinutes(request.getStepMinutes() == null ? 30 : request.getStepMinutes());
+        rule.setMaxReserveMinutes(maxReserveMinutes);
+        rule.setStepMinutes(stepMinutes);
         rule.setEffectiveStartDate(request.getEffectiveStartDate());
         rule.setEffectiveEndDate(request.getEffectiveEndDate());
         rule.setStatus("ENABLED");
@@ -238,7 +278,7 @@ public class InstrumentService {
         } else {
             openRuleRepository.update(rule);
         }
-        operationLogService.save(null, "INSTRUMENT", id == null ? "CREATE_OPEN_RULE" : "UPDATE_OPEN_RULE", "ruleId:" + rule.getId());
+        operationLogService.save(operator, "INSTRUMENT", id == null ? "CREATE_OPEN_RULE" : "UPDATE_OPEN_RULE", "ruleId:" + rule.getId());
         return rule;
     }
 
@@ -256,7 +296,7 @@ public class InstrumentService {
         if ("SAMPLE".equalsIgnoreCase(orderType) && "MACHINE".equalsIgnoreCase(openMode)) {
             throw new BizException(ErrorCodes.BIZ_ERROR, "instrument does not support sample reservation");
         }
-        if (user != null && "EXTERNAL".equalsIgnoreCase(user.getUserType())
+        if (user != null && isExternalUser(user)
             && (instrument.getSupportExternal() == null || instrument.getSupportExternal() != 1)) {
             throw new BizException(ErrorCodes.BIZ_ERROR, "instrument does not support external users");
         }
@@ -314,7 +354,8 @@ public class InstrumentService {
     }
 
     @Transactional
-    public void deleteCategory(Long id) {
+    public void deleteCategory(Long id, SysUser operator) {
+        assertAdmin(operator);
         if (categoryRepository.findById(id) == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "category not found");
         }
@@ -322,35 +363,58 @@ public class InstrumentService {
             throw new BizException(ErrorCodes.BIZ_ERROR, "category is referenced by instruments");
         }
         categoryRepository.softDelete(id, LocalDateTime.now());
-        operationLogService.save(null, "INSTRUMENT", "DELETE_CATEGORY", "categoryId:" + id);
+        operationLogService.save(operator, "INSTRUMENT", "DELETE_CATEGORY", "categoryId:" + id);
     }
 
     @Transactional
-    public void deleteInstrument(Long id) {
-        if (instrumentRepository.findById(id) == null) {
+    public void deleteInstrument(Long id, SysUser operator) {
+        Instrument instrument = instrumentRepository.findById(id);
+        if (instrument == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "instrument not found");
         }
+        assertInstrumentManagePermission(instrument, operator);
         if (reservationOrderRepository.countByInstrumentId(id) > 0) {
             throw new BizException(ErrorCodes.BIZ_ERROR, "instrument has reservation history and cannot be deleted");
         }
-        instrumentRepository.softDelete(id, LocalDateTime.now());
-        operationLogService.save(null, "INSTRUMENT", "DELETE_INSTRUMENT", "instrumentId:" + id);
+        LocalDateTime now = LocalDateTime.now();
+        openRuleRepository.softDeleteByInstrumentId(id, now);
+        attachmentRepository.softDeleteByInstrumentId(id, now);
+        instrumentRepository.softDelete(id, now);
+        operationLogService.save(operator, "INSTRUMENT", "DELETE_INSTRUMENT", "instrumentId:" + id);
     }
 
-    public List<InstrumentOpenRule> allOpenRules() {
-        return openRuleRepository.findAll();
+    public List<InstrumentOpenRule> allOpenRules(SysUser operator) {
+        assertAdminOrInstrumentManager(operator);
+        if (hasRole(operator, "ADMIN")) {
+            return openRuleRepository.findAll();
+        }
+        Set<Long> scopedInstrumentIds = accessibleInstrumentIds(operator);
+        return openRuleRepository.findAll().stream()
+            .filter(rule -> rule.getInstrumentId() != null && scopedInstrumentIds.contains(rule.getInstrumentId()))
+            .collect(Collectors.toList());
     }
 
-    public List<InstrumentAttachment> allAttachments() {
-        return attachmentRepository.findAll();
+    public List<InstrumentAttachment> allAttachments(SysUser operator) {
+        assertAdminOrInstrumentManager(operator);
+        if (hasRole(operator, "ADMIN")) {
+            return attachmentRepository.findAll();
+        }
+        Set<Long> scopedInstrumentIds = accessibleInstrumentIds(operator);
+        return attachmentRepository.findAll().stream()
+            .filter(item -> item.getInstrumentId() != null && scopedInstrumentIds.contains(item.getInstrumentId()))
+            .collect(Collectors.toList());
     }
 
     @Transactional
-    public InstrumentAttachment saveAttachment(Long id, InstrumentAttachment request) {
-        getById(request.getInstrumentId());
+    public InstrumentAttachment saveAttachment(Long id, InstrumentAttachment request, SysUser operator) {
+        Instrument instrument = getById(request.getInstrumentId());
+        assertInstrumentManagePermission(instrument, operator);
         InstrumentAttachment attachment = id == null ? new InstrumentAttachment() : attachmentRepository.findById(id);
         if (id != null && attachment == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "attachment not found");
+        }
+        if (id != null && (attachment.getInstrumentId() == null || !attachment.getInstrumentId().equals(request.getInstrumentId()))) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "instrumentId cannot be changed for existing attachment");
         }
         attachment.setInstrumentId(request.getInstrumentId());
         attachment.setFileName(request.getFileName());
@@ -365,26 +429,32 @@ public class InstrumentService {
         } else {
             attachmentRepository.update(attachment);
         }
-        operationLogService.save(null, "INSTRUMENT", id == null ? "CREATE_ATTACHMENT" : "UPDATE_ATTACHMENT", "attachmentId:" + attachment.getId());
+        operationLogService.save(operator, "INSTRUMENT", id == null ? "CREATE_ATTACHMENT" : "UPDATE_ATTACHMENT", "attachmentId:" + attachment.getId());
         return attachment;
     }
 
     @Transactional
-    public void deleteOpenRule(Long id) {
-        if (openRuleRepository.findById(id) == null) {
+    public void deleteOpenRule(Long id, SysUser operator) {
+        InstrumentOpenRule rule = openRuleRepository.findById(id);
+        if (rule == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "open rule not found");
         }
+        Instrument instrument = getById(rule.getInstrumentId());
+        assertInstrumentManagePermission(instrument, operator);
         openRuleRepository.softDelete(id, LocalDateTime.now());
-        operationLogService.save(null, "INSTRUMENT", "DELETE_OPEN_RULE", "ruleId:" + id);
+        operationLogService.save(operator, "INSTRUMENT", "DELETE_OPEN_RULE", "ruleId:" + id);
     }
 
     @Transactional
-    public void deleteAttachment(Long id) {
-        if (attachmentRepository.findById(id) == null) {
+    public void deleteAttachment(Long id, SysUser operator) {
+        InstrumentAttachment attachment = attachmentRepository.findById(id);
+        if (attachment == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "attachment not found");
         }
+        Instrument instrument = getById(attachment.getInstrumentId());
+        assertInstrumentManagePermission(instrument, operator);
         attachmentRepository.softDelete(id, LocalDateTime.now());
-        operationLogService.save(null, "INSTRUMENT", "DELETE_ATTACHMENT", "attachmentId:" + id);
+        operationLogService.save(operator, "INSTRUMENT", "DELETE_ATTACHMENT", "attachmentId:" + id);
     }
 
     private Map<String, Object> toSummary(Instrument instrument) {
@@ -394,6 +464,8 @@ public class InstrumentService {
         result.put("instrumentName", instrument.getInstrumentName());
         result.put("code", instrument.getInstrumentNo());
         result.put("instrumentNo", instrument.getInstrumentNo());
+        result.put("model", instrument.getModel());
+        result.put("brand", instrument.getBrand());
         result.put("assetNo", instrument.getAssetNo());
         result.put("manufacturer", instrument.getManufacturer());
         result.put("supplier", instrument.getSupplier());
@@ -477,6 +549,37 @@ public class InstrumentService {
         return endDate == null || !date.isAfter(endDate);
     }
 
+    private boolean isExternalUser(SysUser user) {
+        if (user == null) {
+            return false;
+        }
+        if ("EXTERNAL_USER".equalsIgnoreCase(user.getPrimaryRoleCode())) {
+            return true;
+        }
+        return "EXTERNAL".equalsIgnoreCase(user.getUserType());
+    }
+
+    private String validateInstrumentStatus(String status) {
+        if (!INSTRUMENT_STATUS_SET.contains(status)) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "invalid instrument status");
+        }
+        return status;
+    }
+
+    private String validateOpenMode(String openMode) {
+        if (!OPEN_MODE_SET.contains(openMode)) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "invalid openMode");
+        }
+        return openMode;
+    }
+
+    private String validateBookingUnit(String bookingUnit) {
+        if (!BOOKING_UNIT_SET.contains(bookingUnit)) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "invalid bookingUnit");
+        }
+        return bookingUnit;
+    }
+
     private Map<String, Object> buildMetrics(Long instrumentId) {
         Map<String, Object> metrics = new HashMap<>();
         metrics.put("reserveCount", reservationOrderRepository.countByInstrumentId(instrumentId));
@@ -547,6 +650,12 @@ public class InstrumentService {
         throw new BizException(ErrorCodes.INVALID_REQUEST, "week day is required");
     }
 
+    private void validateWeekDay(Integer weekDay) {
+        if (weekDay == null || weekDay < 1 || weekDay > 7) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "weekDay must be between 1 and 7");
+        }
+    }
+
     private LocalTime resolveStartTime(OpenRuleSaveRequest request) {
         if (request.getStartTime() != null && !request.getStartTime().trim().isEmpty()) {
             return LocalTime.parse(request.getStartTime().trim());
@@ -565,5 +674,93 @@ public class InstrumentService {
             return LocalTime.parse(request.getOpenTimeRange().split("-")[1].trim());
         }
         throw new BizException(ErrorCodes.INVALID_REQUEST, "endTime is required");
+    }
+
+    private void assertOpenRuleNoOverlap(Long currentRuleId, Long instrumentId, Integer weekDay,
+                                         LocalTime startTime, LocalTime endTime,
+                                         LocalDate effectiveStartDate, LocalDate effectiveEndDate) {
+        List<InstrumentOpenRule> rules = openRuleRepository.findByInstrumentId(instrumentId).stream()
+            .filter(rule -> "ENABLED".equalsIgnoreCase(rule.getStatus()))
+            .filter(rule -> currentRuleId == null || !currentRuleId.equals(rule.getId()))
+            .filter(rule -> weekDay != null && weekDay.equals(rule.getWeekDay()))
+            .collect(Collectors.toList());
+        for (InstrumentOpenRule rule : rules) {
+            if (rule.getStartTime() == null || rule.getEndTime() == null) {
+                continue;
+            }
+            boolean timeOverlap = startTime.isBefore(rule.getEndTime()) && endTime.isAfter(rule.getStartTime());
+            if (!timeOverlap) {
+                continue;
+            }
+            if (isEffectiveDateOverlap(effectiveStartDate, effectiveEndDate, rule.getEffectiveStartDate(), rule.getEffectiveEndDate())) {
+                throw new BizException(ErrorCodes.INVALID_REQUEST, "open rule overlaps with existing rules");
+            }
+        }
+    }
+
+    private boolean isEffectiveDateOverlap(LocalDate start1, LocalDate end1, LocalDate start2, LocalDate end2) {
+        LocalDate s1 = start1 == null ? LocalDate.of(1970, 1, 1) : start1;
+        LocalDate e1 = end1 == null ? LocalDate.of(2999, 12, 31) : end1;
+        LocalDate s2 = start2 == null ? LocalDate.of(1970, 1, 1) : start2;
+        LocalDate e2 = end2 == null ? LocalDate.of(2999, 12, 31) : end2;
+        return !e1.isBefore(s2) && !e2.isBefore(s1);
+    }
+
+    private void assertInstrumentManagePermission(Instrument instrument, SysUser operator) {
+        if (operator == null) {
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "permission denied");
+        }
+        String roleCode = operator.getPrimaryRoleCode();
+        if ("ADMIN".equalsIgnoreCase(roleCode)) {
+            return;
+        }
+        if ("INSTRUMENT_OWNER".equalsIgnoreCase(roleCode)
+            && instrument.getOwnerUserId() != null
+            && instrument.getOwnerUserId().equals(operator.getId())) {
+            return;
+        }
+        if ("DEPT_MANAGER".equalsIgnoreCase(roleCode)
+            && instrument.getDepartmentId() != null
+            && instrument.getDepartmentId().equals(operator.getDepartmentId())) {
+            return;
+        }
+        throw new BizException(ErrorCodes.PERMISSION_DENIED, "permission denied for this instrument");
+    }
+
+    private void assertAdmin(SysUser operator) {
+        if (operator == null || !"ADMIN".equalsIgnoreCase(operator.getPrimaryRoleCode())) {
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "admin role required");
+        }
+    }
+
+    public void assertAdminOrInstrumentManager(SysUser operator) {
+        if (hasRole(operator, "ADMIN") || hasRole(operator, "INSTRUMENT_OWNER") || hasRole(operator, "DEPT_MANAGER")) {
+            return;
+        }
+        throw new BizException(ErrorCodes.PERMISSION_DENIED, "permission denied");
+    }
+
+    private boolean hasRole(SysUser user, String roleCode) {
+        return user != null && roleCode.equalsIgnoreCase(user.getPrimaryRoleCode());
+    }
+
+    private Set<Long> accessibleInstrumentIds(SysUser operator) {
+        return instrumentRepository.findAll().stream()
+            .filter(item -> canAccessByRole(item, operator))
+            .map(Instrument::getId)
+            .collect(Collectors.toSet());
+    }
+
+    private boolean canAccessByRole(Instrument instrument, SysUser operator) {
+        if (hasRole(operator, "ADMIN")) {
+            return true;
+        }
+        if (hasRole(operator, "INSTRUMENT_OWNER")) {
+            return instrument.getOwnerUserId() != null && instrument.getOwnerUserId().equals(operator.getId());
+        }
+        if (hasRole(operator, "DEPT_MANAGER")) {
+            return instrument.getDepartmentId() != null && instrument.getDepartmentId().equals(operator.getDepartmentId());
+        }
+        return false;
     }
 }

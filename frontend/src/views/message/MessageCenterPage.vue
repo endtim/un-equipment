@@ -13,7 +13,7 @@
           <el-tag v-else type="success">已读</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="createTime" label="接收时间" width="180" />
+      <el-table-column prop="createTime" label="接收时间" width="180" :formatter="formatDateTimeCell" />
       <el-table-column label="操作" width="120">
         <template #default="{ row }">
           <el-button v-if="row.readStatus === 0" link type="primary" @click="markRead(row)">标记已读</el-button>
@@ -25,6 +25,7 @@
 
 <script>
 import { getMessages, markAllMessagesRead, markMessageRead } from '../../api/content'
+import { formatDateTime } from '../../utils/datetime'
 
 export default {
   data() {
@@ -36,6 +37,9 @@ export default {
     await this.load()
   },
   methods: {
+    formatDateTimeCell(row, column, value) {
+      return formatDateTime(value)
+    },
     async load() {
       this.messages = await getMessages()
     },

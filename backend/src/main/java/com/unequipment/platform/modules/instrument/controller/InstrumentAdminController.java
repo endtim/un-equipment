@@ -36,23 +36,25 @@ public class InstrumentAdminController {
         @RequestParam(required = false) String status,
         @RequestParam(required = false) Long categoryId,
         @RequestParam(defaultValue = "1") int pageNum,
-        @RequestParam(defaultValue = "10") int pageSize) {
-        return ApiResponse.success(instrumentService.page(keyword, categoryId, status, pageNum, pageSize));
+        @RequestParam(defaultValue = "10") int pageSize,
+        @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.page(keyword, categoryId, status, pageNum, pageSize, operator));
     }
 
     @GetMapping("/categories")
-    public ApiResponse<?> categories() {
+    public ApiResponse<?> categories(@CurrentUser SysUser operator) {
+        instrumentService.assertAdminOrInstrumentManager(operator);
         return ApiResponse.success(instrumentService.categories());
     }
 
     @GetMapping("/open-rules")
-    public ApiResponse<?> openRules() {
-        return ApiResponse.success(instrumentService.allOpenRules());
+    public ApiResponse<?> openRules(@CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.allOpenRules(operator));
     }
 
     @GetMapping("/attachments")
-    public ApiResponse<?> attachments() {
-        return ApiResponse.success(instrumentService.allAttachments());
+    public ApiResponse<?> attachments(@CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.allAttachments(operator));
     }
 
     @PostMapping
@@ -67,56 +69,65 @@ public class InstrumentAdminController {
     }
 
     @PostMapping("/categories")
-    public ApiResponse<InstrumentCategory> createCategory(@RequestBody InstrumentCategory request) {
-        return ApiResponse.success(instrumentService.saveCategory(null, request));
+    public ApiResponse<InstrumentCategory> createCategory(@RequestBody InstrumentCategory request,
+                                                          @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.saveCategory(null, request, operator));
     }
 
     @PutMapping("/categories/{id}")
-    public ApiResponse<InstrumentCategory> updateCategory(@PathVariable Long id, @RequestBody InstrumentCategory request) {
-        return ApiResponse.success(instrumentService.saveCategory(id, request));
+    public ApiResponse<InstrumentCategory> updateCategory(@PathVariable Long id,
+                                                          @RequestBody InstrumentCategory request,
+                                                          @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.saveCategory(id, request, operator));
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<?> delete(@PathVariable Long id) {
-        instrumentService.deleteInstrument(id);
+    public ApiResponse<?> delete(@PathVariable Long id, @CurrentUser SysUser operator) {
+        instrumentService.deleteInstrument(id, operator);
         return ApiResponse.success("ok");
     }
 
     @DeleteMapping("/categories/{id}")
-    public ApiResponse<?> deleteCategory(@PathVariable Long id) {
-        instrumentService.deleteCategory(id);
+    public ApiResponse<?> deleteCategory(@PathVariable Long id, @CurrentUser SysUser operator) {
+        instrumentService.deleteCategory(id, operator);
         return ApiResponse.success("ok");
     }
 
     @PostMapping("/open-rules")
-    public ApiResponse<InstrumentOpenRule> saveRule(@Valid @RequestBody OpenRuleSaveRequest request) {
-        return ApiResponse.success(instrumentService.saveRule(request));
+    public ApiResponse<InstrumentOpenRule> saveRule(@Valid @RequestBody OpenRuleSaveRequest request,
+                                                    @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.saveRule(request, operator));
     }
 
     @PutMapping("/open-rules/{id}")
-    public ApiResponse<InstrumentOpenRule> updateRule(@PathVariable Long id, @Valid @RequestBody OpenRuleSaveRequest request) {
-        return ApiResponse.success(instrumentService.saveRule(id, request));
+    public ApiResponse<InstrumentOpenRule> updateRule(@PathVariable Long id,
+                                                      @Valid @RequestBody OpenRuleSaveRequest request,
+                                                      @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.saveRule(id, request, operator));
     }
 
     @DeleteMapping("/open-rules/{id}")
-    public ApiResponse<?> deleteRule(@PathVariable Long id) {
-        instrumentService.deleteOpenRule(id);
+    public ApiResponse<?> deleteRule(@PathVariable Long id, @CurrentUser SysUser operator) {
+        instrumentService.deleteOpenRule(id, operator);
         return ApiResponse.success("ok");
     }
 
     @PostMapping("/attachments")
-    public ApiResponse<InstrumentAttachment> createAttachment(@RequestBody InstrumentAttachment request) {
-        return ApiResponse.success(instrumentService.saveAttachment(null, request));
+    public ApiResponse<InstrumentAttachment> createAttachment(@RequestBody InstrumentAttachment request,
+                                                              @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.saveAttachment(null, request, operator));
     }
 
     @PutMapping("/attachments/{id}")
-    public ApiResponse<InstrumentAttachment> updateAttachment(@PathVariable Long id, @RequestBody InstrumentAttachment request) {
-        return ApiResponse.success(instrumentService.saveAttachment(id, request));
+    public ApiResponse<InstrumentAttachment> updateAttachment(@PathVariable Long id,
+                                                              @RequestBody InstrumentAttachment request,
+                                                              @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.saveAttachment(id, request, operator));
     }
 
     @DeleteMapping("/attachments/{id}")
-    public ApiResponse<?> deleteAttachment(@PathVariable Long id) {
-        instrumentService.deleteAttachment(id);
+    public ApiResponse<?> deleteAttachment(@PathVariable Long id, @CurrentUser SysUser operator) {
+        instrumentService.deleteAttachment(id, operator);
         return ApiResponse.success("ok");
     }
 }

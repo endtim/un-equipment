@@ -24,6 +24,10 @@ public class InstrumentSaveRequest {
 
     @Size(max = 50, message = "code length must be <= 50")
     private String code;
+    @Size(max = 100, message = "model length must be <= 100")
+    private String model;
+    @Size(max = 100, message = "brand length must be <= 100")
+    private String brand;
     @Size(max = 50, message = "assetNo length must be <= 50")
     private String assetNo;
     @Size(max = 100, message = "manufacturer length must be <= 100")

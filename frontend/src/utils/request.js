@@ -13,13 +13,12 @@ const codeAliasMap = {
   40400: '请求资源不存在或已删除',
   41001: '用户名或密码错误',
   41002: '用户名已存在',
-  42001: '预约时间范围无效',
   42002: '预约时间与已有订单冲突，请调整预约时段',
   42003: '订单动作非法，请刷新后重试',
   42004: '当前订单状态不允许执行该操作',
   42005: '当前订单类型不支持该操作',
   42006: '订单不存在',
-  43001: '账户余额不足，请先充值',
+  43001: '可用余额不足，请先充值',
   43002: '账户不存在，请联系管理员'
 }
 
@@ -35,11 +34,14 @@ class RequestError extends Error {
 }
 
 function normalizeBizMessage(message, fallback = '服务异常，请稍后重试', code) {
+  if (typeof message === 'string' && message.trim()) {
+    const text = message.trim()
+    if (text.toLowerCase() !== 'internal server error') {
+      return text
+    }
+  }
   if (code && codeAliasMap[code]) {
     return codeAliasMap[code]
-  }
-  if (typeof message === 'string' && message.trim()) {
-    return message
   }
   return fallback
 }
@@ -81,6 +83,9 @@ service.interceptors.response.use(
       pendingWriteMap.delete(requestKey)
     }
     const payload = response.data
+    if ((response.config && response.config.rawResponse) || (response.config && response.config.responseType === 'blob')) {
+      return payload
+    }
     if (payload.code !== 200) {
       const msg = normalizeBizMessage(payload.msg, '请求失败', payload.code)
       if (shouldToast(response.config)) {

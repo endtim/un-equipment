@@ -16,10 +16,11 @@ export function createSampleReservation(data) {
   })
 }
 
-export function getMyOrders() {
+export function getMyOrders(params) {
   return request({
     url: '/api/reservations/my',
-    method: 'get'
+    method: 'get',
+    params
   })
 }
 
@@ -37,10 +38,11 @@ export function cancelOrder(id) {
   })
 }
 
-export function getAdminOrders() {
+export function getAdminOrders(params) {
   return request({
     url: '/api/admin/orders',
-    method: 'get'
+    method: 'get',
+    params
   })
 }
 
@@ -84,6 +86,22 @@ export function settleOrder(id) {
 export function uploadAdminOrderResult(id, data) {
   return request({
     url: `/api/admin/orders/${id}/result`,
+    method: 'post',
+    data
+  })
+}
+
+export function closeAdminOrder(id, data) {
+  return request({
+    url: `/api/admin/orders/${id}/close`,
+    method: 'post',
+    data
+  })
+}
+
+export function adjustAdminOrderAmount(id, data) {
+  return request({
+    url: `/api/admin/orders/${id}/adjust-amount`,
     method: 'post',
     data
   })

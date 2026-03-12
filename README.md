@@ -81,3 +81,15 @@ npm run serve
 ### 7.2 登录失败（账号密码正确）
 
 请确认数据库 `sys_user.password` 为 BCrypt 哈希格式（以 `$2a$` / `$2b$` / `$2y$` 开头），且账号状态为 `ENABLED`。
+
+## 8. P2/P3 回归检查清单
+
+- 预约状态机：
+  - `MACHINE`：`PENDING_AUDIT -> WAITING_USE -> IN_USE -> WAITING_SETTLEMENT -> COMPLETED`
+  - `SAMPLE`：`PENDING_AUDIT -> WAITING_RECEIVE -> TESTING -> RESULT_UPLOADED -> WAITING_SETTLEMENT -> COMPLETED`
+- 取消规则：仅允许 `PENDING_AUDIT`、`APPROVED`、`WAITING_USE`、`WAITING_RECEIVE` 执行取消。
+- 结算幂等：同一订单并发结算只允许一次成功，重复请求应返回状态不允许。
+- 价格口径：统一按用户类型取价（校内 `priceInternal`，校外 `priceExternal`），下单、完单重算、结算记录一致。
+- 开放规则：`weekDay` 必须在 1~7，`maxReserveMinutes` 必须大于等于 `stepMinutes` 且可整除。
+- 已预约时段：仪器详情页切换日期可刷新占用列表；与后端冲突校验口径一致。
+- 前端异常处理：业务错误不出现 Vue 红屏，401/403 统一清理登录态并跳转登录页。

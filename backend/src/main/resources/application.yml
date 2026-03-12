@@ -26,6 +26,11 @@ springdoc:
     path: /swagger-ui.html
 
 app:
+  auth:
+    default-department-code: ${APP_AUTH_DEFAULT_DEPARTMENT_CODE:TEST_CENTER}
+  finance:
+    internal-single-limit: ${APP_FINANCE_INTERNAL_SINGLE_LIMIT:0}
+    external-single-limit: ${APP_FINANCE_EXTERNAL_SINGLE_LIMIT:0}
   security:
     token-prefix: Bearer
     token-header: Authorization
