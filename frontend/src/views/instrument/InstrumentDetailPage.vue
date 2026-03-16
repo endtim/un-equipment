@@ -101,7 +101,7 @@
           </div>
           <div class="open-rule-list">
             <div v-for="item in detail.openRules || []" :key="item.id" class="open-rule-row">
-              周{{ weekLabel(item.weekDay) }}：{{ String(item.startTime).slice(0, 5) }} - {{ String(item.endTime).slice(0, 5) }}
+              {{ weekLabels(item) }}：{{ String(item.startTime).slice(0, 5) }} - {{ String(item.endTime).slice(0, 5) }}
             </div>
           </div>
         </div>
@@ -454,6 +454,18 @@ export default {
     },
     formatDateTime(value) {
       return formatDateTimeUtil(value)
+    },
+    weekLabels(rule) {
+      const text = rule?.weekDays || (rule?.weekDay != null ? String(rule.weekDay) : '')
+      if (!text) {
+        return '-'
+      }
+      return text
+        .split(',')
+        .map(item => Number(item))
+        .filter(item => item >= 1 && item <= 7)
+        .map(item => `周${this.weekLabel(item)}`)
+        .join('、')
     },
     weekLabel(value) {
       const mapping = ['一', '二', '三', '四', '五', '六', '日']

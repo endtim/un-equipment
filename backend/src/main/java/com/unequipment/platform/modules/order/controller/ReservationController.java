@@ -1,6 +1,7 @@
 package com.unequipment.platform.modules.order.controller;
 
 import com.unequipment.platform.common.api.ApiResponse;
+import com.unequipment.platform.common.api.PageResponse;
 import com.unequipment.platform.modules.order.dto.MachineReservationRequest;
 import com.unequipment.platform.modules.order.dto.OrderActionRequest;
 import com.unequipment.platform.modules.order.dto.SampleReservationRequest;
@@ -9,7 +10,6 @@ import com.unequipment.platform.modules.order.vo.OrderDetailVO;
 import com.unequipment.platform.modules.order.vo.OrderSummaryVO;
 import com.unequipment.platform.modules.system.entity.SysUser;
 import com.unequipment.platform.security.CurrentUser;
-import java.util.List;
 import javax.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,9 +38,11 @@ public class ReservationController {
     }
 
     @GetMapping("/my")
-    public ApiResponse<List<OrderSummaryVO>> myOrders(@CurrentUser SysUser user,
-                                                       @RequestParam(value = "orderType", required = false) String orderType) {
-        return ApiResponse.success(orderService.myOrders(user, orderType));
+    public ApiResponse<PageResponse<OrderSummaryVO>> myOrders(@CurrentUser SysUser user,
+                                                              @RequestParam(value = "orderType", required = false) String orderType,
+                                                              @RequestParam(value = "pageNum", defaultValue = "1") int pageNum,
+                                                              @RequestParam(value = "pageSize", defaultValue = "10") int pageSize) {
+        return ApiResponse.success(orderService.myOrders(user, orderType, pageNum, pageSize));
     }
 
     @GetMapping("/{id}")

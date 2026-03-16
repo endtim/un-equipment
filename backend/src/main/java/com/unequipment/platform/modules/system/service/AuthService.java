@@ -7,6 +7,7 @@ import com.unequipment.platform.modules.finance.repository.AccountRepository;
 import com.unequipment.platform.modules.system.dto.LoginRequest;
 import com.unequipment.platform.modules.system.dto.RegisterRequest;
 import com.unequipment.platform.modules.system.entity.SysDepartment;
+import com.unequipment.platform.modules.system.entity.SysRole;
 import com.unequipment.platform.modules.system.entity.SysUser;
 import com.unequipment.platform.modules.system.entity.SysUserRole;
 import com.unequipment.platform.modules.system.repository.SysDepartmentRepository;
@@ -42,12 +43,12 @@ public class AuthService {
     public Map<String, Object> login(LoginRequest request) {
         SysUser user = userRepository.findByUsername(request.getUsername());
         if (user == null || !"ENABLED".equalsIgnoreCase(user.getStatus())) {
-            throw new BizException(ErrorCodes.AUTH_INVALID_CREDENTIALS, "username or password is invalid");
+            throw new BizException(ErrorCodes.AUTH_INVALID_CREDENTIALS, "用户名或密码错误");
         }
         String storedPassword = user.getPassword();
         boolean validPassword = storedPassword != null && passwordEncoder.matches(request.getPassword(), storedPassword);
         if (!validPassword) {
-            throw new BizException(ErrorCodes.AUTH_INVALID_CREDENTIALS, "username or password is invalid");
+            throw new BizException(ErrorCodes.AUTH_INVALID_CREDENTIALS, "用户名或密码错误");
         }
         userRepository.updateLastLoginTime(user.getId(), LocalDateTime.now());
         Map<String, Object> result = new HashMap<>();
@@ -59,14 +60,14 @@ public class AuthService {
     @Transactional
     public Map<String, Object> register(RegisterRequest request) {
         if (userRepository.findByUsername(request.getUsername()) != null) {
-            throw new BizException(ErrorCodes.AUTH_USERNAME_EXISTS, "username already exists");
+            throw new BizException(ErrorCodes.AUTH_USERNAME_EXISTS, "用户名已存在");
         }
         SysDepartment department = departmentRepository.findByDeptCode(defaultDepartmentCode);
         if (department == null) {
             department = departmentRepository.findFirst();
         }
         if (department == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "department seed data missing");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "缺少默认部门数据");
         }
         SysUser user = new SysUser();
         user.setUsername(request.getUsername());
@@ -81,9 +82,14 @@ public class AuthService {
         user.setDeleted(0);
         userRepository.insert(user);
 
+        SysRole internalRole = roleRepository.findByRoleCode("INTERNAL_USER");
+        if (internalRole == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "缺少默认角色数据(INTERNAL_USER)");
+        }
+
         SysUserRole userRole = new SysUserRole();
         userRole.setUserId(user.getId());
-        userRole.setRoleId(roleRepository.findByRoleCode("INTERNAL_USER").getId());
+        userRole.setRoleId(internalRole.getId());
         userRole.setCreateTime(LocalDateTime.now());
         userRoleRepository.insert(userRole);
         user.setPrimaryRoleCode("INTERNAL_USER");

@@ -10,7 +10,11 @@
         <el-table-column prop="username" label="用户名" width="150" />
         <el-table-column prop="realName" label="姓名" width="130" />
         <el-table-column prop="departmentName" label="所属部门" width="170" />
-        <el-table-column prop="primaryRoleCode" label="角色" width="150" />
+        <el-table-column label="角色" width="150">
+          <template #default="{ row }">
+            {{ userRoleLabel(row.primaryRoleCode) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="phone" label="手机号" width="140" />
         <el-table-column prop="email" label="邮箱" min-width="180" />
         <el-table-column label="操作" width="140">
@@ -91,6 +95,7 @@ import {
   getAdminUsersPage,
   updateUser
 } from '../../../api/admin'
+import { userRoleLabel as userRoleLabelDict } from '../../../utils/dicts'
 
 function defaultUserForm() {
   return {
@@ -239,6 +244,9 @@ export default {
       await deleteUser(row.id)
       ElMessage.success('用户已删除')
       await this.load()
+    },
+    userRoleLabel(value) {
+      return userRoleLabelDict(value)
     }
   }
 }

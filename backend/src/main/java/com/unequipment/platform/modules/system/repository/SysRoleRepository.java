@@ -12,6 +12,14 @@ public interface SysRoleRepository {
 
     List<SysRole> findAllNonAdmin();
 
+    List<SysRole> findPage(@Param("offset") int offset, @Param("pageSize") int pageSize);
+
+    long countPage();
+
+    List<SysRole> findPageNonAdmin(@Param("offset") int offset, @Param("pageSize") int pageSize);
+
+    long countPageNonAdmin();
+
     SysRole findByRoleCode(String roleCode);
 
     SysRole findById(Long id);
@@ -21,4 +29,6 @@ public interface SysRoleRepository {
     int update(SysRole role);
 
     int softDelete(@Param("id") Long id, @Param("updateTime") java.time.LocalDateTime updateTime);
+
+    int countByRoleCodeExcludeId(@Param("roleCode") String roleCode, @Param("excludeId") Long excludeId);
 }

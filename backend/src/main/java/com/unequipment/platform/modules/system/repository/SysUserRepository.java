@@ -42,4 +42,6 @@ public interface SysUserRepository {
     int softDelete(@Param("id") Long id, @Param("updateTime") LocalDateTime updateTime);
 
     long countByDepartmentId(@Param("departmentId") Long departmentId);
+
+    int countByUsernameExcludeId(@Param("username") String username, @Param("excludeId") Long excludeId);
 }

@@ -41,4 +41,15 @@ public interface SettlementRecordRepository {
                                     @Param("targetStatus") String targetStatus,
                                     @Param("operatorUserId") Long operatorUserId,
                                     @Param("settledTime") LocalDateTime settledTime);
+
+    long countByScopeAndCreateTime(@Param("startTime") LocalDateTime startTime,
+                                   @Param("endTime") LocalDateTime endTime,
+                                   @Param("roleCode") String roleCode,
+                                   @Param("scopeDepartmentId") Long scopeDepartmentId);
+
+    BigDecimal sumFinalAmountByStatusAndScope(@Param("settleStatus") String settleStatus,
+                                              @Param("startTime") LocalDateTime startTime,
+                                              @Param("endTime") LocalDateTime endTime,
+                                              @Param("roleCode") String roleCode,
+                                              @Param("scopeDepartmentId") Long scopeDepartmentId);
 }

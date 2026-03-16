@@ -94,7 +94,7 @@ public class OperationLogService {
         log.setRequestUri(resolveRequestUri(request, detail));
         log.setRequestIp(resolveRequestIp(request));
         log.setResultCode(200);
-        log.setResultMsg("success");
+        log.setResultMsg("成功");
         log.setBizId(resolveBizId(detail));
         log.setCreateTime(LocalDateTime.now());
         operationLogRepository.insert(log);

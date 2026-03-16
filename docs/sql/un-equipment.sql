@@ -584,7 +584,7 @@ VALUES
 -- WHERE instrument_id = ?
 --   AND order_type = 'MACHINE'
 --   AND deleted = 0
---   AND order_status IN ('PENDING_AUDIT', 'APPROVED', 'WAITING_USE', 'IN_USE')
+--   AND order_status IN ('PENDING_AUDIT', 'WAITING_USE', 'IN_USE')
 --   AND reserve_start < ?
 --   AND reserve_end > ?;
 

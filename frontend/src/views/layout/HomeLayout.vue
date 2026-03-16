@@ -84,10 +84,8 @@ export default {
         { label: '首页', path: '/home', match: ['/home'] },
         { label: '平台成员', path: '/platform-members', match: ['/platform-members'] },
         { label: '预约服务', path: '/instruments', match: ['/instruments'] },
-        { label: '院级平台', path: '/college-platforms', match: ['/college-platforms'] },
         { label: '平台简介', path: '/platform-intro', match: ['/platform-intro'] },
         { label: '通知公告', path: '/notices', match: ['/notices'] },
-        { label: '需求发布', path: '/demands', match: ['/demands'] },
         { label: '帮助中心', path: '/help-center', match: ['/help-center'] },
         { label: '管理平台', path: this.user ? '/admin' : '/login', match: ['/admin'] }
       ]

@@ -12,8 +12,8 @@ import com.unequipment.platform.modules.log.service.OperationLogService;
 import com.unequipment.platform.modules.order.assembler.OrderAssembler;
 import com.unequipment.platform.modules.order.dto.AuditRequest;
 import com.unequipment.platform.modules.order.dto.MachineReservationRequest;
-import com.unequipment.platform.modules.order.dto.OrderAmountAdjustRequest;
 import com.unequipment.platform.modules.order.dto.OrderActionRequest;
+import com.unequipment.platform.modules.order.dto.OrderAmountAdjustRequest;
 import com.unequipment.platform.modules.order.dto.SampleReservationRequest;
 import com.unequipment.platform.modules.order.entity.AuditRecord;
 import com.unequipment.platform.modules.order.entity.ReservationOrder;
@@ -62,6 +62,7 @@ public class OrderService {
     private static final String ACTION_CANCEL = "CANCEL";
     private static final String ACTION_CLOSE = "CLOSE";
     private static final String ACTION_ADJUST_AMOUNT = "ADJUST_AMOUNT";
+    private static final int CREATE_RETRY_TIMES = 3;
 
     private static final Map<String, Set<String>> ACTION_ALLOWED_STATUS;
     private static final Map<String, Set<String>> ACTION_ALLOWED_TYPE;
@@ -74,8 +75,8 @@ public class OrderService {
         statusMap.put(ACTION_UPLOAD_RESULT, setOf("TESTING"));
         statusMap.put(ACTION_FINISH_USE, setOf("IN_USE"));
         statusMap.put(ACTION_SETTLE, setOf("WAITING_SETTLEMENT"));
-        statusMap.put(ACTION_CANCEL, setOf("PENDING_AUDIT", "APPROVED", "WAITING_USE", "WAITING_RECEIVE"));
-        statusMap.put(ACTION_CLOSE, setOf("PENDING_AUDIT", "APPROVED", "WAITING_USE", "IN_USE", "WAITING_RECEIVE", "TESTING", "WAITING_SETTLEMENT"));
+        statusMap.put(ACTION_CANCEL, setOf("PENDING_AUDIT", "WAITING_USE", "WAITING_RECEIVE"));
+        statusMap.put(ACTION_CLOSE, setOf("PENDING_AUDIT", "WAITING_USE", "IN_USE", "WAITING_RECEIVE", "TESTING", "WAITING_SETTLEMENT"));
         statusMap.put(ACTION_ADJUST_AMOUNT, setOf("WAITING_SETTLEMENT"));
         ACTION_ALLOWED_STATUS = Collections.unmodifiableMap(statusMap);
 
@@ -102,6 +103,7 @@ public class OrderService {
     private final OperationLogService operationLogService;
     private final OrderAssembler orderAssembler;
     private final SysUserRepository userRepository;
+
     @Value("${app.finance.internal-single-limit:0}")
     private BigDecimal internalSingleLimit;
     @Value("${app.finance.external-single-limit:0}")
@@ -113,35 +115,59 @@ public class OrderService {
         instrumentService.ensureReservable(instrument);
         instrumentService.ensureOrderTypeSupported(instrument, TYPE_MACHINE, user);
         instrumentService.validateMachineReserveWindow(instrument, request.getReservedStart(), request.getReservedEnd());
-        if (orderRepository.countMachineConflict(instrument.getId(), request.getReservedEnd(), request.getReservedStart()) > 0) {
-            throw new BizException(ErrorCodes.ORDER_TIME_CONFLICT, "预约时间与已有订单冲突");
-        }
 
-        BigDecimal hours = BigDecimal.valueOf(Duration.between(request.getReservedStart(), request.getReservedEnd()).toMinutes())
-            .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
-        BigDecimal amount = resolveUnitPrice(instrument, user).multiply(hours);
-        ensureWithinSingleLimit(user, amount);
-        ReservationOrder order = buildBaseOrder(user, instrument, TYPE_MACHINE);
-        order.setProjectName(request.getProjectName());
-        order.setPurpose(request.getPurpose());
-        order.setReserveStart(request.getReservedStart());
-        order.setReserveEnd(request.getReservedEnd());
-        order.setReserveMinutes((int) Duration.between(request.getReservedStart(), request.getReservedEnd()).toMinutes());
-        order.setEstimatedAmount(amount);
-        order.setFinalAmount(amount);
-        order.setRemark(request.getRemark());
-        applyAuditPolicy(order, instrument);
-        orderRepository.insert(order);
-        if ("PASS".equalsIgnoreCase(order.getAuditStatus())) {
-            financeService.freezeForOrder(order);
-            appendAudit(order, user, "PASS", "AUTO_APPROVE", "Machine order submitted and auto approved");
-            messageService.send(user, "Reservation submitted", "Machine reservation submitted successfully.");
-        } else {
-            appendAudit(order, user, "PENDING", "SUBMIT", "Machine order submitted");
-            messageService.send(user, "Reservation submitted", "Machine reservation submitted and waiting for audit.");
+        ReservationOrder created = null;
+        BizException lastConflict = null;
+        for (int attempt = 1; attempt <= CREATE_RETRY_TIMES; attempt++) {
+            try {
+                ensureNoMachineConflict(instrument.getId(), request.getReservedStart(), request.getReservedEnd(), null);
+                BigDecimal hours = BigDecimal.valueOf(Duration.between(request.getReservedStart(), request.getReservedEnd()).toMinutes())
+                    .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
+                BigDecimal amount = resolveUnitPrice(instrument, user).multiply(hours);
+                ensureWithinSingleLimit(user, amount);
+
+                ReservationOrder order = buildBaseOrder(user, instrument, TYPE_MACHINE);
+                order.setProjectName(request.getProjectName());
+                order.setPurpose(request.getPurpose());
+                order.setReserveStart(request.getReservedStart());
+                order.setReserveEnd(request.getReservedEnd());
+                order.setReserveMinutes((int) Duration.between(request.getReservedStart(), request.getReservedEnd()).toMinutes());
+                order.setEstimatedAmount(amount);
+                order.setFinalAmount(amount);
+                order.setRemark(request.getRemark());
+                applyAuditPolicy(order, instrument);
+
+                ensureNoMachineConflict(instrument.getId(), request.getReservedStart(), request.getReservedEnd(), null);
+                orderRepository.insert(order);
+                if ("PASS".equalsIgnoreCase(order.getAuditStatus())) {
+                    financeService.freezeForOrder(order);
+                    appendAudit(order, user, "PASS", "AUTO_APPROVE", "上机预约提交后自动通过");
+                    messageService.send(user, "预约提交成功", "您的上机预约已提交并自动通过。");
+                } else {
+                    appendAudit(order, user, "PENDING", "SUBMIT", "上机预约已提交，等待审核");
+                    messageService.send(user, "预约提交成功", "您的上机预约已提交，等待审核。");
+                }
+                operationLogService.save(user, "ORDER", "CREATE_MACHINE_ORDER", "orderId:" + order.getId());
+                created = order;
+                break;
+            } catch (BizException ex) {
+                if (ex.getCode() != ErrorCodes.ORDER_TIME_CONFLICT) {
+                    throw ex;
+                }
+                lastConflict = ex;
+                if (attempt >= CREATE_RETRY_TIMES) {
+                    break;
+                }
+                shortBackoff(attempt);
+            }
         }
-        operationLogService.save(user, "ORDER", "CREATE_MACHINE_ORDER", "orderId:" + order.getId());
-        return getOrder(order.getId());
+        if (created == null) {
+            if (lastConflict != null) {
+                throw lastConflict;
+            }
+            throw new BizException(ErrorCodes.BIZ_ERROR, "预约创建失败，请稍后重试");
+        }
+        return getOrder(created.getId());
     }
 
     @Transactional
@@ -151,6 +177,7 @@ public class OrderService {
         instrumentService.ensureOrderTypeSupported(instrument, TYPE_SAMPLE, user);
         BigDecimal amount = resolveUnitPrice(instrument, user).multiply(BigDecimal.valueOf(request.getSampleCount()));
         ensureWithinSingleLimit(user, amount);
+
         ReservationOrder order = buildBaseOrder(user, instrument, TYPE_SAMPLE);
         order.setProjectName(request.getProjectName());
         order.setPurpose(request.getPurpose());
@@ -174,11 +201,11 @@ public class OrderService {
 
         if ("PASS".equalsIgnoreCase(order.getAuditStatus())) {
             financeService.freezeForOrder(order);
-            appendAudit(order, user, "PASS", "AUTO_APPROVE", "Sample order submitted and auto approved");
-            messageService.send(user, "Sample reservation submitted", "Sample reservation submitted successfully.");
+            appendAudit(order, user, "PASS", "AUTO_APPROVE", "送样预约提交后自动通过");
+            messageService.send(user, "预约提交成功", "您的送样预约已提交并自动通过。");
         } else {
-            appendAudit(order, user, "PENDING", "SUBMIT", "Sample order submitted");
-            messageService.send(user, "Sample reservation submitted", "Sample reservation submitted and waiting for audit.");
+            appendAudit(order, user, "PENDING", "SUBMIT", "送样预约已提交，等待审核");
+            messageService.send(user, "预约提交成功", "您的送样预约已提交，等待审核。");
         }
         operationLogService.save(user, "ORDER", "CREATE_SAMPLE_ORDER", "orderId:" + order.getId());
         return getOrder(order.getId());
@@ -189,26 +216,32 @@ public class OrderService {
         ReservationOrder order = getOrder(orderId);
         assertManageable(order, auditor);
         assertActionAllowed(order, ACTION_AUDIT);
-        if (!"APPROVE".equalsIgnoreCase(request.getAction()) && !"REJECT".equalsIgnoreCase(request.getAction())) {
+
+        String action = request.getAction() == null ? "" : request.getAction().trim().toUpperCase();
+        if (!"APPROVE".equals(action) && !"REJECT".equals(action)) {
             throw new BizException(ErrorCodes.ORDER_INVALID_ACTION, "审核动作不合法");
         }
 
-        if ("APPROVE".equalsIgnoreCase(request.getAction())) {
+        if ("APPROVE".equals(action)) {
+            if (TYPE_MACHINE.equals(order.getOrderType())) {
+                ensureNoMachineConflict(order.getInstrumentId(), order.getReserveStart(), order.getReserveEnd(), order.getId());
+            }
             financeService.ensureEnoughAvailableBalance(simpleUser(order.getUserId()), nullSafe(order.getEstimatedAmount()));
             financeService.freezeForOrder(order);
             order.setAuditStatus("PASS");
             order.setOrderStatus(TYPE_MACHINE.equals(order.getOrderType()) ? "WAITING_USE" : "WAITING_RECEIVE");
             order.setApproveTime(LocalDateTime.now());
-            messageService.send(simpleUser(order.getUserId()), "Order approved", "Your order was approved.");
+            messageService.send(simpleUser(order.getUserId()), "订单审核通过", "您的订单已审核通过。");
         } else {
             order.setAuditStatus("REJECT");
             order.setOrderStatus("REJECTED");
-            messageService.send(simpleUser(order.getUserId()), "Order rejected", "Your order was rejected.");
+            messageService.send(simpleUser(order.getUserId()), "订单审核不通过", "您的订单未通过审核。");
         }
+
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
-        appendAudit(order, auditor, order.getAuditStatus(), request.getAction().toUpperCase(), request.getComment());
-        operationLogService.save(auditor, "ORDER", "AUDIT_ORDER", "orderId:" + orderId + ":" + request.getAction());
+        appendAudit(order, auditor, order.getAuditStatus(), action, request.getComment());
+        operationLogService.save(auditor, "ORDER", "AUDIT_ORDER", "orderId:" + orderId + ":" + action);
         return getOrder(orderId);
     }
 
@@ -218,6 +251,7 @@ public class OrderService {
         assertManageable(order, operator);
         assertActionAllowed(order, ACTION_CHECK_IN);
         assertMachineCheckInTime(order, LocalDateTime.now());
+
         order.setOrderStatus("IN_USE");
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
@@ -241,7 +275,7 @@ public class OrderService {
             usageRecordRepository.update(usage);
         }
 
-        appendAudit(order, operator, "PASS", "CHECK_IN", "Machine usage started");
+        appendAudit(order, operator, "PASS", "CHECK_IN", "上机签到成功");
         operationLogService.save(operator, "ORDER", "CHECK_IN_ORDER", "orderId:" + orderId);
         return getOrder(orderId);
     }
@@ -251,6 +285,7 @@ public class OrderService {
         ReservationOrder order = getOrder(orderId);
         assertManageable(order, operator);
         assertActionAllowed(order, ACTION_RECEIVE_SAMPLE);
+
         order.setOrderStatus("TESTING");
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
@@ -265,7 +300,8 @@ public class OrderService {
         sampleOrder.setReceiverUserId(operator.getId());
         sampleOrder.setUpdateTime(LocalDateTime.now());
         sampleOrderRepository.update(sampleOrder);
-        appendAudit(order, operator, "PASS", "RECEIVE_SAMPLE", "Sample received");
+
+        appendAudit(order, operator, "PASS", "RECEIVE_SAMPLE", "送样已接收");
         operationLogService.save(operator, "ORDER", "RECEIVE_SAMPLE_ORDER", "orderId:" + orderId);
         return getOrder(orderId);
     }
@@ -275,6 +311,7 @@ public class OrderService {
         ReservationOrder order = getOrder(orderId);
         assertManageable(order, operator);
         assertActionAllowed(order, ACTION_UPLOAD_RESULT);
+
         SampleOrder sampleOrder = sampleOrderRepository.findByOrderId(orderId);
         if (sampleOrder == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "送样明细不存在");
@@ -283,11 +320,12 @@ public class OrderService {
         sampleOrder.setTestingStatus("RESULT_UPLOADED");
         sampleOrder.setUpdateTime(LocalDateTime.now());
         sampleOrderRepository.update(sampleOrder);
+
         order.setOrderStatus("WAITING_SETTLEMENT");
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
         financeService.ensurePendingSettlementRecord(order);
-        appendAudit(order, operator, "PASS", "UPLOAD_RESULT", "Sample result uploaded");
+        appendAudit(order, operator, "PASS", "UPLOAD_RESULT", "检测结果已上传");
         operationLogService.save(operator, "ORDER", "UPLOAD_SAMPLE_RESULT", "orderId:" + orderId);
         return getOrder(orderId);
     }
@@ -297,6 +335,7 @@ public class OrderService {
         ReservationOrder order = getOrder(orderId);
         assertManageable(order, operator);
         assertActionAllowed(order, ACTION_FINISH_USE);
+
         UsageRecord usage = usageRecordRepository.findByOrderId(orderId);
         if (usage == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "上机记录不存在");
@@ -308,6 +347,7 @@ public class OrderService {
         if (now.isBefore(usage.getStartTime())) {
             throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "结束时间不能早于开始时间");
         }
+
         usage.setEndTime(now);
         long seconds = ChronoUnit.SECONDS.between(usage.getStartTime(), usage.getEndTime());
         int actualMinutes = (int) Math.max(1L, (seconds + 59) / 60);
@@ -318,9 +358,7 @@ public class OrderService {
 
         Instrument instrument = instrumentService.getById(order.getInstrumentId());
         SysUser orderUser = userRepository.findById(order.getUserId());
-        int billMinutes = usage.getActualMinutes() == null || usage.getActualMinutes() <= 0
-            ? 1
-            : usage.getActualMinutes();
+        int billMinutes = usage.getActualMinutes() == null || usage.getActualMinutes() <= 0 ? 1 : usage.getActualMinutes();
         BigDecimal hours = BigDecimal.valueOf(billMinutes)
             .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
         BigDecimal finalAmount = resolveUnitPrice(instrument, orderUser).multiply(hours);
@@ -330,7 +368,7 @@ public class OrderService {
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
         financeService.ensurePendingSettlementRecord(order);
-        appendAudit(order, operator, "PASS", "FINISH_USE", "Machine usage finished");
+        appendAudit(order, operator, "PASS", "FINISH_USE", "上机已结束，等待结算");
         operationLogService.save(operator, "ORDER", "FINISH_MACHINE_ORDER", "orderId:" + orderId);
         return getOrder(orderId);
     }
@@ -340,6 +378,7 @@ public class OrderService {
         ReservationOrder order = getOrder(orderId);
         assertManageable(order, operator);
         assertActionAllowed(order, ACTION_SETTLE);
+
         int changed = orderRepository.markSettling(orderId, LocalDateTime.now());
         if (changed <= 0) {
             throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "订单正在结算或已完成结算，请勿重复操作");
@@ -352,8 +391,8 @@ public class OrderService {
         order.setFinishTime(LocalDateTime.now());
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
-        appendAudit(order, operator, "PASS", "SETTLE", "Order settled");
-        messageService.send(simpleUser(order.getUserId()), "Order completed", "Your order has been settled.");
+        appendAudit(order, operator, "PASS", "SETTLE", "订单已结算");
+        messageService.send(simpleUser(order.getUserId()), "订单已完成", "您的订单已完成结算。");
         operationLogService.save(operator, "ORDER", "SETTLE_ORDER", "orderId:" + orderId);
         return getOrder(orderId);
     }
@@ -362,12 +401,11 @@ public class OrderService {
     public ReservationOrder cancel(Long orderId, SysUser user) {
         ReservationOrder order = getOrder(orderId);
         if (!order.getUserId().equals(user.getId())) {
-            throw new BizException(ErrorCodes.PERMISSION_DENIED, "不能取消他人订单");
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "不能取消他人的订单");
         }
         assertActionAllowed(order, ACTION_CANCEL);
-        if ("PAID".equalsIgnoreCase(order.getPayStatus())
-            && !"REFUNDED".equalsIgnoreCase(order.getPayStatus())) {
-            financeService.refundForOrder(order, "Order canceled by user");
+        if ("PAID".equalsIgnoreCase(order.getPayStatus())) {
+            financeService.refundForOrder(order, "用户取消订单", user);
             order.setPayStatus("REFUNDED");
             order.setSettlementStatus("REFUNDED");
         } else {
@@ -375,12 +413,13 @@ public class OrderService {
             order.setSettlementStatus("VOID");
             financeService.markSettlementVoid(order, user);
         }
+
         order.setOrderStatus("CANCELED");
-        order.setCancelReason("Canceled by user");
+        order.setCancelReason("用户取消");
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
-        appendAudit(order, user, "PASS", "CANCEL", "Order canceled by user");
-        messageService.send(user, "Order canceled", "Your order has been canceled.");
+        appendAudit(order, user, "PASS", "CANCEL", "用户取消订单");
+        messageService.send(user, "订单已取消", "您的订单已取消。");
         operationLogService.save(user, "ORDER", "CANCEL_ORDER", "orderId:" + orderId);
         return getOrder(orderId);
     }
@@ -390,14 +429,14 @@ public class OrderService {
         ReservationOrder order = getOrder(orderId);
         assertManageable(order, user);
         assertActionAllowed(order, ACTION_CLOSE);
-        if ("PAID".equalsIgnoreCase(order.getPayStatus()) && !"REFUNDED".equalsIgnoreCase(order.getPayStatus())) {
-            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "已支付订单不能关闭，请走退款流程");
+        if ("PAID".equalsIgnoreCase(order.getPayStatus())) {
+            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "已支付订单不能直接关闭，请走退款流程");
         }
         financeService.releaseFreezeForOrder(order);
         order.setOrderStatus("CANCELED");
         order.setSettlementStatus("VOID");
         order.setCancelReason(request == null || request.getComment() == null || request.getComment().trim().isEmpty()
-            ? "Closed by admin"
+            ? "管理员关闭订单"
             : request.getComment().trim());
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
@@ -421,14 +460,16 @@ public class OrderService {
         return getOrder(orderId);
     }
 
-    public List<OrderSummaryVO> myOrders(SysUser user, String orderType) {
-        List<ReservationOrder> orders;
-        if (orderType == null || orderType.trim().isEmpty()) {
-            orders = orderRepository.findByUserId(user.getId());
-        } else {
-            orders = orderRepository.findByUserIdAndOrderType(user.getId(), orderType.trim().toUpperCase());
-        }
-        return orderAssembler.toSummaryList(orders);
+    public PageResponse<OrderSummaryVO> myOrders(SysUser user, String orderType, int pageNum, int pageSize) {
+        String normalizedOrderType = orderType == null ? null : orderType.trim().toUpperCase();
+        int validPageNum = Math.max(1, pageNum);
+        int validPageSize = Math.max(1, pageSize);
+        int offset = (validPageNum - 1) * validPageSize;
+        List<ReservationOrder> orders = orderRepository.findPageByUser(
+            user.getId(), normalizedOrderType, offset, validPageSize
+        );
+        long total = orderRepository.countByUser(user.getId(), normalizedOrderType);
+        return new PageResponse<>(orderAssembler.toSummaryList(orders), total, validPageNum, validPageSize);
     }
 
     public OrderDetailVO detail(Long orderId, SysUser user) {
@@ -453,17 +494,21 @@ public class OrderService {
         if (!canManageAsAdmin(user)) {
             throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限访问");
         }
-        int offset = Math.max(pageNum - 1, 0) * pageSize;
-        String roleCode = defaultString(user.getPrimaryRoleCode(), "INTERNAL_USER").toUpperCase();
         if (minAmount != null && maxAmount != null && minAmount.compareTo(maxAmount) > 0) {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "最小金额不能大于最大金额");
         }
-        List<ReservationOrder> list = orderRepository.findPageForAdmin(orderType, status, keyword, submitStart, submitEnd,
+        int offset = Math.max(pageNum - 1, 0) * pageSize;
+        String roleCode = defaultString(user.getPrimaryRoleCode(), "INTERNAL_USER").toUpperCase();
+        List<ReservationOrder> list = orderRepository.findPageForAdmin(
+            orderType, status, keyword, submitStart, submitEnd,
             filterDepartmentId, auditorKeyword, minAmount, maxAmount,
-            roleCode, user.getId(), user.getDepartmentId(), offset, pageSize);
-        long total = orderRepository.countForAdmin(orderType, status, keyword, submitStart, submitEnd,
+            roleCode, user.getId(), user.getDepartmentId(), offset, pageSize
+        );
+        long total = orderRepository.countForAdmin(
+            orderType, status, keyword, submitStart, submitEnd,
             filterDepartmentId, auditorKeyword, minAmount, maxAmount,
-            roleCode, user.getId(), user.getDepartmentId());
+            roleCode, user.getId(), user.getDepartmentId()
+        );
         return new PageResponse<>(orderAssembler.toSummaryList(list), total, pageNum, pageSize);
     }
 
@@ -516,8 +561,8 @@ public class OrderService {
         auditRecord.setOrderId(order.getId());
         Integer maxNode = auditRecordRepository.findMaxNodeNo(order.getId());
         auditRecord.setNodeNo(maxNode == null ? 1 : maxNode + 1);
-        auditRecord.setAuditorId(operator.getId());
-        auditRecord.setAuditorRole(operator.getPrimaryRoleCode());
+        auditRecord.setAuditorId(operator == null ? null : operator.getId());
+        auditRecord.setAuditorRole(operator == null ? null : operator.getPrimaryRoleCode());
         auditRecord.setAuditResult(result);
         auditRecord.setAuditOpinion(action + (opinion == null ? "" : ": " + opinion));
         auditRecord.setAuditTime(LocalDateTime.now());
@@ -540,15 +585,10 @@ public class OrderService {
         if (user == null) {
             return false;
         }
-        String roleCode = user.getPrimaryRoleCode();
-        if ("EXTERNAL_USER".equalsIgnoreCase(roleCode)) {
+        if ("EXTERNAL_USER".equalsIgnoreCase(user.getPrimaryRoleCode())) {
             return true;
         }
         return "EXTERNAL".equalsIgnoreCase(user.getUserType());
-    }
-
-    private Integer defaultInt(Integer value, Integer fallback) {
-        return value == null ? fallback : value;
     }
 
     private void applyAuditPolicy(ReservationOrder order, Instrument instrument) {
@@ -568,8 +608,28 @@ public class OrderService {
             return;
         }
         if (nullSafe(amount).compareTo(limit) > 0) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST,
-                "single order amount exceeds budget limit");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "单笔订单金额超过预算限额");
+        }
+    }
+
+    private void ensureNoMachineConflict(Long instrumentId, LocalDateTime reserveStart, LocalDateTime reserveEnd, Long excludeOrderId) {
+        int conflict;
+        if (excludeOrderId == null) {
+            conflict = orderRepository.countMachineConflict(instrumentId, reserveEnd, reserveStart);
+        } else {
+            conflict = orderRepository.countMachineConflictExcludeOrder(instrumentId, reserveEnd, reserveStart, excludeOrderId);
+        }
+        if (conflict > 0) {
+            throw new BizException(ErrorCodes.ORDER_TIME_CONFLICT, "预约时间与已有订单冲突，请调整时间后重试");
+        }
+    }
+
+    private void shortBackoff(int attempt) {
+        long millis = 30L * attempt;
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 

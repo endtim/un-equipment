@@ -1,24 +1,18 @@
 package com.unequipment.platform.modules.stat.service;
 
-import com.unequipment.platform.modules.finance.entity.SettlementRecord;
-import com.unequipment.platform.modules.finance.repository.SettlementRecordRepository;
-import com.unequipment.platform.modules.instrument.repository.InstrumentRepository;
-import com.unequipment.platform.modules.order.entity.ReservationOrder;
-import com.unequipment.platform.modules.order.repository.ReservationOrderRepository;
 import com.unequipment.platform.modules.stat.entity.DailySnapshot;
 import com.unequipment.platform.modules.stat.repository.DailySnapshotRepository;
-import com.unequipment.platform.modules.system.repository.SysDepartmentRepository;
+import com.unequipment.platform.modules.stat.repository.StatQueryRepository;
+import com.unequipment.platform.modules.system.entity.SysUser;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -26,143 +20,177 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class StatService {
 
-    private final ReservationOrderRepository orderRepository;
-    private final InstrumentRepository instrumentRepository;
-    private final SysDepartmentRepository departmentRepository;
-    private final SettlementRecordRepository settlementRecordRepository;
     private final DailySnapshotRepository dailySnapshotRepository;
-    private static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
-    private static final DateTimeFormatter DAY_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private final StatQueryRepository statQueryRepository;
+
+    public List<Map<String, Object>> platformMembers() {
+        return platformMembers(null);
+    }
+
+    public List<Map<String, Object>> platformMembers(SysUser user) {
+        String roleCode = roleCode(user);
+        Long scopeDepartmentId = scopeDepartmentId(user);
+        List<Map<String, Object>> rows = statQueryRepository.queryPlatformMembers(roleCode, scopeDepartmentId);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map<String, Object> item : rows) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("departmentId", item.get("departmentId"));
+            row.put("departmentName", item.get("departmentName"));
+            row.put("instrumentCount", numberToLong(item.get("instrumentCount")));
+            result.add(row);
+        }
+        return result;
+    }
 
     public Map<String, Object> overview(LocalDateTime startTime, LocalDateTime endTime) {
-        List<ReservationOrder> orders = filterOrdersByTime(orderRepository.findAll(), startTime, endTime);
-        List<SettlementRecord> settlements = filterSettlementsByTime(settlementRecordRepository.findAll(), startTime, endTime);
+        return overview(startTime, endTime, null);
+    }
+
+    public Map<String, Object> overview(LocalDateTime startTime, LocalDateTime endTime, SysUser user) {
+        String roleCode = roleCode(user);
+        Long scopeDepartmentId = scopeDepartmentId(user);
+        long reservationCount = safeGet(
+            () -> statQueryRepository.countOrders(startTime, endTime, roleCode, scopeDepartmentId), 0L
+        );
+        long completionCount = safeGet(
+            () -> statQueryRepository.countOrdersByStatus("COMPLETED", startTime, endTime, roleCode, scopeDepartmentId), 0L
+        );
+        long waitingSettlementCount = safeGet(
+            () -> statQueryRepository.countOrdersByStatus("WAITING_SETTLEMENT", startTime, endTime, roleCode, scopeDepartmentId), 0L
+        );
+        long settledCount = safeGet(
+            () -> statQueryRepository.countSettlementsByStatus("CONFIRMED", startTime, endTime, roleCode, scopeDepartmentId), 0L
+        );
+        BigDecimal incomeAmount = nullSafe(safeGet(
+            () -> statQueryRepository.sumSettlementAmountByStatus("CONFIRMED", startTime, endTime, roleCode, scopeDepartmentId),
+            BigDecimal.ZERO
+        ));
+        BigDecimal averageOrderAmount = nullSafe(safeGet(
+            () -> statQueryRepository.avgOrderFinalAmount(startTime, endTime, roleCode, scopeDepartmentId),
+            BigDecimal.ZERO
+        ))
+            .setScale(2, RoundingMode.HALF_UP);
+
         Map<String, Object> result = new HashMap<>();
-        result.put("instrumentCount", instrumentRepository.countAll());
-        result.put("reservationCount", orders.size());
-        result.put("completionCount", orders.stream().filter(item -> "COMPLETED".equals(item.getOrderStatus())).count());
-        result.put("departmentCount", departmentRepository.findAll().size());
-        result.put("waitingSettlementCount", orders.stream().filter(item -> "WAITING_SETTLEMENT".equals(item.getOrderStatus())).count());
-        result.put("settledCount", settlements.stream().filter(item -> "CONFIRMED".equalsIgnoreCase(item.getSettleStatus())).count());
-
-        BigDecimal income = settlements.stream()
-            .filter(item -> "CONFIRMED".equalsIgnoreCase(item.getSettleStatus()))
-            .map(SettlementRecord::getFinalAmount)
-            .map(item -> item == null ? BigDecimal.ZERO : item)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        result.put("incomeAmount", income);
-        result.put("averageOrderAmount", calculateAverageAmount(orders));
-
-        result.put("topInstruments", orders.stream()
-            .collect(Collectors.groupingBy(item -> defaultString(item.getInstrumentName(), "未命名仪器"), Collectors.counting()))
-            .entrySet().stream()
-            .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
-            .limit(5)
-            .collect(Collectors.toList()));
-
-        Map<Long, String> departmentNameMap = departmentRepository.findAll().stream()
-            .collect(Collectors.toMap(item -> item.getId(), item -> item.getDeptName(), (left, right) -> left));
-        Map<String, Long> distribution = new LinkedHashMap<>();
-        orders.stream()
-            .collect(Collectors.groupingBy(item -> departmentNameMap.getOrDefault(item.getDepartmentId(), "Unassigned"), Collectors.counting()))
-            .entrySet().stream()
-            .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
-            .forEach(entry -> distribution.put(entry.getKey(), entry.getValue()));
-        result.put("departmentDistribution", distribution);
-
-        result.put("orderTrend", buildTrend(orders, startTime, endTime));
+        result.put("instrumentCount", safeGet(statQueryRepository::countInstruments, 0L));
+        result.put("reservationCount", reservationCount);
+        result.put("completionCount", completionCount);
+        result.put("departmentCount", safeGet(statQueryRepository::countDepartments, 0L));
+        result.put("waitingSettlementCount", waitingSettlementCount);
+        result.put("settledCount", settledCount);
+        result.put("incomeAmount", incomeAmount);
+        result.put("averageOrderAmount", averageOrderAmount);
+        result.put("topInstruments", normalizeKeyValueList(safeGet(
+            () -> statQueryRepository.queryTopInstruments(startTime, endTime, roleCode, scopeDepartmentId, 5),
+            new ArrayList<>()
+        )));
+        result.put("departmentDistribution", toOrderedMap(safeGet(
+            () -> statQueryRepository.queryDepartmentDistribution(startTime, endTime, roleCode, scopeDepartmentId),
+            new ArrayList<>()
+        )));
+        result.put("orderTrend", buildTrend(startTime, endTime, roleCode, scopeDepartmentId));
         result.put("periodStart", startTime);
         result.put("periodEnd", endTime);
         return result;
     }
 
-    private Map<String, Long> buildTrend(List<ReservationOrder> orders, LocalDateTime startTime, LocalDateTime endTime) {
+    private Map<String, Long> buildTrend(LocalDateTime startTime, LocalDateTime endTime,
+                                         String roleCode, Long scopeDepartmentId) {
         if (startTime == null && endTime == null) {
-            List<DailySnapshot> snapshots = dailySnapshotRepository.findLatestLimit(30);
+            List<DailySnapshot> snapshots = safeGet(() -> dailySnapshotRepository.findLatestLimit(30), new ArrayList<>());
             if (snapshots != null && !snapshots.isEmpty()) {
                 Map<String, Long> trend = new LinkedHashMap<>();
-                List<DailySnapshot> asc = new ArrayList<>(snapshots);
-                asc.sort(Comparator.comparing(DailySnapshot::getStatDate));
-                for (DailySnapshot item : asc) {
-                    long count = (long) defaultInt(item.getMachineOrderTotal(), 0) + defaultInt(item.getSampleOrderTotal(), 0);
-                    trend.put(item.getStatDate().format(DAY_FORMATTER), count);
+                List<DailySnapshot> ordered = new ArrayList<>(snapshots);
+                ordered.sort((a, b) -> a.getStatDate().compareTo(b.getStatDate()));
+                for (DailySnapshot item : ordered) {
+                    long count = numberToLong(item.getMachineOrderTotal()) + numberToLong(item.getSampleOrderTotal());
+                    trend.put(item.getStatDate().toString(), count);
                 }
                 return trend;
             }
         }
 
-        Map<String, Long> dailyTrend = new LinkedHashMap<>();
-        orders.stream()
-            .filter(item -> item.getSubmitTime() != null)
-            .collect(Collectors.groupingBy(item -> item.getSubmitTime().toLocalDate().format(DAY_FORMATTER), Collectors.counting()))
-            .entrySet().stream()
-            .sorted(Map.Entry.comparingByKey())
-            .forEach(entry -> dailyTrend.put(entry.getKey(), entry.getValue()));
-
-        if (!dailyTrend.isEmpty()) {
-            return dailyTrend;
+        List<Map<String, Object>> dailyRows = safeGet(
+            () -> statQueryRepository.queryDailyTrend(startTime, endTime, roleCode, scopeDepartmentId),
+            new ArrayList<>()
+        );
+        if (!dailyRows.isEmpty()) {
+            return toOrderedMap(dailyRows);
         }
 
-        Map<String, Long> monthlyTrend = new LinkedHashMap<>();
-        orders.stream()
-            .filter(item -> item.getSubmitTime() != null)
-            .collect(Collectors.groupingBy(item -> item.getSubmitTime().format(MONTH_FORMATTER), Collectors.counting()))
-            .entrySet().stream()
-            .sorted(Map.Entry.comparingByKey())
-            .forEach(entry -> monthlyTrend.put(entry.getKey(), entry.getValue()));
-        return monthlyTrend;
+        List<Map<String, Object>> monthlyRows = safeGet(
+            () -> statQueryRepository.queryMonthlyTrend(startTime, endTime, roleCode, scopeDepartmentId),
+            new ArrayList<>()
+        );
+        return toOrderedMap(monthlyRows);
     }
 
-    private List<ReservationOrder> filterOrdersByTime(List<ReservationOrder> all,
-                                                      LocalDateTime startTime,
-                                                      LocalDateTime endTime) {
-        return all.stream()
-            .filter(item -> item.getSubmitTime() != null)
-            .filter(item -> startTime == null || !item.getSubmitTime().isBefore(startTime))
-            .filter(item -> endTime == null || !item.getSubmitTime().isAfter(endTime))
-            .collect(Collectors.toList());
-    }
-
-    private List<SettlementRecord> filterSettlementsByTime(List<SettlementRecord> all,
-                                                           LocalDateTime startTime,
-                                                           LocalDateTime endTime) {
-        return all.stream()
-            .filter(item -> {
-                LocalDateTime ref = item.getCreateTime() == null ? item.getSettledTime() : item.getCreateTime();
-                if (ref == null) {
-                    return false;
-                }
-                if (startTime != null && ref.isBefore(startTime)) {
-                    return false;
-                }
-                if (endTime != null && ref.isAfter(endTime)) {
-                    return false;
-                }
-                return true;
-            })
-            .collect(Collectors.toList());
-    }
-
-    private BigDecimal calculateAverageAmount(List<ReservationOrder> orders) {
-        if (orders == null || orders.isEmpty()) {
-            return BigDecimal.ZERO;
+    private String roleCode(SysUser user) {
+        if (user == null || user.getPrimaryRoleCode() == null) {
+            return "ADMIN";
         }
-        BigDecimal total = orders.stream()
-            .map(ReservationOrder::getFinalAmount)
-            .map(this::nullSafe)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return total.divide(BigDecimal.valueOf(orders.size()), 2, RoundingMode.HALF_UP);
+        return user.getPrimaryRoleCode().toUpperCase();
+    }
+
+    private Long scopeDepartmentId(SysUser user) {
+        if (user == null) {
+            return null;
+        }
+        return user.getDepartmentId();
+    }
+
+    private List<Map<String, Object>> normalizeKeyValueList(List<Map<String, Object>> rows) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            normalized.put("key", safeString(row.get("key"), "未知"));
+            normalized.put("value", numberToLong(row.get("value")));
+            result.add(normalized);
+        }
+        return result;
+    }
+
+    private Map<String, Long> toOrderedMap(List<Map<String, Object>> rows) {
+        Map<String, Long> result = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            String key = safeString(row.get("key"), "未知");
+            result.put(key, numberToLong(row.get("value")));
+        }
+        return result;
     }
 
     private BigDecimal nullSafe(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }
 
-    private Integer defaultInt(Integer value, Integer fallback) {
-        return value == null ? fallback : value;
+    private String safeString(Object value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? fallback : text;
     }
 
-    private String defaultString(String value, String fallback) {
-        return value == null || value.trim().isEmpty() ? fallback : value.trim();
+    private long numberToLong(Object value) {
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
+    }
+
+    private <T> T safeGet(Supplier<T> supplier, T fallback) {
+        try {
+            T value = supplier.get();
+            return value == null ? fallback : value;
+        } catch (Exception ignored) {
+            return fallback;
+        }
     }
 }

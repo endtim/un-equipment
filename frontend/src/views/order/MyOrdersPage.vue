@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div>
     <div class="grid-3" style="margin-bottom: 14px;">
       <div v-for="card in summaryCards" :key="card.label" class="content-card" style="padding: 16px 18px;">
@@ -34,6 +34,17 @@
           <el-empty :description="emptyText" />
         </template>
       </el-table>
+
+      <el-pagination
+        v-model:current-page="query.pageNum"
+        v-model:page-size="query.pageSize"
+        class="pagination"
+        layout="total, sizes, prev, pager, next, jumper"
+        :page-sizes="[10, 20, 50]"
+        :total="total"
+        @current-change="load"
+        @size-change="onSizeChange"
+      />
     </div>
 
     <el-drawer v-model="detailVisible" title="订单详情" size="40%">
@@ -99,6 +110,11 @@ export default {
   data() {
     return {
       orders: [],
+      total: 0,
+      query: {
+        pageNum: 1,
+        pageSize: 10
+      },
       detailVisible: false,
       detail: null
     }
@@ -132,13 +148,14 @@ export default {
       return '展示全部订单，可统一查看状态与金额。'
     },
     summaryCards() {
-      const total = this.orders.length
+      const total = this.total
       const waiting = this.orders.filter(item => ['PENDING_AUDIT', 'WAITING_USE', 'WAITING_RECEIVE', 'TESTING'].includes(item.status)).length
       const completed = this.orders.filter(item => item.status === 'COMPLETED').length
       const totalAmount = this.orders.reduce((sum, item) => sum + Number(item.amount || 0), 0)
       return [
         { label: '订单总数', value: String(total) },
         { label: '进行中', value: String(waiting) },
+        { label: '已完成', value: String(completed) },
         { label: '累计金额', value: totalAmount.toFixed(2) }
       ]
     },
@@ -156,6 +173,7 @@ export default {
     orderType: {
       immediate: true,
       async handler() {
+        this.query.pageNum = 1
         await this.load()
       }
     }
@@ -165,12 +183,23 @@ export default {
       return this.formatDateTime(value)
     },
     async load() {
-      const params = this.orderType ? { orderType: this.orderType } : undefined
-      const orders = await getMyOrders(params)
-      this.orders = orders
+      const params = {
+        pageNum: this.query.pageNum,
+        pageSize: this.query.pageSize
+      }
+      if (this.orderType) {
+        params.orderType = this.orderType
+      }
+      const page = await getMyOrders(params)
+      this.orders = page.list || []
+      this.total = page.total || 0
+    },
+    async onSizeChange() {
+      this.query.pageNum = 1
+      await this.load()
     },
     canCancel(row) {
-      return ['PENDING_AUDIT', 'APPROVED', 'WAITING_USE', 'WAITING_RECEIVE'].includes(row.status)
+      return ['PENDING_AUDIT', 'WAITING_USE', 'WAITING_RECEIVE'].includes(row.status)
     },
     async openDetail(row) {
       this.detail = await getOrderDetail(row.id)
@@ -205,5 +234,10 @@ export default {
   margin: 4px 0 14px;
   color: #6f86a2;
   font-size: 13px;
+}
+
+.pagination {
+  margin-top: 14px;
+  justify-content: flex-end;
 }
 </style>

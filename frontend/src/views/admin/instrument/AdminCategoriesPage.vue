@@ -5,6 +5,7 @@
         <div class="admin-card-title admin-card-title--tight">分类列表</div>
         <el-button type="primary" @click="openCreate">新增分类</el-button>
       </div>
+
       <el-table :data="categories" border>
         <el-table-column prop="categoryName" label="分类名称" min-width="200" />
         <el-table-column prop="categoryCode" label="分类编码" width="180" />
@@ -22,6 +23,17 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <el-pagination
+        v-model:current-page="query.pageNum"
+        v-model:page-size="query.pageSize"
+        class="pagination"
+        layout="total, sizes, prev, pager, next, jumper"
+        :page-sizes="[10, 20, 50]"
+        :total="total"
+        @current-change="load"
+        @size-change="onSizeChange"
+      />
       <el-empty v-if="categories.length === 0" description="暂无分类数据" class="admin-empty" />
     </div>
 
@@ -60,7 +72,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   createInstrumentCategory,
   deleteInstrumentCategory,
-  getAdminInstrumentCategories,
+  getAdminInstrumentCategoriesPage,
   updateInstrumentCategory
 } from '../../../api/admin'
 
@@ -72,16 +84,21 @@ export default {
   data() {
     return {
       categories: [],
+      total: 0,
+      query: {
+        pageNum: 1,
+        pageSize: 10
+      },
       dialogVisible: false,
       form: defaultForm(),
       rules: {
         categoryName: [
           { required: true, message: '请输入分类名称', trigger: 'blur' },
-          { min: 2, max: 100, message: '分类名称长度为2-100字符', trigger: 'blur' }
+          { min: 2, max: 100, message: '分类名称长度为 2-100 个字符', trigger: 'blur' }
         ],
         categoryCode: [
           { required: true, message: '请输入分类编码', trigger: 'blur' },
-          { min: 2, max: 50, message: '分类编码长度为2-50字符', trigger: 'blur' }
+          { min: 2, max: 50, message: '分类编码长度为 2-50 个字符', trigger: 'blur' }
         ]
       }
     }
@@ -91,7 +108,13 @@ export default {
   },
   methods: {
     async load() {
-      this.categories = await getAdminInstrumentCategories()
+      const page = await getAdminInstrumentCategoriesPage(this.query)
+      this.categories = page.list || []
+      this.total = page.total || 0
+    },
+    async onSizeChange() {
+      this.query.pageNum = 1
+      await this.load()
     },
     openCreate() {
       this.form = defaultForm()
@@ -104,7 +127,9 @@ export default {
     closeDialog() {
       this.dialogVisible = false
       this.$nextTick(() => {
-        this.$refs.formRef && this.$refs.formRef.clearValidate()
+        if (this.$refs.formRef) {
+          this.$refs.formRef.clearValidate()
+        }
       })
     },
     async submit() {
@@ -145,4 +170,10 @@ export default {
 .full-width {
   width: 100%;
 }
+
+.pagination {
+  margin-top: 14px;
+  justify-content: flex-end;
+}
 </style>
+

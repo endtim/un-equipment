@@ -32,11 +32,6 @@ public class FinanceAdminController {
 
     private final FinanceService financeService;
 
-    @GetMapping("/recharges")
-    public ApiResponse<?> recharges(@CurrentUser SysUser user) {
-        return ApiResponse.success(financeService.listRecharges(user));
-    }
-
     @GetMapping("/recharges/page")
     public ApiResponse<PageResponse<RechargeOrder>> rechargePage(
         @CurrentUser SysUser user,

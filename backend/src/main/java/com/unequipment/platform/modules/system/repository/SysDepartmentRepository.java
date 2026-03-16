@@ -10,6 +10,10 @@ public interface SysDepartmentRepository {
 
     List<SysDepartment> findAll();
 
+    List<SysDepartment> findPage(@Param("offset") int offset, @Param("pageSize") int pageSize);
+
+    long countPage();
+
     SysDepartment findById(Long id);
 
     SysDepartment findFirst();
@@ -21,4 +25,6 @@ public interface SysDepartmentRepository {
     int update(SysDepartment department);
 
     int softDelete(@Param("id") Long id, @Param("operatorId") Long operatorId, @Param("updateTime") java.time.LocalDateTime updateTime);
+
+    int countByDeptCodeExcludeId(@Param("deptCode") String deptCode, @Param("excludeId") Long excludeId);
 }

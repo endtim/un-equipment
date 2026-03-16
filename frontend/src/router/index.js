@@ -1,4 +1,4 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+﻿import { createRouter, createWebHashHistory } from 'vue-router'
 import store from '../store'
 import HomeLayout from '../views/layout/HomeLayout.vue'
 import CenterLayout from '../views/layout/CenterLayout.vue'
@@ -17,12 +17,14 @@ import PortalIntroPage from '../views/portal/PortalIntroPage.vue'
 import PlatformMembersPage from '../views/portal/PlatformMembersPage.vue'
 import NoticesPage from '../views/portal/NoticesPage.vue'
 import HelpCenterPage from '../views/portal/HelpCenterPage.vue'
+import ContentDetailPage from '../views/portal/ContentDetailPage.vue'
 import CenterDashboardPage from '../views/center/CenterDashboardPage.vue'
 import AdminUsersPage from '../views/admin/system/AdminUsersPage.vue'
 import AdminRolesPage from '../views/admin/system/AdminRolesPage.vue'
 import AdminDepartmentsPage from '../views/admin/system/AdminDepartmentsPage.vue'
 import AdminCategoriesPage from '../views/admin/instrument/AdminCategoriesPage.vue'
 import AdminInstrumentsPage from '../views/admin/instrument/AdminInstrumentsPage.vue'
+import AdminOpenRulesPage from '../views/admin/instrument/AdminOpenRulesPage.vue'
 import AdminMachineOrdersPage from '../views/admin/orders/AdminMachineOrdersPage.vue'
 import AdminSampleOrdersPage from '../views/admin/orders/AdminSampleOrdersPage.vue'
 import AdminRechargeAuditPage from '../views/admin/finance/AdminRechargeAuditPage.vue'
@@ -48,10 +50,20 @@ const router = createRouter({
         { path: 'service', redirect: '/instruments' },
         { path: 'platform-members', component: PlatformMembersPage, meta: { title: '平台成员', pageType: 'section', breadcrumb: ['首页', '平台成员'] } },
         { path: 'platform-intro', component: PortalIntroPage, meta: { title: '平台简介', pageType: 'reading', breadcrumb: ['首页', '平台简介'] } },
-        { path: 'college-platforms', component: PortalIntroPage, meta: { title: '院级平台', pageType: 'reading', breadcrumb: ['首页', '院级平台'] } },
-        { path: 'demands', component: PortalIntroPage, meta: { title: '需求发布', pageType: 'reading', breadcrumb: ['首页', '需求发布'] } },
         { path: 'notices', component: NoticesPage, meta: { title: '通知公告', pageType: 'reading', breadcrumb: ['首页', '通知公告'] } },
+        {
+          path: 'notices/:id',
+          component: ContentDetailPage,
+          props: { contentType: 'notice' },
+          meta: { title: '正文', pageType: 'reading', breadcrumb: ['首页', '通知公告', '正文'] }
+        },
         { path: 'help-center', component: HelpCenterPage, meta: { title: '帮助中心', pageType: 'reading', breadcrumb: ['首页', '帮助中心'] } },
+        {
+          path: 'help-center/:id',
+          component: ContentDetailPage,
+          props: { contentType: 'help' },
+          meta: { title: '正文', pageType: 'reading', breadcrumb: ['首页', '帮助中心', '正文'] }
+        },
         { path: 'instruments', component: InstrumentListPage, meta: { title: '预约服务', pageType: 'operation', breadcrumb: ['首页', '预约服务'] } },
         {
           path: 'instruments/:id',
@@ -107,6 +119,11 @@ const router = createRouter({
           meta: { title: '仪器管理', pageType: 'operation', breadcrumb: ['管理平台', '仪器管理', '仪器管理'], roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] }
         },
         {
+          path: 'open-rules',
+          component: AdminOpenRulesPage,
+          meta: { title: '开放规则', pageType: 'operation', breadcrumb: ['管理平台', '仪器管理', '开放规则'], roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] }
+        },
+        {
           path: 'orders/machine',
           component: AdminMachineOrdersPage,
           meta: { title: '上机订单', pageType: 'operation', breadcrumb: ['管理平台', '业务处理', '上机订单'], roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] }
@@ -151,6 +168,8 @@ const router = createRouter({
     { path: '/account', redirect: '/center/account' },
     { path: '/orders', redirect: '/center/orders' },
     { path: '/messages', redirect: '/center/messages' },
+    { path: '/college-platforms', redirect: '/home' },
+    { path: '/demands', redirect: '/home' },
     { path: '/admin/orders', redirect: '/admin/orders/machine' },
     { path: '/admin/finance', redirect: '/admin/recharges' },
     { path: '/admin/system', redirect: '/admin/users' },

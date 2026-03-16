@@ -20,6 +20,8 @@ public interface NoticeRepository {
 
     Notice findById(@Param("id") Long id);
 
+    Notice findPublishedById(@Param("id") Long id);
+
     int insert(Notice notice);
 
     int update(Notice notice);

@@ -1,6 +1,7 @@
 package com.unequipment.platform.modules.order.repository;
 
 import com.unequipment.platform.modules.order.entity.ReservationOrder;
+import com.unequipment.platform.modules.finance.vo.FinanceAnomalyVO;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -11,6 +12,8 @@ import org.apache.ibatis.annotations.Param;
 public interface ReservationOrderRepository {
 
     ReservationOrder findById(@Param("id") Long id);
+
+    ReservationOrder findByIdForUpdate(@Param("id") Long id);
 
     List<ReservationOrder> findAll();
 
@@ -47,6 +50,14 @@ public interface ReservationOrderRepository {
     List<ReservationOrder> findByUserIdAndOrderType(@Param("userId") Long userId,
                                                     @Param("orderType") String orderType);
 
+    List<ReservationOrder> findPageByUser(@Param("userId") Long userId,
+                                          @Param("orderType") String orderType,
+                                          @Param("offset") int offset,
+                                          @Param("pageSize") int pageSize);
+
+    long countByUser(@Param("userId") Long userId,
+                     @Param("orderType") String orderType);
+
     long countByInstrumentId(@Param("instrumentId") Long instrumentId);
 
     long countDistinctUsersByInstrumentId(@Param("instrumentId") Long instrumentId);
@@ -54,6 +65,11 @@ public interface ReservationOrderRepository {
     int countMachineConflict(@Param("instrumentId") Long instrumentId,
                              @Param("reserveEnd") LocalDateTime reserveEnd,
                              @Param("reserveStart") LocalDateTime reserveStart);
+
+    int countMachineConflictExcludeOrder(@Param("instrumentId") Long instrumentId,
+                                         @Param("reserveEnd") LocalDateTime reserveEnd,
+                                         @Param("reserveStart") LocalDateTime reserveStart,
+                                         @Param("excludeOrderId") Long excludeOrderId);
 
     List<ReservationOrder> findMachineReservedSlots(@Param("instrumentId") Long instrumentId,
                                                     @Param("dayStart") LocalDateTime dayStart,
@@ -64,4 +80,38 @@ public interface ReservationOrderRepository {
     int update(ReservationOrder order);
 
     int markSettling(@Param("id") Long id, @Param("updateTime") LocalDateTime updateTime);
+
+    long countByScopeAndCreateTime(@Param("startTime") LocalDateTime startTime,
+                                   @Param("endTime") LocalDateTime endTime,
+                                   @Param("roleCode") String roleCode,
+                                   @Param("scopeDepartmentId") Long scopeDepartmentId);
+
+    long countCompletedButUnsettledByScope(@Param("startTime") LocalDateTime startTime,
+                                           @Param("endTime") LocalDateTime endTime,
+                                           @Param("roleCode") String roleCode,
+                                           @Param("scopeDepartmentId") Long scopeDepartmentId);
+
+    long countWaitingSettlementByScope(@Param("startTime") LocalDateTime startTime,
+                                       @Param("endTime") LocalDateTime endTime,
+                                       @Param("roleCode") String roleCode,
+                                       @Param("scopeDepartmentId") Long scopeDepartmentId);
+
+    long countConfirmedButUnpaidByScope(@Param("startTime") LocalDateTime startTime,
+                                        @Param("endTime") LocalDateTime endTime,
+                                        @Param("roleCode") String roleCode,
+                                        @Param("scopeDepartmentId") Long scopeDepartmentId);
+
+    List<FinanceAnomalyVO> findFinanceAnomalyPage(@Param("type") String type,
+                                                  @Param("startTime") LocalDateTime startTime,
+                                                  @Param("endTime") LocalDateTime endTime,
+                                                  @Param("roleCode") String roleCode,
+                                                  @Param("scopeDepartmentId") Long scopeDepartmentId,
+                                                  @Param("offset") int offset,
+                                                  @Param("pageSize") int pageSize);
+
+    long countFinanceAnomaly(@Param("type") String type,
+                             @Param("startTime") LocalDateTime startTime,
+                             @Param("endTime") LocalDateTime endTime,
+                             @Param("roleCode") String roleCode,
+                             @Param("scopeDepartmentId") Long scopeDepartmentId);
 }

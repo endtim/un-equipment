@@ -1,34 +1,33 @@
 package com.unequipment.platform.modules.finance.service;
 
+import com.unequipment.platform.common.api.PageResponse;
 import com.unequipment.platform.common.exception.BizException;
 import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.common.util.BizNoGenerator;
-import com.unequipment.platform.common.api.PageResponse;
 import com.unequipment.platform.modules.content.service.MessageService;
-import com.unequipment.platform.modules.log.service.OperationLogService;
 import com.unequipment.platform.modules.finance.dto.RechargeAuditRequest;
 import com.unequipment.platform.modules.finance.dto.RechargeRequest;
 import com.unequipment.platform.modules.finance.entity.Account;
 import com.unequipment.platform.modules.finance.entity.RechargeOrder;
 import com.unequipment.platform.modules.finance.entity.SettlementRecord;
 import com.unequipment.platform.modules.finance.entity.TransactionRecord;
-import com.unequipment.platform.modules.finance.vo.FinanceAnomalyVO;
 import com.unequipment.platform.modules.finance.repository.AccountRepository;
 import com.unequipment.platform.modules.finance.repository.RechargeOrderRepository;
 import com.unequipment.platform.modules.finance.repository.SettlementRecordRepository;
 import com.unequipment.platform.modules.finance.repository.TransactionRecordRepository;
+import com.unequipment.platform.modules.finance.vo.FinanceAnomalyVO;
+import com.unequipment.platform.modules.log.service.OperationLogService;
 import com.unequipment.platform.modules.order.entity.ReservationOrder;
 import com.unequipment.platform.modules.order.repository.ReservationOrderRepository;
 import com.unequipment.platform.modules.system.entity.SysUser;
 import com.unequipment.platform.modules.system.repository.SysUserRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Locale;
-import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,9 +53,26 @@ public class FinanceService {
         result.put("status", account.getStatus());
         result.put("totalRecharge", account.getTotalRecharge());
         result.put("totalConsume", account.getTotalConsume());
-        result.put("transactions", transactionRecordRepository.findByUserId(user.getId()));
-        result.put("recharges", rechargeOrderRepository.findByUserId(user.getId()));
+        result.put("pendingRechargeCount", rechargeOrderRepository.countByUserIdAndStatus(user.getId(), "PENDING"));
         return result;
+    }
+
+    public PageResponse<TransactionRecord> pageMyTransactions(SysUser user, int pageNum, int pageSize) {
+        int safePageNum = Math.max(pageNum, 1);
+        int safePageSize = Math.max(pageSize, 1);
+        int offset = (safePageNum - 1) * safePageSize;
+        List<TransactionRecord> list = transactionRecordRepository.findPageByUserId(user.getId(), offset, safePageSize);
+        long total = transactionRecordRepository.countByUserId(user.getId());
+        return new PageResponse<>(list, total, safePageNum, safePageSize);
+    }
+
+    public PageResponse<RechargeOrder> pageMyRecharges(SysUser user, int pageNum, int pageSize) {
+        int safePageNum = Math.max(pageNum, 1);
+        int safePageSize = Math.max(pageSize, 1);
+        int offset = (safePageNum - 1) * safePageSize;
+        List<RechargeOrder> list = rechargeOrderRepository.findPageByUserId(user.getId(), offset, safePageSize);
+        long total = rechargeOrderRepository.countByUserId(user.getId());
+        return new PageResponse<>(list, total, safePageNum, safePageSize);
     }
 
     @Transactional
@@ -80,22 +96,25 @@ public class FinanceService {
     public RechargeOrder auditRecharge(Long id, RechargeAuditRequest request, SysUser auditor) {
         RechargeOrder order = rechargeOrderRepository.findById(id);
         if (order == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "recharge order not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "充值单不存在");
         }
-        if (!canManageUserResource(order.getUserId(), auditor)) {
-            throw new BizException(ErrorCodes.PERMISSION_DENIED, "permission denied for this recharge order");
+        if (!canManageRecharge(order, auditor)) {
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权审核该充值单");
         }
+
         LocalDateTime now = LocalDateTime.now();
+        String action = request.getAction() == null ? "" : request.getAction().trim().toUpperCase(Locale.ROOT);
         String targetStatus;
         String targetRemark = order.getRemark();
-        if ("APPROVE".equalsIgnoreCase(request.getAction())) {
+        if ("APPROVE".equals(action)) {
             targetStatus = "PASS";
-        } else if ("REJECT".equalsIgnoreCase(request.getAction())) {
+        } else if ("REJECT".equals(action)) {
             targetStatus = "REJECT";
             targetRemark = request.getComment();
         } else {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "invalid recharge audit action");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "充值审核动作不合法");
         }
+
         int changed = rechargeOrderRepository.updateIfPending(
             order.getId(),
             targetStatus,
@@ -105,33 +124,39 @@ public class FinanceService {
             now
         );
         if (changed <= 0) {
-            throw new BizException(ErrorCodes.BIZ_ERROR, "recharge order already processed");
+            throw new BizException(ErrorCodes.BIZ_ERROR, "充值单已被处理，请刷新后重试");
         }
 
-        SysUser notifyUser = new SysUser();
-        notifyUser.setId(order.getUserId());
-        if ("APPROVE".equalsIgnoreCase(request.getAction())) {
+        SysUser notifyUser = simpleUser(order.getUserId());
+        if ("APPROVE".equals(action)) {
             Account account = getAccount(order.getUserId());
-            BigDecimal before = account.getBalance();
+            BigDecimal before = nullSafe(account.getBalance());
             int updated = accountRepository.increaseBalanceForRecharge(account.getId(), order.getAmount(), now);
             if (updated <= 0) {
-                throw new BizException(ErrorCodes.BIZ_ERROR, "account update failed");
+                throw new BizException(ErrorCodes.BIZ_ERROR, "账户更新失败，请稍后重试");
             }
-            recordTransaction(order.getUserId(), null, order.getId(), order.getAmount(), "RECHARGE", "IN",
-                before, before.add(order.getAmount()), "Recharge approved");
-            messageService.send(notifyUser, "Recharge approved", "Your recharge request has been approved.");
-            operationLogService.save(
-                auditor,
-                "FINANCE",
-                "AUDIT_RECHARGE",
-                "rechargeId:" + id + ":" + targetStatus
-                    + ",before=" + before
-                    + ",after=" + before.add(order.getAmount())
+            recordTransaction(
+                order.getUserId(),
+                null,
+                order.getId(),
+                order.getAmount(),
+                "RECHARGE",
+                "IN",
+                before,
+                before.add(order.getAmount()),
+                "充值审核通过"
             );
+            messageService.send(notifyUser, "充值审核通过", "您的充值申请已审核通过。");
         } else {
-            messageService.send(notifyUser, "Recharge rejected", "Your recharge request was rejected.");
-            operationLogService.save(auditor, "FINANCE", "AUDIT_RECHARGE", "rechargeId:" + id + ":" + targetStatus);
+            messageService.send(notifyUser, "充值审核未通过", "您的充值申请未通过审核。");
         }
+
+        operationLogService.save(
+            auditor,
+            "FINANCE",
+            "AUDIT_RECHARGE",
+            "rechargeId:" + id + ":" + targetStatus
+        );
         return rechargeOrderRepository.findById(id);
     }
 
@@ -149,11 +174,20 @@ public class FinanceService {
             LocalDateTime.now()
         );
         if (changed <= 0) {
-            throw new BizException(ErrorCodes.FINANCE_INSUFFICIENT_BALANCE, "insufficient available balance");
+            throw new BizException(ErrorCodes.FINANCE_INSUFFICIENT_BALANCE, "可用余额不足，无法完成结算");
         }
 
-        recordTransaction(order.getUserId(), order.getId(), null, amount.negate(), "CONSUME", "OUT",
-            before, after, "Order settlement");
+        recordTransaction(
+            order.getUserId(),
+            order.getId(),
+            null,
+            amount.negate(),
+            "CONSUME",
+            "OUT",
+            before,
+            after,
+            "订单结算扣费"
+        );
 
         int confirmed = settlementRecordRepository.confirmByOrderId(
             order.getId(),
@@ -178,7 +212,7 @@ public class FinanceService {
                 settlement.setUserId(order.getUserId());
                 settlement.setInstrumentId(order.getInstrumentId());
                 settlement.setBillType(resolveBillType(order.getUserId()));
-                settlement.setPriceDesc("Auto generated from reservation order");
+                settlement.setPriceDesc("订单自动生成");
                 settlement.setEstimatedAmount(nullSafe(order.getEstimatedAmount()));
                 settlement.setDiscountAmount(BigDecimal.ZERO);
                 settlement.setFinalAmount(amount);
@@ -189,6 +223,7 @@ public class FinanceService {
                 settlementRecordRepository.insert(settlement);
             }
         }
+
         operationLogService.save(
             operator,
             "FINANCE",
@@ -199,18 +234,38 @@ public class FinanceService {
 
     @Transactional
     public void refundForOrder(ReservationOrder order, String reason) {
+        refundForOrder(order, reason, null);
+    }
+
+    @Transactional
+    public void refundForOrder(ReservationOrder order, String reason, SysUser operator) {
         Account account = getAccount(order.getUserId());
         BigDecimal amount = settlementAmount(order);
-        BigDecimal before = account.getBalance();
+        BigDecimal before = nullSafe(account.getBalance());
         int changed = accountRepository.increaseBalanceForRefund(account.getId(), amount, LocalDateTime.now());
         if (changed <= 0) {
-            throw new BizException(ErrorCodes.BIZ_ERROR, "refund failed");
+            throw new BizException(ErrorCodes.BIZ_ERROR, "退款失败，请稍后重试");
         }
-        settlementRecordRepository.updateStatusByOrderId(order.getId(), "REFUNDED", LocalDateTime.now(), null, amount);
-        recordTransaction(order.getUserId(), order.getId(), null, amount, "REFUND", "IN",
-            before, before.add(amount), reason);
-        operationLogService.save(
+        settlementRecordRepository.updateStatusByOrderId(
+            order.getId(),
+            "REFUNDED",
+            LocalDateTime.now(),
+            operator == null ? null : operator.getId(),
+            amount
+        );
+        recordTransaction(
+            order.getUserId(),
+            order.getId(),
             null,
+            amount,
+            "REFUND",
+            "IN",
+            before,
+            before.add(amount),
+            reason
+        );
+        operationLogService.save(
+            operator,
             "FINANCE",
             "REFUND_ORDER",
             "orderId:" + order.getId() + ",before=" + before + ",after=" + before.add(amount) + ",refund=" + amount
@@ -230,7 +285,7 @@ public class FinanceService {
             settlement.setUserId(order.getUserId());
             settlement.setInstrumentId(order.getInstrumentId());
             settlement.setBillType(billType);
-            settlement.setPriceDesc("Pending settlement");
+            settlement.setPriceDesc("待结算");
             settlement.setEstimatedAmount(estimated);
             settlement.setDiscountAmount(BigDecimal.ZERO);
             settlement.setFinalAmount(finalAmount);
@@ -242,7 +297,7 @@ public class FinanceService {
         settlementRecordRepository.updatePendingByOrderId(
             order.getId(),
             billType,
-            "Pending settlement",
+            "待结算",
             estimated,
             BigDecimal.ZERO,
             finalAmount
@@ -258,7 +313,7 @@ public class FinanceService {
         Account account = getAccount(order.getUserId());
         int changed = accountRepository.freezeAmountIfAvailable(account.getId(), amount, LocalDateTime.now());
         if (changed <= 0) {
-            throw new BizException(ErrorCodes.FINANCE_INSUFFICIENT_BALANCE, "insufficient available balance");
+            throw new BizException(ErrorCodes.FINANCE_INSUFFICIENT_BALANCE, "可用余额不足，无法冻结预估金额");
         }
     }
 
@@ -284,67 +339,43 @@ public class FinanceService {
         );
     }
 
-    public List<RechargeOrder> listRecharges(SysUser requester) {
-        return rechargeOrderRepository.findAll().stream()
-            .filter(item -> canManageUserResource(item.getUserId(), requester))
-            .collect(Collectors.toList());
-    }
-
     public PageResponse<RechargeOrder> pageRecharges(SysUser requester, String keyword, String status,
                                                      Long userId, Long auditUserId,
                                                      BigDecimal minAmount, BigDecimal maxAmount,
                                                      LocalDateTime startTime, LocalDateTime endTime,
                                                      int pageNum, int pageSize) {
-        List<RechargeOrder> filtered = new ArrayList<>(listRecharges(requester));
-        if (userId != null) {
-            filtered = filtered.stream().filter(item -> userId.equals(item.getUserId())).collect(Collectors.toList());
-        }
-        if (auditUserId != null) {
-            filtered = filtered.stream()
-                .filter(item -> auditUserId.equals(item.getAuditUserId()))
-                .collect(Collectors.toList());
-        }
-        if (status != null && !status.trim().isEmpty()) {
-            String targetStatus = status.trim().toUpperCase();
-            filtered = filtered.stream()
-                .filter(item -> item.getStatus() != null && targetStatus.equalsIgnoreCase(item.getStatus()))
-                .collect(Collectors.toList());
-        }
-        if (keyword != null && !keyword.trim().isEmpty()) {
-            String key = keyword.trim().toLowerCase();
-            filtered = filtered.stream().filter(item ->
-                containsIgnoreCase(item.getRechargeNo(), key)
-                    || containsIgnoreCase(item.getUserName(), key)
-                    || containsIgnoreCase(item.getRemark(), key))
-                .collect(Collectors.toList());
-        }
-        if (minAmount != null) {
-            filtered = filtered.stream()
-                .filter(item -> nullSafe(item.getAmount()).compareTo(minAmount) >= 0)
-                .collect(Collectors.toList());
-        }
-        if (maxAmount != null) {
-            filtered = filtered.stream()
-                .filter(item -> nullSafe(item.getAmount()).compareTo(maxAmount) <= 0)
-                .collect(Collectors.toList());
-        }
-        if (startTime != null) {
-            filtered = filtered.stream()
-                .filter(item -> item.getCreateTime() != null && !item.getCreateTime().isBefore(startTime))
-                .collect(Collectors.toList());
-        }
-        if (endTime != null) {
-            filtered = filtered.stream()
-                .filter(item -> item.getCreateTime() != null && !item.getCreateTime().isAfter(endTime))
-                .collect(Collectors.toList());
-        }
-
         int safePageNum = Math.max(pageNum, 1);
         int safePageSize = Math.max(pageSize, 1);
-        int from = (safePageNum - 1) * safePageSize;
-        int to = Math.min(from + safePageSize, filtered.size());
-        List<RechargeOrder> pageList = from >= filtered.size() ? new ArrayList<>() : filtered.subList(from, to);
-        return new PageResponse<>(pageList, filtered.size(), safePageNum, safePageSize);
+        int offset = (safePageNum - 1) * safePageSize;
+        String roleCode = normalizeRole(requester);
+        Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
+        List<RechargeOrder> list = rechargeOrderRepository.findPageByScope(
+            trimToNull(keyword),
+            trimToNull(status),
+            userId,
+            auditUserId,
+            minAmount,
+            maxAmount,
+            startTime,
+            endTime,
+            roleCode,
+            scopeDepartmentId,
+            offset,
+            safePageSize
+        );
+        long total = rechargeOrderRepository.countPageByScope(
+            trimToNull(keyword),
+            trimToNull(status),
+            userId,
+            auditUserId,
+            minAmount,
+            maxAmount,
+            startTime,
+            endTime,
+            roleCode,
+            scopeDepartmentId
+        );
+        return new PageResponse<>(list, total, safePageNum, safePageSize);
     }
 
     public String exportRechargesCsv(SysUser requester, String keyword, String status,
@@ -352,71 +383,74 @@ public class FinanceService {
                                      BigDecimal minAmount, BigDecimal maxAmount,
                                      LocalDateTime startTime, LocalDateTime endTime) {
         List<RechargeOrder> list = pageRecharges(
-            requester, keyword, status, userId, auditUserId,
-            minAmount, maxAmount, startTime, endTime, 1, Integer.MAX_VALUE
+            requester,
+            keyword,
+            status,
+            userId,
+            auditUserId,
+            minAmount,
+            maxAmount,
+            startTime,
+            endTime,
+            1,
+            Integer.MAX_VALUE
         ).getList();
         StringBuilder sb = new StringBuilder();
         sb.append("充值单号,申请人,审核人,金额,状态,申请时间,审核时间,备注\n");
         for (RechargeOrder item : list) {
-            sb.append(csv(item.getRechargeNo())).append(',')
-                .append(csv(item.getUserName())).append(',')
-                .append(csv(item.getAuditUserName())).append(',')
-                .append(csv(item.getAmount())).append(',')
-                .append(csv(item.getStatus())).append(',')
-                .append(csv(item.getCreateTime())).append(',')
-                .append(csv(item.getAuditTime())).append(',')
-                .append(csv(item.getRemark())).append('\n');
+            sb.append(csv(item.getRechargeNo())).append(",")
+                .append(csv(item.getUserName())).append(",")
+                .append(csv(item.getAuditUserName())).append(",")
+                .append(csv(item.getAmount())).append(",")
+                .append(csv(item.getStatus())).append(",")
+                .append(csv(item.getCreateTime())).append(",")
+                .append(csv(item.getAuditTime())).append(",")
+                .append(csv(item.getRemark())).append("\n");
         }
         return sb.toString();
     }
 
     public Map<String, Object> reconciliationOverview(SysUser requester, LocalDateTime startTime, LocalDateTime endTime) {
+        String roleCode = normalizeRole(requester);
+        Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
+
+        long rechargeCount = safeGet(
+            () -> rechargeOrderRepository.countByScopeAndCreateTime(startTime, endTime, roleCode, scopeDepartmentId),
+            0L
+        );
+        BigDecimal rechargeAmount = nullSafe(safeGet(
+            () -> rechargeOrderRepository.sumAmountByStatusAndScope("PASS", startTime, endTime, roleCode, scopeDepartmentId),
+            BigDecimal.ZERO
+        ));
+        long settlementCount = safeGet(
+            () -> settlementRecordRepository.countByScopeAndCreateTime(startTime, endTime, roleCode, scopeDepartmentId),
+            0L
+        );
+        BigDecimal settledAmount = nullSafe(safeGet(
+            () -> settlementRecordRepository.sumFinalAmountByStatusAndScope("CONFIRMED", startTime, endTime, roleCode, scopeDepartmentId),
+            BigDecimal.ZERO
+        ));
+        BigDecimal refundedAmount = nullSafe(safeGet(
+            () -> settlementRecordRepository.sumFinalAmountByStatusAndScope("REFUNDED", startTime, endTime, roleCode, scopeDepartmentId),
+            BigDecimal.ZERO
+        ));
+        long completedButUnsettled = safeGet(
+            () -> orderRepository.countCompletedButUnsettledByScope(startTime, endTime, roleCode, scopeDepartmentId),
+            0L
+        );
+        long waitingSettlement = safeGet(
+            () -> orderRepository.countWaitingSettlementByScope(startTime, endTime, roleCode, scopeDepartmentId),
+            0L
+        );
+        long confirmedButUnpaid = safeGet(
+            () -> orderRepository.countConfirmedButUnpaidByScope(startTime, endTime, roleCode, scopeDepartmentId),
+            0L
+        );
+
         Map<String, Object> result = new HashMap<>();
-
-        List<RechargeOrder> rechargeOrders = listRecharges(requester).stream()
-            .filter(item -> inRange(item.getCreateTime(), startTime, endTime))
-            .collect(Collectors.toList());
-        BigDecimal rechargeAmount = rechargeOrders.stream()
-            .filter(item -> "PASS".equalsIgnoreCase(item.getStatus()))
-            .map(RechargeOrder::getAmount)
-            .map(this::nullSafe)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        List<ReservationOrder> scopedOrders = orderRepository.findAll().stream()
-            .filter(item -> canManageUserResource(item.getUserId(), requester))
-            .filter(item -> inRange(item.getCreateTime(), startTime, endTime))
-            .collect(Collectors.toList());
-        List<SettlementRecord> scopedSettlements = settlementRecordRepository.findAll().stream()
-            .filter(item -> canManageUserResource(item.getUserId(), requester))
-            .filter(item -> inRange(item.getCreateTime(), startTime, endTime))
-            .collect(Collectors.toList());
-        BigDecimal settledAmount = scopedSettlements.stream()
-            .filter(item -> "CONFIRMED".equalsIgnoreCase(item.getSettleStatus()))
-            .map(SettlementRecord::getFinalAmount)
-            .map(this::nullSafe)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal refundedAmount = scopedSettlements.stream()
-            .filter(item -> "REFUNDED".equalsIgnoreCase(item.getSettleStatus()))
-            .map(SettlementRecord::getFinalAmount)
-            .map(this::nullSafe)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        long completedButUnsettled = scopedOrders.stream()
-            .filter(item -> "COMPLETED".equalsIgnoreCase(item.getOrderStatus()))
-            .filter(item -> !"CONFIRMED".equalsIgnoreCase(item.getSettlementStatus())
-                && !"REFUNDED".equalsIgnoreCase(item.getSettlementStatus()))
-            .count();
-        long waitingSettlement = scopedOrders.stream()
-            .filter(item -> "WAITING_SETTLEMENT".equalsIgnoreCase(item.getOrderStatus()))
-            .count();
-        long confirmedButUnpaid = scopedOrders.stream()
-            .filter(item -> "CONFIRMED".equalsIgnoreCase(item.getSettlementStatus()))
-            .filter(item -> !"PAID".equalsIgnoreCase(item.getPayStatus()))
-            .count();
-
-        result.put("rechargeCount", rechargeOrders.size());
+        result.put("rechargeCount", rechargeCount);
         result.put("rechargeAmount", rechargeAmount);
-        result.put("settlementCount", scopedSettlements.size());
+        result.put("settlementCount", settlementCount);
         result.put("settledAmount", settledAmount);
         result.put("refundedAmount", refundedAmount);
         result.put("completedButUnsettled", completedButUnsettled);
@@ -430,64 +464,32 @@ public class FinanceService {
     public PageResponse<FinanceAnomalyVO> reconciliationAnomalies(SysUser requester, String type,
                                                                   LocalDateTime startTime, LocalDateTime endTime,
                                                                   int pageNum, int pageSize) {
-        List<ReservationOrder> scopedOrders = orderRepository.findAll().stream()
-            .filter(item -> canManageUserResource(item.getUserId(), requester))
-            .filter(item -> inRange(item.getCreateTime(), startTime, endTime))
-            .collect(Collectors.toList());
-        Map<Long, SettlementRecord> settlementByOrder = settlementRecordRepository.findAll().stream()
-            .filter(item -> canManageUserResource(item.getUserId(), requester))
-            .collect(Collectors.toMap(SettlementRecord::getOrderId, item -> item, (a, b) -> a));
-
-        List<FinanceAnomalyVO> anomalies = new ArrayList<>();
-        for (ReservationOrder order : scopedOrders) {
-            SettlementRecord settlement = settlementByOrder.get(order.getId());
-
-            if ("COMPLETED".equalsIgnoreCase(order.getOrderStatus())
-                && (settlement == null || "PENDING".equalsIgnoreCase(settlement.getSettleStatus()))) {
-                anomalies.add(buildAnomaly("COMPLETED_UNSETTLED", "已完成未结算", order, settlement,
-                    "订单已完成但结算未确认"));
-            }
-            if ("WAITING_SETTLEMENT".equalsIgnoreCase(order.getOrderStatus())) {
-                anomalies.add(buildAnomaly("WAITING_SETTLEMENT", "待结算滞留", order, settlement,
-                    "订单长时间处于待结算状态"));
-            }
-            if (settlement != null && "CONFIRMED".equalsIgnoreCase(settlement.getSettleStatus())
-                && !"PAID".equalsIgnoreCase(order.getPayStatus())) {
-                anomalies.add(buildAnomaly("CONFIRMED_UNPAID", "已结算未支付", order, settlement,
-                    "结算已确认但订单支付状态不是已支付"));
-            }
-            if ("REFUNDED".equalsIgnoreCase(order.getPayStatus())
-                && (settlement == null || !"REFUNDED".equalsIgnoreCase(settlement.getSettleStatus()))) {
-                anomalies.add(buildAnomaly("REFUNDED_UNMATCHED", "已退款未冲正", order, settlement,
-                    "订单支付已退款，但结算记录未标记为已退款"));
-            }
-        }
-
-        if (type != null && !type.trim().isEmpty()) {
-            String target = type.trim().toUpperCase(Locale.ROOT);
-            anomalies = anomalies.stream()
-                .filter(item -> target.equalsIgnoreCase(item.getAnomalyType()))
-                .collect(Collectors.toList());
-        }
-        anomalies.sort((a, b) -> {
-            if (a.getCreateTime() == null && b.getCreateTime() == null) {
-                return 0;
-            }
-            if (a.getCreateTime() == null) {
-                return 1;
-            }
-            if (b.getCreateTime() == null) {
-                return -1;
-            }
-            return b.getCreateTime().compareTo(a.getCreateTime());
-        });
-
         int safePageNum = Math.max(pageNum, 1);
         int safePageSize = Math.max(pageSize, 1);
-        int from = (safePageNum - 1) * safePageSize;
-        int to = Math.min(from + safePageSize, anomalies.size());
-        List<FinanceAnomalyVO> pageList = from >= anomalies.size() ? new ArrayList<>() : anomalies.subList(from, to);
-        return new PageResponse<>(pageList, anomalies.size(), safePageNum, safePageSize);
+        int offset = (safePageNum - 1) * safePageSize;
+        String roleCode = normalizeRole(requester);
+        Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
+        String anomalyType = trimToNull(type);
+        if (anomalyType != null) {
+            anomalyType = anomalyType.toUpperCase(Locale.ROOT);
+        }
+        List<FinanceAnomalyVO> list = orderRepository.findFinanceAnomalyPage(
+            anomalyType,
+            startTime,
+            endTime,
+            roleCode,
+            scopeDepartmentId,
+            offset,
+            safePageSize
+        );
+        long total = orderRepository.countFinanceAnomaly(
+            anomalyType,
+            startTime,
+            endTime,
+            roleCode,
+            scopeDepartmentId
+        );
+        return new PageResponse<>(list, total, safePageNum, safePageSize);
     }
 
     public Account getAccount(SysUser user) {
@@ -497,14 +499,14 @@ public class FinanceService {
     public Account getAccount(Long userId) {
         Account account = accountRepository.findByUserId(userId);
         if (account == null) {
-            throw new BizException(ErrorCodes.FINANCE_ACCOUNT_NOT_FOUND, "account not found");
+            throw new BizException(ErrorCodes.FINANCE_ACCOUNT_NOT_FOUND, "资金账户不存在");
         }
         return account;
     }
 
     public void ensureEnoughBalance(SysUser user, BigDecimal amount) {
         if (getAccount(user).getBalance().compareTo(amount) < 0) {
-            throw new BizException(ErrorCodes.FINANCE_INSUFFICIENT_BALANCE, "insufficient balance");
+            throw new BizException(ErrorCodes.FINANCE_INSUFFICIENT_BALANCE, "账户余额不足");
         }
     }
 
@@ -512,7 +514,7 @@ public class FinanceService {
         Account account = getAccount(user);
         BigDecimal available = nullSafe(account.getBalance()).subtract(nullSafe(account.getFrozenAmount()));
         if (available.compareTo(amount) < 0) {
-            throw new BizException(ErrorCodes.FINANCE_INSUFFICIENT_BALANCE, "insufficient available balance");
+            throw new BizException(ErrorCodes.FINANCE_INSUFFICIENT_BALANCE, "可用余额不足");
         }
     }
 
@@ -549,47 +551,27 @@ public class FinanceService {
         return value == null ? BigDecimal.ZERO : value;
     }
 
-    private boolean containsIgnoreCase(String value, String keywordLowerCase) {
-        return value != null && value.toLowerCase().contains(keywordLowerCase);
-    }
-
-    private boolean inRange(LocalDateTime target, LocalDateTime start, LocalDateTime end) {
-        if (target == null) {
-            return false;
-        }
-        if (start != null && target.isBefore(start)) {
-            return false;
-        }
-        if (end != null && target.isAfter(end)) {
-            return false;
-        }
-        return true;
-    }
-
-    private FinanceAnomalyVO buildAnomaly(String type, String label, ReservationOrder order,
-                                          SettlementRecord settlement, String detail) {
-        FinanceAnomalyVO vo = new FinanceAnomalyVO();
-        vo.setAnomalyType(type);
-        vo.setAnomalyLabel(label);
-        vo.setOrderId(order.getId());
-        vo.setOrderNo(order.getOrderNo());
-        vo.setUserId(order.getUserId());
-        vo.setUserName(order.getUserName());
-        vo.setCreateTime(order.getCreateTime());
-        vo.setDetail(detail);
-        if (settlement != null) {
-            vo.setSettlementId(settlement.getId());
-            vo.setSettlementNo(settlement.getSettlementNo());
-        }
-        return vo;
-    }
-
     private String csv(Object value) {
         if (value == null) {
             return "";
         }
         String text = String.valueOf(value).replace("\"", "\"\"");
         return "\"" + text + "\"";
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeRole(SysUser user) {
+        if (user == null || user.getPrimaryRoleCode() == null || user.getPrimaryRoleCode().trim().isEmpty()) {
+            return "INTERNAL_USER";
+        }
+        return user.getPrimaryRoleCode().trim().toUpperCase(Locale.ROOT);
     }
 
     private String resolveBillType(Long userId) {
@@ -604,25 +586,38 @@ public class FinanceService {
         return "INTERNAL";
     }
 
-    private boolean canManageUserResource(Long targetUserId, SysUser operator) {
-        if (operator == null) {
+    private boolean canManageRecharge(RechargeOrder order, SysUser operator) {
+        if (operator == null || order == null) {
             return false;
         }
         if (hasRole(operator, "ADMIN")) {
             return true;
         }
-        if (targetUserId != null && targetUserId.equals(operator.getId())) {
-            return true;
-        }
         if (hasRole(operator, "DEPT_MANAGER")) {
-            SysUser target = userRepository.findById(targetUserId);
-            return target != null && target.getDepartmentId() != null
+            SysUser target = userRepository.findById(order.getUserId());
+            return target != null
+                && target.getDepartmentId() != null
                 && target.getDepartmentId().equals(operator.getDepartmentId());
         }
         return false;
     }
 
+    private SysUser simpleUser(Long userId) {
+        SysUser user = new SysUser();
+        user.setId(userId);
+        return user;
+    }
+
     private boolean hasRole(SysUser user, String roleCode) {
         return user != null && roleCode.equalsIgnoreCase(user.getPrimaryRoleCode());
+    }
+
+    private <T> T safeGet(Supplier<T> supplier, T fallback) {
+        try {
+            T value = supplier.get();
+            return value == null ? fallback : value;
+        } catch (Exception ignored) {
+            return fallback;
+        }
     }
 }

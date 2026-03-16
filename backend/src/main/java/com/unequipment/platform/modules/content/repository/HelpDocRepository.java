@@ -20,6 +20,8 @@ public interface HelpDocRepository {
 
     HelpDoc findById(@Param("id") Long id);
 
+    HelpDoc findPublishedById(@Param("id") Long id);
+
     int insert(HelpDoc helpDoc);
 
     int update(HelpDoc helpDoc);

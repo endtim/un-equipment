@@ -1,12 +1,12 @@
 package com.unequipment.platform.modules.content.service;
 
+import com.unequipment.platform.common.api.PageResponse;
 import com.unequipment.platform.common.exception.BizException;
 import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.modules.content.entity.UserMessage;
 import com.unequipment.platform.modules.content.repository.UserMessageRepository;
 import com.unequipment.platform.modules.system.entity.SysUser;
 import java.time.LocalDateTime;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -27,13 +27,21 @@ public class MessageService {
         userMessageRepository.insert(message);
     }
 
-    public List<UserMessage> findByUser(SysUser user) {
-        return userMessageRepository.findByUserId(user.getId());
+    public PageResponse<UserMessage> findByUser(SysUser user, int pageNum, int pageSize) {
+        int validPageNum = Math.max(1, pageNum);
+        int validPageSize = Math.max(1, pageSize);
+        int offset = (validPageNum - 1) * validPageSize;
+        return new PageResponse<>(
+            userMessageRepository.findPageByUserId(user.getId(), offset, validPageSize),
+            userMessageRepository.countByUserId(user.getId()),
+            validPageNum,
+            validPageSize
+        );
     }
 
     public void markRead(SysUser user, Long id) {
         if (userMessageRepository.findByIdAndUserId(id, user.getId()) == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "message not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "消息不存在");
         }
         userMessageRepository.markRead(id, user.getId(), LocalDateTime.now());
     }
@@ -42,3 +50,4 @@ public class MessageService {
         userMessageRepository.markAllRead(user.getId(), LocalDateTime.now());
     }
 }
+

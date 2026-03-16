@@ -8,14 +8,14 @@ import lombok.Data;
 @Data
 public class SampleReservationRequest {
 
-    @NotNull(message = "instrumentId is required")
+    @NotNull(message = "仪器编号不能为空")
     private Long instrumentId;
 
-    @NotBlank(message = "sampleName is required")
+    @NotBlank(message = "样品名称不能为空")
     private String sampleName;
 
-    @NotNull(message = "sampleCount is required")
-    @Min(value = 1, message = "sampleCount must be greater than 0")
+    @NotNull(message = "样品数量不能为空")
+    @Min(value = 1, message = "样品数量必须大于0")
     private Integer sampleCount;
 
     private String projectName;

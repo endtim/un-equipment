@@ -88,6 +88,7 @@
     <section class="grid-3">
       <div class="content-card panel">
         <div class="panel-head"><h3>仪器预约排行</h3></div>
+        <el-empty v-if="instrumentRanking.length === 0" description="暂无排行数据" />
         <div v-for="(item, index) in instrumentRanking" :key="item.name" class="rank-row">
           <span class="rank-index">{{ index + 1 }}</span>
           <span class="rank-name">{{ item.name }}</span>
@@ -190,7 +191,7 @@ export default {
       if (Array.isArray(this.overview.topInstruments) && this.overview.topInstruments.length) {
         return this.overview.topInstruments.slice(0, 5).map(item => ({ name: item.key, value: item.value }))
       }
-      return (this.instruments || []).slice(0, 5).map((item, index) => ({ name: item.instrumentName, value: 10 - index }))
+      return []
     },
     userRanking() {
       return this.fallbackUserRanking
@@ -203,15 +204,15 @@ export default {
     }
   },
   async created() {
-    const [overview, notices, helpDocs, instruments] = await Promise.all([
+    const [overview, noticePage, helpDocPage, instruments] = await Promise.all([
       getOverview().catch(() => ({})),
-      getNotices().catch(() => []),
-      getHelpDocs().catch(() => []),
+      getNotices({ pageNum: 1, pageSize: 6 }).catch(() => null),
+      getHelpDocs({ pageNum: 1, pageSize: 6 }).catch(() => null),
       getInstruments({ pageNum: 1, pageSize: 8 }).catch(() => [])
     ])
     this.overview = overview || {}
-    this.notices = notices || []
-    this.helpDocs = helpDocs || []
+    this.notices = Array.isArray(noticePage?.list) ? noticePage.list : []
+    this.helpDocs = Array.isArray(helpDocPage?.list) ? helpDocPage.list : []
     this.instruments = Array.isArray(instruments?.list) ? instruments.list : (Array.isArray(instruments) ? instruments : [])
   },
   methods: {

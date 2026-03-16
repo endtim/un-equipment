@@ -15,10 +15,19 @@ export function submitRecharge(data) {
   })
 }
 
-export function getRechargeOrders() {
+export function getMyTransactions(params) {
   return request({
-    url: '/api/admin/finance/recharges',
-    method: 'get'
+    url: '/api/account/transactions',
+    method: 'get',
+    params
+  })
+}
+
+export function getMyRecharges(params) {
+  return request({
+    url: '/api/account/recharges',
+    method: 'get',
+    params
   })
 }
 

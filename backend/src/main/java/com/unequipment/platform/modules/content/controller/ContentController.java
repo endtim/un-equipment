@@ -1,6 +1,9 @@
 package com.unequipment.platform.modules.content.controller;
 
 import com.unequipment.platform.common.api.ApiResponse;
+import com.unequipment.platform.common.api.PageResponse;
+import com.unequipment.platform.modules.content.entity.HelpDoc;
+import com.unequipment.platform.modules.content.entity.Notice;
 import com.unequipment.platform.modules.content.service.ContentService;
 import com.unequipment.platform.modules.content.service.MessageService;
 import com.unequipment.platform.modules.system.entity.SysUser;
@@ -9,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,28 +25,36 @@ public class ContentController {
     private final MessageService messageService;
 
     @GetMapping("/notices")
-    public ApiResponse<?> notices() {
-        return ApiResponse.success(contentService.notices());
+    public ApiResponse<PageResponse<Notice>> notices(
+        @RequestParam(required = false) String keyword,
+        @RequestParam(defaultValue = "1") int pageNum,
+        @RequestParam(defaultValue = "10") int pageSize) {
+        return ApiResponse.success(contentService.noticePage(keyword, "PUBLISHED", pageNum, pageSize));
     }
 
     @GetMapping("/notices/{id}")
     public ApiResponse<?> notice(@PathVariable Long id) {
-        return ApiResponse.success(contentService.notice(id));
+        return ApiResponse.success(contentService.publishedNotice(id));
     }
 
     @GetMapping("/help-docs")
-    public ApiResponse<?> helpDocs() {
-        return ApiResponse.success(contentService.helpDocs());
+    public ApiResponse<PageResponse<HelpDoc>> helpDocs(
+        @RequestParam(required = false) String keyword,
+        @RequestParam(defaultValue = "1") int pageNum,
+        @RequestParam(defaultValue = "10") int pageSize) {
+        return ApiResponse.success(contentService.helpDocPage(keyword, "PUBLISHED", pageNum, pageSize));
     }
 
     @GetMapping("/help-docs/{id}")
     public ApiResponse<?> helpDoc(@PathVariable Long id) {
-        return ApiResponse.success(contentService.helpDoc(id));
+        return ApiResponse.success(contentService.publishedHelpDoc(id));
     }
 
     @GetMapping("/messages")
-    public ApiResponse<?> messages(@CurrentUser SysUser user) {
-        return ApiResponse.success(messageService.findByUser(user));
+    public ApiResponse<?> messages(@CurrentUser SysUser user,
+                                   @RequestParam(defaultValue = "1") int pageNum,
+                                   @RequestParam(defaultValue = "10") int pageSize) {
+        return ApiResponse.success(messageService.findByUser(user, pageNum, pageSize));
     }
 
     @PostMapping("/messages/{id}/read")

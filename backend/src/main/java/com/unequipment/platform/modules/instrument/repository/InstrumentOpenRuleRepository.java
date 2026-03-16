@@ -10,6 +10,22 @@ public interface InstrumentOpenRuleRepository {
 
     List<InstrumentOpenRule> findAll();
 
+    List<InstrumentOpenRule> findPageByScope(@Param("instrumentId") Long instrumentId,
+                                             @Param("weekDay") Integer weekDay,
+                                             @Param("status") String status,
+                                             @Param("roleCode") String roleCode,
+                                             @Param("operatorId") Long operatorId,
+                                             @Param("scopeDepartmentId") Long scopeDepartmentId,
+                                             @Param("offset") int offset,
+                                             @Param("pageSize") int pageSize);
+
+    long countPageByScope(@Param("instrumentId") Long instrumentId,
+                          @Param("weekDay") Integer weekDay,
+                          @Param("status") String status,
+                          @Param("roleCode") String roleCode,
+                          @Param("operatorId") Long operatorId,
+                          @Param("scopeDepartmentId") Long scopeDepartmentId);
+
     List<InstrumentOpenRule> findByInstrumentId(Long instrumentId);
 
     InstrumentOpenRule findById(Long id);

@@ -1,5 +1,6 @@
 package com.unequipment.platform.security;
 
+import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.modules.system.entity.SysUser;
 import com.unequipment.platform.modules.system.repository.SysUserRepository;
 import java.io.IOException;
@@ -9,6 +10,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -40,24 +42,19 @@ public class SecurityConfig {
             .exceptionHandling()
             .authenticationEntryPoint(unauthorizedEntryPoint())
             .accessDeniedHandler((request, response, accessDeniedException) ->
-                writeError(response, HttpStatus.FORBIDDEN.value(), 403, "forbidden"))
+                writeError(response, HttpStatus.FORBIDDEN.value(), ErrorCodes.PERMISSION_DENIED, "没有访问权限"))
             .and()
             .authorizeHttpRequests()
             .antMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
             .antMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register").permitAll()
             .antMatchers(HttpMethod.GET, "/api/instruments/**", "/api/notices/**", "/api/help-docs/**", "/api/stats/**").permitAll()
-            .antMatchers("/api/admin/system/users/**")
-            .hasAnyRole("ADMIN", "DEPT_MANAGER")
-            .antMatchers(HttpMethod.GET, "/api/admin/system/departments")
-            .hasAnyRole("ADMIN", "DEPT_MANAGER")
-            .antMatchers(HttpMethod.GET, "/api/admin/system/roles")
-            .hasAnyRole("ADMIN", "DEPT_MANAGER")
-            .antMatchers("/api/admin/system/**", "/api/admin/logs/**", "/api/admin/content/**")
-            .hasRole("ADMIN")
-            .antMatchers("/api/admin/finance/**")
-            .hasAnyRole("ADMIN", "DEPT_MANAGER")
-            .antMatchers("/api/admin/settlements/**")
-            .hasAnyRole("ADMIN", "DEPT_MANAGER")
+            .antMatchers("/api/admin/system/users/**").hasAnyRole("ADMIN", "DEPT_MANAGER")
+            .antMatchers(HttpMethod.GET, "/api/admin/system/departments").hasAnyRole("ADMIN", "DEPT_MANAGER")
+            .antMatchers(HttpMethod.GET, "/api/admin/system/roles").hasAnyRole("ADMIN", "DEPT_MANAGER")
+            .antMatchers("/api/admin/system/**", "/api/admin/logs/**", "/api/admin/content/**").hasRole("ADMIN")
+            .antMatchers("/api/admin/finance/**").hasAnyRole("ADMIN", "DEPT_MANAGER")
+            .antMatchers("/api/admin/settlements/**").hasAnyRole("ADMIN", "DEPT_MANAGER")
+            .antMatchers("/api/admin/stats/**").hasAnyRole("ADMIN", "DEPT_MANAGER")
             .antMatchers("/api/admin/instruments/**", "/api/admin/orders/**")
             .hasAnyRole("ADMIN", "INSTRUMENT_OWNER", "DEPT_MANAGER")
             .antMatchers("/api/admin/**").hasRole("ADMIN")
@@ -75,7 +72,7 @@ public class SecurityConfig {
     @Bean
     public AuthenticationEntryPoint unauthorizedEntryPoint() {
         return (request, response, authException) ->
-            writeError(response, HttpStatus.UNAUTHORIZED.value(), 401, "unauthorized");
+            writeError(response, HttpStatus.UNAUTHORIZED.value(), ErrorCodes.UNAUTHORIZED, "未登录或登录已失效");
     }
 
     private static void writeError(HttpServletResponse response, int httpStatus, int code, String msg) throws IOException {
@@ -85,9 +82,11 @@ public class SecurityConfig {
         response.setStatus(httpStatus);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType("application/json;charset=UTF-8");
-        response.getWriter().write(String.format("{\"code\":%d,\"msg\":\"%s\",\"data\":null}", code, msg));
+        String safeMsg = msg == null ? "" : msg.replace("\"", "\\\"");
+        response.getWriter().write(String.format("{\"code\":%d,\"msg\":\"%s\",\"data\":null}", code, safeMsg));
     }
 
+    @Slf4j
     @Component
     @RequiredArgsConstructor
     public static class AuthTokenFilter extends OncePerRequestFilter {
@@ -106,19 +105,21 @@ public class SecurityConfig {
                     SysUser user = userRepository.findById(userId);
                     if (user == null || !"ENABLED".equalsIgnoreCase(user.getStatus())) {
                         SecurityContextHolder.clearContext();
-                        writeError(response, HttpStatus.UNAUTHORIZED.value(), 401, "unauthorized");
+                        writeError(response, HttpStatus.UNAUTHORIZED.value(), ErrorCodes.UNAUTHORIZED, "用户不存在或已停用");
                         return;
                     }
-                    UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(
-                            user.getUsername(),
-                            null,
-                            AuthorityUtils.createAuthorityList("ROLE_" + (user.getPrimaryRoleCode() == null ? "INTERNAL_USER" : user.getPrimaryRoleCode())));
+                    String roleCode = user.getPrimaryRoleCode() == null ? "INTERNAL_USER" : user.getPrimaryRoleCode();
+                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                        user.getUsername(),
+                        null,
+                        AuthorityUtils.createAuthorityList("ROLE_" + roleCode)
+                    );
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                     request.setAttribute("currentUser", user);
-                } catch (Exception ignored) {
+                } catch (Exception ex) {
+                    log.warn("令牌校验失败: uri={}, reason={}", request.getRequestURI(), ex.getMessage());
                     SecurityContextHolder.clearContext();
-                    writeError(response, HttpStatus.UNAUTHORIZED.value(), 401, "invalid or expired token");
+                    writeError(response, HttpStatus.UNAUTHORIZED.value(), ErrorCodes.UNAUTHORIZED, "登录令牌无效或已过期");
                     return;
                 }
             }

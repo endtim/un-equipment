@@ -189,17 +189,45 @@ VALUES
 -- ---------------------------------------------------------
 -- 3) Content / message
 -- ---------------------------------------------------------
-DELETE FROM content_notice WHERE title = 'SEED-平台预约流程通知';
+DELETE FROM content_notice WHERE title LIKE 'SEED-NOTICE-%';
 INSERT INTO content_notice
 (title, category, summary, content, cover_url, instrument_id, top_flag, publish_status, publish_time, view_count, create_time, update_time, deleted)
 VALUES
-('SEED-平台预约流程通知', 'NOTICE', '预约流程统一线上办理', '所有预约、送样、充值申请统一通过系统提交。', NULL, NULL, 1, 'PUBLISHED', NOW(), 0, NOW(), NOW(), 0);
+('SEED-NOTICE-01 平台预约时间规则调整', 'NOTICE', '工作日预约时段统一为 08:30-17:30', '自本周起，平台统一预约时段为工作日 08:30-17:30。已审核订单不受影响，新增订单请按新时段提交。', NULL, NULL, 1, 'PUBLISHED', NOW() - INTERVAL 30 DAY, 125, NOW(), NOW(), 0),
+('SEED-NOTICE-02 样品接收规范更新', 'INSTRUMENT_NOTICE', '送样需附样品信息单与风险说明', '所有送样订单需上传样品信息单，涉及危险化学品的样品需补充风险说明并经管理员确认后接样。', NULL, @ins2, 1, 'PUBLISHED', NOW() - INTERVAL 28 DAY, 98, NOW(), NOW(), 0),
+('SEED-NOTICE-03 周末值守安排公告', 'NOTICE', '周末实行预约值守制', '周末预约将按值守排班执行，请至少提前 1 个工作日提交预约申请，避免影响使用。', NULL, NULL, 0, 'PUBLISHED', NOW() - INTERVAL 26 DAY, 76, NOW(), NOW(), 0),
+('SEED-NOTICE-04 账户充值到账时效说明', 'NOTICE', '线下充值审核通过后 1 个工作日内到账', '线下转账充值请保留凭证。审核通过后原则上 1 个工作日内完成到账，如遇节假日顺延。', NULL, NULL, 0, 'PUBLISHED', NOW() - INTERVAL 24 DAY, 143, NOW(), NOW(), 0),
+('SEED-NOTICE-05 HPLC 排队高峰提醒', 'INSTRUMENT_NOTICE', '周三与周四下午使用需求较高', '高效液相色谱仪在周三、周四下午预约较集中，建议错峰预约或尽量提前 2 天提交申请。', NULL, @ins1, 0, 'PUBLISHED', NOW() - INTERVAL 22 DAY, 64, NOW(), NOW(), 0),
+('SEED-NOTICE-06 仪器培训报名通道开放', 'NOTICE', '新用户可报名基础培训', '平台已开放 3 月基础培训报名通道。未通过培训的用户将无法预约需要培训准入的仪器。', NULL, NULL, 1, 'PUBLISHED', NOW() - INTERVAL 20 DAY, 189, NOW(), NOW(), 0),
+('SEED-NOTICE-07 订单取消规则说明', 'NOTICE', '开机前 2 小时内取消将计入爽约', '为保障公共资源利用效率，开机前 2 小时内取消将计入爽约记录，请合理安排测试计划。', NULL, NULL, 0, 'PUBLISHED', NOW() - INTERVAL 18 DAY, 167, NOW(), NOW(), 0),
+('SEED-NOTICE-08 SEM 维护停机通知', 'INSTRUMENT_NOTICE', '扫描电镜例行维护 1 天', '扫描电子显微镜将于本周五进行例行维护，维护期间暂停预约与送样接收，完成后自动恢复。', NULL, @ins2, 1, 'PUBLISHED', NOW() - INTERVAL 16 DAY, 152, NOW(), NOW(), 0),
+('SEED-NOTICE-09 发票申请流程优化', 'NOTICE', '新增线上发票信息补录入口', '用户可在结算记录页面补录开票信息并提交申请，财务审核通过后统一开具。', NULL, NULL, 0, 'PUBLISHED', NOW() - INTERVAL 14 DAY, 87, NOW(), NOW(), 0),
+('SEED-NOTICE-10 站内消息通知升级', 'NOTICE', '审核结果将同步站内消息和页面提醒', '订单审核、充值审核、结算确认等关键节点将通过站内消息同步提醒，请及时关注消息中心。', NULL, NULL, 0, 'PUBLISHED', NOW() - INTERVAL 12 DAY, 58, NOW(), NOW(), 0),
+('SEED-NOTICE-11 对外服务申请须知', 'NOTICE', '校外用户需补充单位信息', '校外用户提交预约前请完善单位、联系人和用途信息，信息不完整将导致审核退回。', NULL, NULL, 0, 'PUBLISHED', NOW() - INTERVAL 10 DAY, 121, NOW(), NOW(), 0),
+('SEED-NOTICE-12 仪器附件下载入口启用', 'INSTRUMENT_NOTICE', '说明书与模板可在线下载', '平台已上线仪器附件下载功能，包含操作规程、送样模板、注意事项等资料。', NULL, @ins1, 0, 'PUBLISHED', NOW() - INTERVAL 8 DAY, 93, NOW(), NOW(), 0),
+('SEED-NOTICE-13 预约审核时限提示', 'NOTICE', '管理员将在 24 小时内完成审核', '工作日提交的预约订单，管理员将在 24 小时内完成审核；节假日订单顺延至下一个工作日处理。', NULL, NULL, 0, 'PUBLISHED', NOW() - INTERVAL 6 DAY, 72, NOW(), NOW(), 0),
+('SEED-NOTICE-14 结果文件命名规范', 'NOTICE', '统一采用 订单号_日期 格式', '为便于归档检索，请上传结果文件时使用“订单号_日期_版本”命名格式。', NULL, NULL, 0, 'PUBLISHED', NOW() - INTERVAL 4 DAY, 46, NOW(), NOW(), 0),
+('SEED-NOTICE-15 月度服务数据简报', 'NOTICE', '本月平台预约量与完成率稳步提升', '本月平台预约总量较上月提升约 12%，订单完成率维持在 95% 以上，感谢各位用户配合。', NULL, NULL, 1, 'PUBLISHED', NOW() - INTERVAL 2 DAY, 134, NOW(), NOW(), 0);
 
-DELETE FROM content_help_doc WHERE title = 'SEED-上机预约操作指南';
+DELETE FROM content_help_doc WHERE title LIKE 'SEED-HELP-%';
 INSERT INTO content_help_doc
 (title, doc_type, summary, content, file_url, sort_no, publish_status, publish_time, create_time, update_time, deleted)
 VALUES
-('SEED-上机预约操作指南', 'GUIDE', '演示账号完整流程', '1) 选择仪器 2) 提交预约 3) 等待审核 4) 签到使用 5) 完成结算', 'https://example.com/help/machine-guide.pdf', 1, 'PUBLISHED', NOW(), NOW(), NOW(), 0);
+('SEED-HELP-01 平台登录与账号初始化', 'HELP', '首次登录后建议完善个人信息', '步骤：1) 登录系统 2) 进入个人中心 3) 完善手机号、邮箱、单位信息 4) 保存后重新进入业务模块。', 'https://example.com/help/account-init.pdf', 1, 'PUBLISHED', NOW() - INTERVAL 30 DAY, NOW(), NOW(), 0),
+('SEED-HELP-02 仪器检索与筛选说明', 'HELP', '按分类、状态、关键词组合筛选', '在仪器列表页可按“仪器分类 + 开放状态 + 关键词”组合筛选，并在详情页查看价格、规则和联系人。', 'https://example.com/help/instrument-search.pdf', 2, 'PUBLISHED', NOW() - INTERVAL 28 DAY, NOW(), NOW(), 0),
+('SEED-HELP-03 上机预约完整流程', 'PROCESS', '从提交预约到完成结算', '流程：选择仪器 -> 填写预约时间与用途 -> 提交审核 -> 通过后签到使用 -> 提交结果与结算确认。', 'https://example.com/help/machine-reservation-process.pdf', 3, 'PUBLISHED', NOW() - INTERVAL 26 DAY, NOW(), NOW(), 0),
+('SEED-HELP-04 送样检测提交流程', 'PROCESS', '送样信息需完整填写', '填写样品名称、数量、规格、测试需求。若样品有危险属性，需在危险说明中明确处置要求。', 'https://example.com/help/sample-process.pdf', 4, 'PUBLISHED', NOW() - INTERVAL 24 DAY, NOW(), NOW(), 0),
+('SEED-HELP-05 预约审核常见退回原因', 'FAQ', '信息不全是最主要原因', '常见退回原因：预约用途不清晰、时间冲突、样品信息缺失、联系方式无效。请根据退回意见修改后重新提交。', 'https://example.com/help/audit-faq.pdf', 5, 'PUBLISHED', NOW() - INTERVAL 22 DAY, NOW(), NOW(), 0),
+('SEED-HELP-06 充值申请与审核说明', 'HELP', '支持线下转账凭证上传', '充值流程：提交金额 -> 上传凭证 -> 等待财务审核 -> 审核通过后余额更新。审核期间可在充值记录页查看状态。', 'https://example.com/help/recharge-help.pdf', 6, 'PUBLISHED', NOW() - INTERVAL 20 DAY, NOW(), NOW(), 0),
+('SEED-HELP-07 订单取消与爽约规则', 'FAQ', '取消时点影响信用记录', '开机前较短时间内取消可能计入爽约。若因不可抗力需取消，请联系管理员并上传说明材料。', 'https://example.com/help/cancel-faq.pdf', 7, 'PUBLISHED', NOW() - INTERVAL 18 DAY, NOW(), NOW(), 0),
+('SEED-HELP-08 签到与实际机时记录', 'HELP', '签到后系统开始记录使用数据', '到场后请先在订单详情执行签到，使用结束后由负责人确认实际机时，系统按确认机时进行结算。', 'https://example.com/help/checkin-help.pdf', 8, 'PUBLISHED', NOW() - INTERVAL 16 DAY, NOW(), NOW(), 0),
+('SEED-HELP-09 结算单查看与确认', 'HELP', '结算支持在线确认与备注', '订单完成后可在结算管理查看账单明细，确认金额无误后提交确认；如有问题请在备注中说明。', 'https://example.com/help/settlement-help.pdf', 9, 'PUBLISHED', NOW() - INTERVAL 14 DAY, NOW(), NOW(), 0),
+('SEED-HELP-10 结果文件上传规范', 'TEMPLATE', '推荐格式与命名规则', '推荐上传 PDF/ZIP，命名建议：订单号_日期_版本。文件内应包含测试条件、关键参数与结论摘要。', 'https://example.com/help/result-template.docx', 10, 'PUBLISHED', NOW() - INTERVAL 12 DAY, NOW(), NOW(), 0),
+('SEED-HELP-11 仪器培训报名指引', 'PROCESS', '培训通过后方可预约特定仪器', '在培训管理入口选择场次并报名，培训结束后由管理员登记结果，通过后自动开通对应预约权限。', 'https://example.com/help/training-process.pdf', 11, 'PUBLISHED', NOW() - INTERVAL 10 DAY, NOW(), NOW(), 0),
+('SEED-HELP-12 校外用户使用说明', 'HELP', '完善单位与联系人后可申请', '校外用户需完善单位名称、联系人、联系方式，并在预约时补充服务用途与发票需求信息。', 'https://example.com/help/external-user-help.pdf', 12, 'PUBLISHED', NOW() - INTERVAL 8 DAY, NOW(), NOW(), 0),
+('SEED-HELP-13 常见系统问题排查', 'FAQ', '登录、加载与提交失败处理', '若出现页面加载异常，建议先刷新并重新登录；若提交失败，请检查必填项与网络状态后重试。', 'https://example.com/help/system-faq.pdf', 13, 'PUBLISHED', NOW() - INTERVAL 6 DAY, NOW(), NOW(), 0),
+('SEED-HELP-14 送样信息填写模板', 'TEMPLATE', '含样品描述与测试需求示例', '模板内容包括：样品名称、规格、数量、存储条件、危险属性、测试需求、结果输出格式等字段。', 'https://example.com/help/sample-template.xlsx', 14, 'PUBLISHED', NOW() - INTERVAL 4 DAY, NOW(), NOW(), 0),
+('SEED-HELP-15 消息中心使用指南', 'HELP', '查看审核、充值与系统通知', '消息中心会展示订单审核、充值审核、结算确认等通知，可按未读状态筛选并支持一键已读。', 'https://example.com/help/message-center-help.pdf', 15, 'PUBLISHED', NOW() - INTERVAL 2 DAY, NOW(), NOW(), 0);
 
 DELETE FROM sys_message WHERE user_id = @u_teacher AND title = 'SEED-欢迎使用平台';
 INSERT INTO sys_message
@@ -322,11 +350,11 @@ INSERT INTO biz_reservation_audit
 VALUES
 (@ord_m1, 1, @u_teacher, 'INTERNAL_USER', 'PENDING', 'SUBMIT: Machine order submitted', NOW(), NOW()),
 (@ord_m2, 1, @u_teacher, 'INTERNAL_USER', 'PENDING', 'SUBMIT: Machine order submitted', NOW(), NOW()),
-(@ord_m2, 2, @u_owner, 'INSTRUMENT_OWNER', 'PASS', 'APPROVE: Approved', NOW(), NOW()),
+(@ord_m2, 2, @u_owner, 'INSTRUMENT_OWNER', 'PASS', '审核通过', NOW(), NOW()),
 (@ord_s1, 1, @u_teacher, 'INTERNAL_USER', 'PENDING', 'SUBMIT: Sample order submitted', NOW(), NOW()),
-(@ord_s1, 2, @u_owner, 'INSTRUMENT_OWNER', 'PASS', 'APPROVE: Approved', NOW(), NOW()),
+(@ord_s1, 2, @u_owner, 'INSTRUMENT_OWNER', 'PASS', '审核通过', NOW(), NOW()),
 (@ord_m3, 1, @u_teacher, 'INTERNAL_USER', 'PENDING', 'SUBMIT: Machine order submitted', NOW() - INTERVAL 4 DAY, NOW() - INTERVAL 4 DAY),
-(@ord_m3, 2, @u_owner, 'INSTRUMENT_OWNER', 'PASS', 'APPROVE: Approved', NOW() - INTERVAL 3 DAY, NOW() - INTERVAL 3 DAY),
+(@ord_m3, 2, @u_owner, 'INSTRUMENT_OWNER', 'PASS', '审核通过', NOW() - INTERVAL 3 DAY, NOW() - INTERVAL 3 DAY),
 (@ord_m3, 3, @u_owner, 'INSTRUMENT_OWNER', 'PASS', 'SETTLE: Order settled', NOW() - INTERVAL 3 DAY, NOW() - INTERVAL 3 DAY);
 
 INSERT INTO biz_settlement_record

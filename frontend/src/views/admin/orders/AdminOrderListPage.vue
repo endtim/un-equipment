@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="admin-page">
     <div class="content-card admin-table-card">
       <div class="page-head">
@@ -114,7 +114,7 @@ import {
   uploadAdminOrderResult
 } from '../../../api/order'
 
-const CLOSABLE_STATUS = ['PENDING_AUDIT', 'APPROVED', 'WAITING_USE', 'IN_USE', 'WAITING_RECEIVE', 'TESTING', 'WAITING_SETTLEMENT']
+const CLOSABLE_STATUS = ['PENDING_AUDIT', 'WAITING_USE', 'IN_USE', 'WAITING_RECEIVE', 'TESTING', 'WAITING_SETTLEMENT']
 
 export default {
   props: {
@@ -168,7 +168,7 @@ export default {
       try {
         await action()
       } catch (error) {
-        // 请求层已统一提示，这里阻断异常继续冒泡
+        // 请求层已统一提示，这里仅阻断异常冒泡。
       }
     },
     async loadDepartments() {

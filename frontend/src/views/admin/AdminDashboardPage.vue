@@ -44,7 +44,7 @@
 </template>
 
 <script>
-import { getOverview } from '../../api/stat'
+import { getAdminOverview } from '../../api/stat'
 
 export default {
   data() {
@@ -54,7 +54,7 @@ export default {
     }
   },
   async created() {
-    this.overview = await getOverview()
+    this.overview = await getAdminOverview()
     this.cards = [
       { label: '仪器总数', value: this.overview.instrumentCount || 0 },
       { label: '预约总数', value: this.overview.reservationCount || 0 },

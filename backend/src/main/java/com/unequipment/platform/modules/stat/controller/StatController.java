@@ -34,6 +34,11 @@ public class StatController {
         return ApiResponse.success(statService.overview(start, end));
     }
 
+    @GetMapping("/platform-members")
+    public ApiResponse<?> platformMembers() {
+        return ApiResponse.success(statService.platformMembers());
+    }
+
     private LocalDateTime parseDateTime(String value) {
         if (value == null || value.trim().isEmpty()) {
             return null;
@@ -45,7 +50,7 @@ public class StatController {
             try {
                 return LocalDateTime.parse(text, SPACE_SECOND);
             } catch (DateTimeParseException ex2) {
-                throw new BizException(ErrorCodes.INVALID_REQUEST, "时间格式错误，需为 yyyy-MM-ddTHH:mm:ss");
+                throw new BizException(ErrorCodes.INVALID_REQUEST, "时间格式错误，示例：2026-03-12 08:30:00");
             }
         }
     }

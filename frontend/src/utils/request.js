@@ -9,6 +9,7 @@ const pendingWriteMap = new Map()
 const codeAliasMap = {
   40000: '操作失败，请稍后重试',
   40001: '请求参数不合法，请检查后重试',
+  401: '未登录或登录已失效，请重新登录',
   40300: '当前账号无权限执行该操作',
   40400: '请求资源不存在或已删除',
   41001: '用户名或密码错误',
@@ -68,7 +69,7 @@ service.interceptors.request.use(config => {
     const now = Date.now()
     const last = pendingWriteMap.get(requestKey)
     if (last && now - last < PENDING_WINDOW_MS) {
-      return Promise.reject(new Error('请勿重复提交'))
+      return Promise.reject(new RequestError('请勿重复提交', { kind: 'biz', code: 40000 }))
     }
     pendingWriteMap.set(requestKey, now)
     config.__requestKey = requestKey
@@ -105,20 +106,36 @@ service.interceptors.response.use(
     if (requestKey) {
       pendingWriteMap.delete(requestKey)
     }
+
     const status = error.response && error.response.status
-    if (status === 401 || status === 403) {
+    const payload = error.response && error.response.data
+    const bizCode = payload && typeof payload.code !== 'undefined' ? payload.code : null
+
+    if (status === 401 || bizCode === 401) {
       store.commit('clearAuth')
       const redirect = router.currentRoute.value && router.currentRoute.value.fullPath
       router.push({ path: '/login', query: redirect ? { redirect } : {} })
       return Promise.reject(new RequestError('登录状态已失效，请重新登录', {
         kind: 'auth',
-        code: status,
-        httpStatus: status,
-        raw: error
+        code: 401,
+        httpStatus: 401,
+        raw: payload || error
       }))
     }
 
-    const payload = error.response && error.response.data
+    if (status === 403 || bizCode === 40300) {
+      const message = normalizeBizMessage(payload && payload.msg, '当前账号无权限执行该操作', 40300)
+      if (shouldToast(error.config)) {
+        ElMessage.error(message)
+      }
+      return Promise.reject(new RequestError(message, {
+        kind: 'biz',
+        code: 40300,
+        httpStatus: status || 403,
+        raw: payload || error
+      }))
+    }
+
     if (payload && typeof payload.code !== 'undefined') {
       const message = normalizeBizMessage(payload.msg, '请求失败', payload.code)
       if (shouldToast(error.config)) {

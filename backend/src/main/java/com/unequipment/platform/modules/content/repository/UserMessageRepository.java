@@ -11,6 +11,12 @@ public interface UserMessageRepository {
 
     List<UserMessage> findByUserId(Long userId);
 
+    List<UserMessage> findPageByUserId(@Param("userId") Long userId,
+                                       @Param("offset") int offset,
+                                       @Param("pageSize") int pageSize);
+
+    long countByUserId(@Param("userId") Long userId);
+
     UserMessage findByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 
     int insert(UserMessage userMessage);

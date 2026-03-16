@@ -1,73 +1,209 @@
 <template>
-  <div class="portal-subpage">
-    <div class="notice-layout">
-      <div class="content-card notice-list-card">
-        <div class="section-title">公告列表</div>
-        <div
+  <div class="portal-subpage content-list-page">
+    <section class="content-card content-list-card">
+      <div v-if="notices.length" class="content-list-body">
+        <article
           v-for="item in notices"
           :key="item.id"
-          class="notice-row"
-          :class="{ active: currentNotice && currentNotice.id === item.id }"
-          @click="selectNotice(item)"
+          class="content-item"
+          @click="openDetail(item)"
         >
-          <div class="notice-row-title">{{ item.title }}</div>
-          <div class="notice-row-date">{{ formatDate(item.publishTime || item.createTime) }}</div>
-        </div>
+          <h3 class="content-item-title">{{ item.title }}</h3>
+          <p class="content-item-summary">{{ buildSummary(item) }}</p>
+          <div class="content-item-time">
+            <span class="time-dot" />
+            {{ formatTime(item.publishTime || item.createTime) }}
+          </div>
+        </article>
       </div>
+      <el-empty v-else description="暂无公告信息" :image-size="92" />
 
-      <div class="content-card notice-detail-card">
-        <template v-if="currentNotice">
-          <div class="notice-detail-title">{{ currentNotice.title }}</div>
-          <div class="notice-detail-meta">发布时间：{{ formatDate(currentNotice.publishTime || currentNotice.createTime) }}</div>
-          <div class="notice-detail-content">{{ currentNotice.content || currentNotice.summary || '暂无公告内容。' }}</div>
-        </template>
-        <template v-else>
-          <div class="empty-tip">暂无公告信息</div>
-        </template>
+      <div class="content-pagination">
+        <el-pagination
+          background
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="total"
+          :current-page="query.pageNum"
+          :page-size="query.pageSize"
+          :page-sizes="pageSizeOptions"
+          @size-change="changePageSize"
+          @current-change="changePage"
+        />
       </div>
-    </div>
+    </section>
   </div>
 </template>
 
 <script>
-import { getNotices, getNotice } from '../../api/content'
+import { formatDateTime } from '../../utils/datetime'
+import { getNotices } from '../../api/content'
 
 export default {
   data() {
     return {
       notices: [],
-      currentNotice: null
+      total: 0,
+      pageSizeOptions: [10, 20, 30],
+      query: {
+        publishStatus: 'PUBLISHED',
+        pageNum: 1,
+        pageSize: 10
+      }
     }
   },
   async created() {
-    const notices = await getNotices().catch(() => [])
-    this.notices = notices || []
-    if (this.notices.length) {
-      await this.selectNotice(this.notices[0])
-    }
+    this.restoreQuery()
+    await this.load()
   },
   methods: {
-    async selectNotice(item) {
-      this.currentNotice = await getNotice(item.id).catch(() => item)
+    restoreQuery() {
+      const q = this.$route.query || {}
+      this.query.pageNum = Number(q.pageNum || 1)
+      this.query.pageSize = Number(q.pageSize || 10)
     },
-    formatDate(value) {
-      return value ? String(value).slice(0, 10) : ''
+    syncQuery() {
+      this.$router.replace({
+        path: this.$route.path,
+        query: {
+          pageNum: this.query.pageNum > 1 ? String(this.query.pageNum) : undefined,
+          pageSize: this.query.pageSize !== 10 ? String(this.query.pageSize) : undefined
+        }
+      })
+    },
+    async load() {
+      const page = await getNotices(this.query).catch(() => null)
+      this.notices = Array.isArray(page?.list) ? page.list : []
+      this.total = Number(page?.total || 0)
+      this.syncQuery()
+    },
+    buildSummary(item) {
+      const raw = item.summary || item.content || ''
+      const plain = String(raw).replace(/\s+/g, ' ').trim()
+      if (!plain) {
+        return '暂无摘要'
+      }
+      return plain.length > 170 ? `${plain.slice(0, 170)}...` : plain
+    },
+    formatTime(value) {
+      return formatDateTime(value, 'YYYY-MM-DD HH:mm:ss', '-')
+    },
+    openDetail(item) {
+      this.$router.push({
+        path: `/notices/${item.id}`,
+        query: {
+          pageNum: String(this.query.pageNum),
+          pageSize: String(this.query.pageSize)
+        }
+      })
+    },
+    async changePage(pageNum) {
+      this.query.pageNum = pageNum
+      await this.load()
+    },
+    async changePageSize(pageSize) {
+      this.query.pageSize = pageSize
+      this.query.pageNum = 1
+      await this.load()
     }
   }
 }
 </script>
 
 <style scoped>
-.portal-subpage { display: flex; flex-direction: column; gap: 18px; }
-.notice-layout { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 18px; }
-.notice-list-card, .notice-detail-card { padding: 24px; }
-.notice-row { padding: 14px 0; border-bottom: 1px dashed #dbe4ef; cursor: pointer; }
-.notice-row.active .notice-row-title { color: #0b4ea2; }
-.notice-row-title { font-weight: 700; color: #304863; }
-.notice-row-date { margin-top: 6px; color: #8192a8; font-size: 13px; }
-.notice-detail-title { font-size: 28px; font-weight: 700; color: #163d77; }
-.notice-detail-meta { margin-top: 12px; color: #7b8ea8; border-bottom: 1px solid #e1e8f2; padding-bottom: 14px; }
-.notice-detail-content { margin-top: 22px; color: #44566f; line-height: 2; white-space: pre-wrap; }
-.empty-tip { color: #7a8ba1; }
-@media (max-width: 900px) { .notice-layout { grid-template-columns: 1fr; } }
+.content-list-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.content-list-card {
+  padding: 22px 38px 16px;
+}
+
+.content-list-body {
+  min-height: 300px;
+}
+
+.content-item {
+  padding: 26px 0 22px;
+  border-bottom: 1px dashed #e4e9f2;
+  cursor: pointer;
+}
+
+.content-item-title {
+  margin: 0;
+  color: #21354f;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.content-item-summary {
+  margin: 14px 0 0;
+  color: #7f8ea4;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.content-item-time {
+  margin-top: 20px;
+  color: #8799b2;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.time-dot {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #9bc0f9;
+  border-radius: 50%;
+  position: relative;
+}
+
+.time-dot::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 2px;
+  height: 5px;
+  background: #9bc0f9;
+  border-radius: 2px;
+}
+
+.content-pagination {
+  display: flex;
+  justify-content: center;
+  padding: 18px 0 6px;
+}
+
+@media (max-width: 900px) {
+  .content-list-card {
+    padding: 14px 16px;
+  }
+
+  .content-item {
+    padding: 16px 0 14px;
+  }
+
+  .content-item-title {
+    font-size: 18px;
+  }
+
+  .content-item-summary {
+    font-size: 14px;
+    margin-top: 8px;
+  }
+
+  .content-item-time {
+    font-size: 13px;
+    margin-top: 12px;
+  }
+
+  .content-pagination {
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+}
 </style>

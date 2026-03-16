@@ -19,16 +19,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ApiResponse<Void> handleValid(MethodArgumentNotValidException ex) {
         FieldError error = ex.getBindingResult().getFieldError();
-        return ApiResponse.error(ErrorCodes.INVALID_REQUEST, error == null ? "invalid request" : error.getDefaultMessage());
+        return ApiResponse.error(
+            ErrorCodes.INVALID_REQUEST,
+            error == null ? "请求参数不合法" : error.getDefaultMessage()
+        );
     }
 
     @ExceptionHandler({ConstraintViolationException.class, HttpMessageNotReadableException.class})
     public ApiResponse<Void> handleBadRequest(Exception ex) {
-        return ApiResponse.error(ErrorCodes.INVALID_REQUEST, "invalid request");
+        return ApiResponse.error(ErrorCodes.INVALID_REQUEST, "请求参数不合法");
     }
 
     @ExceptionHandler(Exception.class)
     public ApiResponse<Void> handleDefault(Exception ex) {
-        return ApiResponse.error(ErrorCodes.INTERNAL_ERROR, "internal server error");
+        return ApiResponse.error(ErrorCodes.INTERNAL_ERROR, "服务器内部错误");
     }
 }

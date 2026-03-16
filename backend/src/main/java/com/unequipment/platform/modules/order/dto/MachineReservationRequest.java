@@ -8,14 +8,14 @@ import org.springframework.format.annotation.DateTimeFormat;
 @Data
 public class MachineReservationRequest {
 
-    @NotNull(message = "instrumentId is required")
+    @NotNull(message = "仪器编号不能为空")
     private Long instrumentId;
 
-    @NotNull(message = "reservedStart is required")
+    @NotNull(message = "预约开始时间不能为空")
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     private LocalDateTime reservedStart;
 
-    @NotNull(message = "reservedEnd is required")
+    @NotNull(message = "预约结束时间不能为空")
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     private LocalDateTime reservedEnd;
 

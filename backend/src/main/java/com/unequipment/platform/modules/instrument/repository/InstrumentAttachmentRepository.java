@@ -12,6 +12,16 @@ public interface InstrumentAttachmentRepository {
 
     List<InstrumentAttachment> findByInstrumentId(Long instrumentId);
 
+    List<InstrumentAttachment> findPageByScope(@Param("roleCode") String roleCode,
+                                               @Param("operatorId") Long operatorId,
+                                               @Param("departmentId") Long departmentId,
+                                               @Param("offset") int offset,
+                                               @Param("pageSize") int pageSize);
+
+    long countByScope(@Param("roleCode") String roleCode,
+                      @Param("operatorId") Long operatorId,
+                      @Param("departmentId") Long departmentId);
+
     InstrumentAttachment findById(Long id);
 
     int insert(InstrumentAttachment attachment);

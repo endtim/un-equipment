@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class ContentService {
+    private static final String PUBLISHED = "PUBLISHED";
 
     private final NoticeRepository noticeRepository;
     private final HelpDocRepository helpDocRepository;
@@ -28,12 +29,14 @@ public class ContentService {
     }
 
     public PageResponse<Notice> noticePage(String keyword, String publishStatus, int pageNum, int pageSize) {
-        int offset = Math.max(pageNum - 1, 0) * pageSize;
+        int safePageNum = normalizePageNum(pageNum);
+        int safePageSize = normalizePageSize(pageSize);
+        int offset = (safePageNum - 1) * safePageSize;
         return new PageResponse<>(
-            noticeRepository.findPage(keyword, publishStatus, offset, pageSize),
+            noticeRepository.findPage(keyword, publishStatus, offset, safePageSize),
             noticeRepository.countPage(keyword, publishStatus),
-            pageNum,
-            pageSize
+            safePageNum,
+            safePageSize
         );
     }
 
@@ -41,40 +44,69 @@ public class ContentService {
         return noticeRepository.findById(id);
     }
 
+    public Notice publishedNotice(Long id) {
+        Notice notice = noticeRepository.findPublishedById(id);
+        if (notice == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "公告不存在或未发布");
+        }
+        return notice;
+    }
+
     public List<HelpDoc> helpDocs() {
         return helpDocRepository.findAll();
     }
 
     public PageResponse<HelpDoc> helpDocPage(String keyword, String publishStatus, int pageNum, int pageSize) {
-        int offset = Math.max(pageNum - 1, 0) * pageSize;
+        int safePageNum = normalizePageNum(pageNum);
+        int safePageSize = normalizePageSize(pageSize);
+        int offset = (safePageNum - 1) * safePageSize;
         return new PageResponse<>(
-            helpDocRepository.findPage(keyword, publishStatus, offset, pageSize),
+            helpDocRepository.findPage(keyword, publishStatus, offset, safePageSize),
             helpDocRepository.countPage(keyword, publishStatus),
-            pageNum,
-            pageSize
+            safePageNum,
+            safePageSize
         );
+    }
+
+    private int normalizePageNum(int pageNum) {
+        return Math.max(pageNum, 1);
+    }
+
+    private int normalizePageSize(int pageSize) {
+        if (pageSize <= 0) {
+            return 10;
+        }
+        return Math.min(pageSize, 100);
     }
 
     public HelpDoc helpDoc(Long id) {
         return helpDocRepository.findById(id);
     }
 
-    @Transactional
-    public void deleteNotice(Long id) {
-        if (noticeRepository.findById(id) == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "notice not found");
+    public HelpDoc publishedHelpDoc(Long id) {
+        HelpDoc helpDoc = helpDocRepository.findPublishedById(id);
+        if (helpDoc == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "帮助文档不存在或未发布");
         }
-        noticeRepository.softDelete(id, LocalDateTime.now());
-        operationLogService.save(null, "CONTENT", "DELETE_NOTICE", "noticeId:" + id);
+        return helpDoc;
     }
 
     @Transactional
-    public void deleteHelpDoc(Long id) {
+    public void deleteNotice(Long id, SysUser operator) {
+        if (noticeRepository.findById(id) == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "公告不存在");
+        }
+        noticeRepository.softDelete(id, LocalDateTime.now());
+        operationLogService.save(operator, "CONTENT", "DELETE_NOTICE", "noticeId:" + id);
+    }
+
+    @Transactional
+    public void deleteHelpDoc(Long id, SysUser operator) {
         if (helpDocRepository.findById(id) == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "help doc not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "帮助文档不存在");
         }
         helpDocRepository.softDelete(id, LocalDateTime.now());
-        operationLogService.save(null, "CONTENT", "DELETE_HELP_DOC", "helpDocId:" + id);
+        operationLogService.save(operator, "CONTENT", "DELETE_HELP_DOC", "helpDocId:" + id);
     }
 
     @Transactional

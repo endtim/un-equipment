@@ -1,15 +1,16 @@
-<template>
+﻿<template>
   <div class="admin-page">
     <div class="content-card admin-table-card">
       <div class="admin-toolbar">
         <el-input v-model="query.keyword" placeholder="搜索帮助文档标题" clearable />
-        <el-select v-model="query.publishStatus" clearable placeholder="发布状态">
+        <el-select v-model="query.publishStatus" clearable placeholder="发布状态" style="width: 140px">
           <el-option label="已发布" value="PUBLISHED" />
           <el-option label="草稿" value="DRAFT" />
         </el-select>
         <el-button type="primary" @click="search">查询</el-button>
         <el-button type="primary" plain @click="openCreate">发布文档</el-button>
       </div>
+
       <el-table :data="helpDocs" border>
         <el-table-column prop="title" label="标题" min-width="220" />
         <el-table-column label="状态" width="120">
@@ -24,6 +25,7 @@
           </template>
         </el-table-column>
       </el-table>
+
       <div class="admin-pagination">
         <el-pagination
           background
@@ -54,6 +56,12 @@
         <el-form-item label="正文内容" prop="content">
           <el-input v-model="form.content" type="textarea" :rows="8" />
         </el-form-item>
+        <el-form-item label="发布状态" prop="publishStatus">
+          <el-select v-model="form.publishStatus" style="width: 140px">
+            <el-option label="已发布" value="PUBLISHED" />
+            <el-option label="草稿" value="DRAFT" />
+          </el-select>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="closeDialog">取消</el-button>
@@ -68,7 +76,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { createHelpDoc, deleteHelpDoc, getAdminHelpDocPage, updateHelpDoc } from '../../../api/admin'
 
 function defaultForm() {
-  return { id: null, title: '', summary: '', content: '', publishStatus: 'PUBLISHED' }
+  return {
+    id: null,
+    title: '',
+    summary: '',
+    content: '',
+    publishStatus: 'PUBLISHED'
+  }
 }
 
 export default {
@@ -91,7 +105,8 @@ export default {
           { min: 2, max: 100, message: '标题长度为 2-100 个字符', trigger: 'blur' }
         ],
         summary: [{ max: 255, message: '摘要最多 255 个字符', trigger: 'blur' }],
-        content: [{ required: true, message: '请输入文档内容', trigger: 'blur' }]
+        content: [{ required: true, message: '请输入文档内容', trigger: 'blur' }],
+        publishStatus: [{ required: true, message: '请选择发布状态', trigger: 'change' }]
       }
     }
   },
@@ -101,11 +116,11 @@ export default {
   },
   methods: {
     restoreQuery() {
-      const query = this.$route.query || {}
-      this.query.keyword = query.keyword || ''
-      this.query.publishStatus = query.publishStatus || ''
-      this.query.pageNum = Number(query.pageNum || 1)
-      this.query.pageSize = Number(query.pageSize || 10)
+      const routeQuery = this.$route.query || {}
+      this.query.keyword = routeQuery.keyword || ''
+      this.query.publishStatus = routeQuery.publishStatus || ''
+      this.query.pageNum = Number(routeQuery.pageNum || 1)
+      this.query.pageSize = Number(routeQuery.pageSize || 10)
     },
     syncQuery() {
       this.$router.replace({
@@ -120,8 +135,8 @@ export default {
     },
     async load() {
       const page = await getAdminHelpDocPage(this.query)
-      this.helpDocs = page.list || []
-      this.total = page.total || 0
+      this.helpDocs = Array.isArray(page?.list) ? page.list : []
+      this.total = Number(page?.total || 0)
       this.syncQuery()
     },
     async search() {
@@ -142,29 +157,43 @@ export default {
       this.dialogVisible = true
     },
     openEdit(row) {
-      this.form = { ...row }
+      this.form = {
+        id: row.id,
+        title: row.title || '',
+        summary: row.summary || '',
+        content: row.content || '',
+        publishStatus: row.publishStatus || 'PUBLISHED'
+      }
       this.dialogVisible = true
     },
     closeDialog() {
       this.dialogVisible = false
       this.$nextTick(() => {
-        this.$refs.formRef && this.$refs.formRef.clearValidate()
+        if (this.$refs.formRef) {
+          this.$refs.formRef.clearValidate()
+        }
       })
     },
     async submitHelpDoc() {
       await this.$refs.formRef.validate()
+      const payload = {
+        title: this.form.title,
+        summary: this.form.summary,
+        content: this.form.content,
+        publishStatus: this.form.publishStatus
+      }
       if (this.form.id) {
-        await updateHelpDoc(this.form.id, this.form)
+        await updateHelpDoc(this.form.id, payload)
         ElMessage.success('帮助文档已更新')
       } else {
-        await createHelpDoc(this.form)
+        await createHelpDoc(payload)
         ElMessage.success('帮助文档已发布')
       }
       this.closeDialog()
       await this.load()
     },
     async removeHelpDoc(row) {
-      await ElMessageBox.confirm(`确认删除文档“${row.title}”吗？`, '删除确认')
+      await ElMessageBox.confirm(`确认删除文档“${row.title}”吗？`, '删除确认', { type: 'warning' })
       await deleteHelpDoc(row.id)
       ElMessage.success('帮助文档已删除')
       await this.load()

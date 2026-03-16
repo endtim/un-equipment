@@ -10,6 +10,10 @@ public interface InstrumentCategoryRepository {
 
     List<InstrumentCategory> findAll();
 
+    List<InstrumentCategory> findPage(@Param("offset") int offset, @Param("pageSize") int pageSize);
+
+    long countPage();
+
     InstrumentCategory findById(Long id);
 
     int insert(InstrumentCategory category);

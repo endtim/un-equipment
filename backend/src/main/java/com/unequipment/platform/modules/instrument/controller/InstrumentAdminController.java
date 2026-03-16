@@ -19,8 +19,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -43,22 +43,49 @@ public class InstrumentAdminController {
 
     @GetMapping("/categories")
     public ApiResponse<?> categories(@CurrentUser SysUser operator) {
+        // Full list endpoint: used by instrument/open-rule dropdowns.
         instrumentService.assertAdminOrInstrumentManager(operator);
         return ApiResponse.success(instrumentService.categories());
     }
 
+    @GetMapping("/categories/page")
+    public ApiResponse<PageResponse<InstrumentCategory>> categoryPage(
+        @RequestParam(defaultValue = "1") int pageNum,
+        @RequestParam(defaultValue = "10") int pageSize,
+        @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.pageCategories(pageNum, pageSize, operator));
+    }
+
     @GetMapping("/open-rules")
-    public ApiResponse<?> openRules(@CurrentUser SysUser operator) {
-        return ApiResponse.success(instrumentService.allOpenRules(operator));
+    public ApiResponse<PageResponse<InstrumentOpenRule>> openRules(
+        @RequestParam(required = false) Long instrumentId,
+        @RequestParam(required = false) Integer weekDay,
+        @RequestParam(required = false) String status,
+        @RequestParam(defaultValue = "1") int pageNum,
+        @RequestParam(defaultValue = "10") int pageSize,
+        @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.pageOpenRules(
+            instrumentId, weekDay, status, pageNum, pageSize, operator
+        ));
     }
 
     @GetMapping("/attachments")
     public ApiResponse<?> attachments(@CurrentUser SysUser operator) {
+        // Full list endpoint: kept for internal selection/legacy integration.
         return ApiResponse.success(instrumentService.allAttachments(operator));
     }
 
+    @GetMapping("/attachments/page")
+    public ApiResponse<PageResponse<InstrumentAttachment>> attachmentPage(
+        @RequestParam(defaultValue = "1") int pageNum,
+        @RequestParam(defaultValue = "10") int pageSize,
+        @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.pageAttachments(operator, pageNum, pageSize));
+    }
+
     @PostMapping
-    public ApiResponse<Instrument> create(@Valid @RequestBody InstrumentSaveRequest request, @CurrentUser SysUser operator) {
+    public ApiResponse<Instrument> create(@Valid @RequestBody InstrumentSaveRequest request,
+                                          @CurrentUser SysUser operator) {
         return ApiResponse.success(instrumentService.save(null, request, operator));
     }
 

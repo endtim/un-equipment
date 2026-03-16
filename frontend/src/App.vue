@@ -5,7 +5,7 @@
       <div class="global-error-card">
         <h2 class="global-error-title">{{ errorState.title }}</h2>
         <p class="global-error-message">{{ errorState.message }}</p>
-        <p class="global-error-meta">来源：{{ errorState.source || 'unknown' }}</p>
+        <p class="global-error-meta">来源：{{ errorState.source || '未知' }}</p>
         <p class="global-error-meta">时间：{{ errorState.time }}</p>
         <div class="global-error-actions">
           <el-button @click="goHome">返回首页</el-button>

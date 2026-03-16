@@ -55,8 +55,8 @@ public class ContentAdminController {
     }
 
     @DeleteMapping("/notices/{id}")
-    public ApiResponse<?> deleteNotice(@PathVariable Long id) {
-        contentService.deleteNotice(id);
+    public ApiResponse<?> deleteNotice(@PathVariable Long id, @CurrentUser SysUser user) {
+        contentService.deleteNotice(id, user);
         return ApiResponse.success("ok");
     }
 
@@ -71,8 +71,8 @@ public class ContentAdminController {
     }
 
     @DeleteMapping("/help-docs/{id}")
-    public ApiResponse<?> deleteHelpDoc(@PathVariable Long id) {
-        contentService.deleteHelpDoc(id);
+    public ApiResponse<?> deleteHelpDoc(@PathVariable Long id, @CurrentUser SysUser user) {
+        contentService.deleteHelpDoc(id, user);
         return ApiResponse.success("ok");
     }
 }

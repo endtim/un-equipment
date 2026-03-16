@@ -5,6 +5,7 @@
         <div class="admin-card-title admin-card-title--tight">部门列表</div>
         <el-button type="primary" @click="openCreate">新增部门</el-button>
       </div>
+
       <el-table :data="departments" border>
         <el-table-column prop="deptName" label="部门名称" min-width="180" />
         <el-table-column prop="deptCode" label="部门编码" width="150" />
@@ -24,6 +25,17 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <el-pagination
+        v-model:current-page="query.pageNum"
+        v-model:page-size="query.pageSize"
+        class="pagination"
+        layout="total, sizes, prev, pager, next, jumper"
+        :page-sizes="[10, 20, 50]"
+        :total="total"
+        @current-change="load"
+        @size-change="onSizeChange"
+      />
       <el-empty v-if="departments.length === 0" description="暂无部门数据" class="admin-empty" />
     </div>
 
@@ -73,7 +85,7 @@
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { createDepartment, deleteDepartment, getAdminDepartments, updateDepartment } from '../../../api/admin'
+import { createDepartment, deleteDepartment, getAdminDepartmentsPage, updateDepartment } from '../../../api/admin'
 
 function defaultForm() {
   return {
@@ -92,6 +104,11 @@ export default {
   data() {
     return {
       departments: [],
+      total: 0,
+      query: {
+        pageNum: 1,
+        pageSize: 10
+      },
       dialogVisible: false,
       form: defaultForm(),
       rules: {
@@ -112,7 +129,13 @@ export default {
   },
   methods: {
     async load() {
-      this.departments = await getAdminDepartments()
+      const page = await getAdminDepartmentsPage(this.query)
+      this.departments = page.list || []
+      this.total = page.total || 0
+    },
+    async onSizeChange() {
+      this.query.pageNum = 1
+      await this.load()
     },
     openCreate() {
       this.form = defaultForm()
@@ -125,7 +148,9 @@ export default {
     closeDialog() {
       this.dialogVisible = false
       this.$nextTick(() => {
-        this.$refs.formRef && this.$refs.formRef.clearValidate()
+        if (this.$refs.formRef) {
+          this.$refs.formRef.clearValidate()
+        }
       })
     },
     async submit() {
@@ -166,4 +191,10 @@ export default {
 .full-width {
   width: 100%;
 }
+
+.pagination {
+  margin-top: 14px;
+  justify-content: flex-end;
+}
 </style>
+

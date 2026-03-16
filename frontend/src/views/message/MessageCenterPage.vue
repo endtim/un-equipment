@@ -1,9 +1,10 @@
 <template>
-  <div class="content-card" style="padding: 24px;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-      <div class="section-title" style="margin: 0;">消息中心</div>
+  <div class="content-card message-page">
+    <div class="message-head">
+      <div class="section-title title">消息中心</div>
       <el-button type="primary" plain @click="markAllRead">全部标记已读</el-button>
     </div>
+
     <el-table :data="messages" border>
       <el-table-column prop="title" label="消息标题" min-width="180" />
       <el-table-column prop="content" label="消息内容" />
@@ -19,7 +20,21 @@
           <el-button v-if="row.readStatus === 0" link type="primary" @click="markRead(row)">标记已读</el-button>
         </template>
       </el-table-column>
+      <template #empty>
+        <el-empty description="暂无消息" />
+      </template>
     </el-table>
+
+    <el-pagination
+      v-model:current-page="query.pageNum"
+      v-model:page-size="query.pageSize"
+      class="pagination"
+      layout="total, sizes, prev, pager, next, jumper"
+      :page-sizes="[10, 20, 50]"
+      :total="total"
+      @current-change="load"
+      @size-change="onSizeChange"
+    />
   </div>
 </template>
 
@@ -30,7 +45,12 @@ import { formatDateTime } from '../../utils/datetime'
 export default {
   data() {
     return {
-      messages: []
+      messages: [],
+      total: 0,
+      query: {
+        pageNum: 1,
+        pageSize: 10
+      }
     }
   },
   async created() {
@@ -41,7 +61,13 @@ export default {
       return formatDateTime(value)
     },
     async load() {
-      this.messages = await getMessages()
+      const page = await getMessages(this.query)
+      this.messages = page.list || []
+      this.total = page.total || 0
+    },
+    async onSizeChange() {
+      this.query.pageNum = 1
+      await this.load()
     },
     async markRead(row) {
       await markMessageRead(row.id)
@@ -56,3 +82,25 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.message-page {
+  padding: 24px;
+}
+
+.message-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.title {
+  margin: 0;
+}
+
+.pagination {
+  margin-top: 14px;
+  justify-content: flex-end;
+}
+</style>

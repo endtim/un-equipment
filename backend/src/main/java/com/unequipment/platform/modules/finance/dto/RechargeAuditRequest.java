@@ -8,10 +8,10 @@ import lombok.Data;
 @Data
 public class RechargeAuditRequest {
 
-    @NotBlank(message = "action is required")
-    @Pattern(regexp = "^(APPROVE|REJECT)$", message = "action must be APPROVE or REJECT")
+    @NotBlank(message = "操作不能为空")
+    @Pattern(regexp = "^(APPROVE|REJECT)$", message = "操作值不合法")
     private String action;
 
-    @Size(max = 255, message = "comment length must be <= 255")
+    @Size(max = 255, message = "备注长度不能超过255个字符")
     private String comment;
 }

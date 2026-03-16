@@ -6,6 +6,6 @@ import lombok.Data;
 @Data
 public class OrderActionRequest {
 
-    @Size(max = 255, message = "comment length must be <= 255")
+    @Size(max = 255, message = "备注长度不能超过255个字符")
     private String comment;
 }

@@ -68,7 +68,8 @@ const ADMIN_GROUPS = [
     label: '仪器管理',
     items: [
       { label: '仪器分类', path: '/admin/categories', roles: ['ADMIN'] },
-      { label: '仪器管理', path: '/admin/instruments', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] }
+      { label: '仪器管理', path: '/admin/instruments', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] },
+      { label: '开放规则', path: '/admin/open-rules', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] }
     ]
   },
   {

@@ -134,13 +134,13 @@
         <div><span class="k">申请人：</span>{{ detail.userName }}</div>
         <div><span class="k">仪器：</span>{{ detail.instrumentName }}</div>
         <div><span class="k">部门：</span>{{ detail.departmentName }}</div>
-        <div><span class="k">账单类型：</span>{{ detail.billType || '-' }}</div>
+        <div><span class="k">账单类型：</span>{{ billTypeLabel(detail.billType) }}</div>
         <div><span class="k">预估金额：</span>{{ detail.estimatedAmount }}</div>
         <div><span class="k">优惠金额：</span>{{ detail.discountAmount }}</div>
         <div><span class="k">最终金额：</span>{{ detail.finalAmount }}</div>
         <div><span class="k">结算状态：</span>{{ statusLabel(detail.settleStatus) }}</div>
-        <div><span class="k">订单状态：</span>{{ detail.orderStatus || '-' }}</div>
-        <div><span class="k">支付状态：</span>{{ detail.payStatus || '-' }}</div>
+        <div><span class="k">订单状态：</span>{{ orderStatusLabel(detail.orderStatus) }}</div>
+        <div><span class="k">支付状态：</span>{{ payStatusLabel(detail.payStatus) }}</div>
         <div><span class="k">创建时间：</span>{{ formatDateTime(detail.createTime) }}</div>
         <div><span class="k">结算时间：</span>{{ formatDateTime(detail.settledTime) }}</div>
         <div><span class="k">操作人：</span>{{ detail.operatorName || '-' }}</div>
@@ -161,6 +161,11 @@ import {
 } from '../../../api/settlement'
 import { getReconciliationAnomalies, getReconciliationOverview } from '../../../api/account'
 import { formatDateTime } from '../../../utils/datetime'
+import {
+  billTypeLabel as billTypeLabelDict,
+  orderStatusLabel as orderStatusLabelDict,
+  payStatusLabel as payStatusLabelDict
+} from '../../../utils/dicts'
 
 const STATUS_LABEL = {
   PENDING: '待结算',
@@ -243,6 +248,15 @@ export default {
     num(v) {
       const n = Number(v || 0)
       return n.toFixed(2)
+    },
+    billTypeLabel(value) {
+      return billTypeLabelDict(value)
+    },
+    orderStatusLabel(value) {
+      return orderStatusLabelDict(value)
+    },
+    payStatusLabel(value) {
+      return payStatusLabelDict(value)
     },
     buildParams() {
       const [createStart, createEnd] = this.query.createRange || []

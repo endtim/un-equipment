@@ -1,9 +1,10 @@
 import request from '../utils/request'
 
-export function getNotices() {
+export function getNotices(params) {
   return request({
     url: '/api/notices',
-    method: 'get'
+    method: 'get',
+    params
   })
 }
 
@@ -14,10 +15,11 @@ export function getNotice(id) {
   })
 }
 
-export function getHelpDocs() {
+export function getHelpDocs(params) {
   return request({
     url: '/api/help-docs',
-    method: 'get'
+    method: 'get',
+    params
   })
 }
 
@@ -28,10 +30,11 @@ export function getHelpDoc(id) {
   })
 }
 
-export function getMessages() {
+export function getMessages(params) {
   return request({
     url: '/api/messages',
-    method: 'get'
+    method: 'get',
+    params
   })
 }
 

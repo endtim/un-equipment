@@ -12,6 +12,7 @@ public class InstrumentOpenRule extends BaseEntity {
 
     private Long instrumentId;
     private Integer weekDay;
+    private String weekDays;
     private LocalTime startTime;
     private LocalTime endTime;
     private Integer maxReserveMinutes;

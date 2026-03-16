@@ -123,12 +123,22 @@ public class InstrumentService {
         return categoryRepository.findAll();
     }
 
+    public PageResponse<InstrumentCategory> pageCategories(int pageNum, int pageSize, SysUser operator) {
+        assertAdminOrInstrumentManager(operator);
+        int safePageNum = Math.max(pageNum, 1);
+        int safePageSize = pageSize <= 0 ? 10 : Math.min(pageSize, 100);
+        int offset = (safePageNum - 1) * safePageSize;
+        List<InstrumentCategory> list = categoryRepository.findPage(offset, safePageSize);
+        long total = categoryRepository.countPage();
+        return new PageResponse<>(list, total, safePageNum, safePageSize);
+    }
+
     @Transactional
     public InstrumentCategory saveCategory(Long id, InstrumentCategory request, SysUser operator) {
         assertAdmin(operator);
         InstrumentCategory category = id == null ? new InstrumentCategory() : categoryRepository.findById(id);
         if (id != null && category == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "category not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "仪器分类不存在");
         }
         category.setParentId(request.getParentId());
         category.setCategoryName(request.getCategoryName());
@@ -152,7 +162,7 @@ public class InstrumentService {
         Instrument instrument = id == null ? new Instrument() : getById(id);
         InstrumentCategory category = categoryRepository.findById(request.getCategoryId());
         if (category == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "category not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "仪器分类不存在");
         }
         if (id != null) {
             assertInstrumentManagePermission(instrument, operator);
@@ -236,40 +246,40 @@ public class InstrumentService {
         assertInstrumentManagePermission(instrument, operator);
         InstrumentOpenRule rule = id == null ? new InstrumentOpenRule() : openRuleRepository.findById(id);
         if (id != null && rule == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "open rule not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "开放规则不存在");
         }
         if (id != null && (rule.getInstrumentId() == null || !rule.getInstrumentId().equals(request.getInstrumentId()))) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "instrumentId cannot be changed for existing open rule");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "已有开放规则不允许修改仪器");
         }
-        Integer weekDay = resolveWeekDay(request);
-        validateWeekDay(weekDay);
+        List<Integer> weekDays = resolveWeekDays(request);
         LocalTime startTime = resolveStartTime(request);
         LocalTime endTime = resolveEndTime(request);
         if (!endTime.isAfter(startTime)) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "open time range is invalid");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "开放时间范围不合法");
         }
         Integer stepMinutes = defaultInt(request.getStepMinutes(), 30);
         Integer maxReserveMinutes = defaultInt(request.getMaxReserveMinutes(), 480);
         validateReserveRuleConfig(stepMinutes, maxReserveMinutes, stepMinutes);
         if (maxReserveMinutes % stepMinutes != 0) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "open rule maxReserveMinutes must align with stepMinutes");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "开放规则中最长预约时长必须与时间步长对齐");
         }
         if (request.getEffectiveStartDate() != null && request.getEffectiveEndDate() != null
             && request.getEffectiveEndDate().isBefore(request.getEffectiveStartDate())) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "effective date range is invalid");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "生效日期范围不合法");
         }
-        assertOpenRuleNoOverlap(id, instrument.getId(), weekDay, startTime, endTime,
+        assertOpenRuleNoOverlap(id, instrument.getId(), weekDays, startTime, endTime,
             request.getEffectiveStartDate(), request.getEffectiveEndDate());
 
         rule.setInstrumentId(instrument.getId());
-        rule.setWeekDay(weekDay);
+        rule.setWeekDay(weekDays.get(0));
+        rule.setWeekDays(joinWeekDays(weekDays));
         rule.setStartTime(startTime);
         rule.setEndTime(endTime);
         rule.setMaxReserveMinutes(maxReserveMinutes);
         rule.setStepMinutes(stepMinutes);
         rule.setEffectiveStartDate(request.getEffectiveStartDate());
         rule.setEffectiveEndDate(request.getEffectiveEndDate());
-        rule.setStatus("ENABLED");
+        rule.setStatus(defaultString(request.getStatus(), "ENABLED"));
         rule.setUpdateTime(LocalDateTime.now());
         if (id == null) {
             rule.setCreateTime(LocalDateTime.now());
@@ -284,30 +294,30 @@ public class InstrumentService {
 
     public void ensureReservable(Instrument instrument) {
         if (!"NORMAL".equalsIgnoreCase(instrument.getStatus()) || instrument.getOpenStatus() == null || instrument.getOpenStatus() != 1) {
-            throw new BizException(ErrorCodes.BIZ_ERROR, "instrument is not available");
+            throw new BizException(ErrorCodes.BIZ_ERROR, "当前仪器不可预约");
         }
     }
 
     public void ensureOrderTypeSupported(Instrument instrument, String orderType, SysUser user) {
         String openMode = instrument.getOpenMode() == null ? "BOTH" : instrument.getOpenMode();
         if ("MACHINE".equalsIgnoreCase(orderType) && "SAMPLE".equalsIgnoreCase(openMode)) {
-            throw new BizException(ErrorCodes.BIZ_ERROR, "instrument does not support machine reservation");
+            throw new BizException(ErrorCodes.BIZ_ERROR, "该仪器不支持上机预约");
         }
         if ("SAMPLE".equalsIgnoreCase(orderType) && "MACHINE".equalsIgnoreCase(openMode)) {
-            throw new BizException(ErrorCodes.BIZ_ERROR, "instrument does not support sample reservation");
+            throw new BizException(ErrorCodes.BIZ_ERROR, "该仪器不支持送样预约");
         }
         if (user != null && isExternalUser(user)
             && (instrument.getSupportExternal() == null || instrument.getSupportExternal() != 1)) {
-            throw new BizException(ErrorCodes.BIZ_ERROR, "instrument does not support external users");
+            throw new BizException(ErrorCodes.BIZ_ERROR, "该仪器不支持校外用户预约");
         }
     }
 
     public void validateMachineReserveWindow(Instrument instrument, LocalDateTime reserveStart, LocalDateTime reserveEnd) {
         if (reserveStart == null || reserveEnd == null || !reserveEnd.isAfter(reserveStart)) {
-            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "reserved time range is invalid");
+            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "预约时间范围不合法");
         }
         if (!reserveStart.toLocalDate().equals(reserveEnd.toLocalDate())) {
-            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "cross-day reservation is not supported");
+            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "暂不支持跨天预约");
         }
         int reserveMinutes = (int) java.time.Duration.between(reserveStart, reserveEnd).toMinutes();
         Integer minMinutes = defaultInt(instrument.getMinReserveMinutes(), 30);
@@ -325,14 +335,14 @@ public class InstrumentService {
             .filter(rule -> "ENABLED".equalsIgnoreCase(rule.getStatus()))
             .collect(Collectors.toList());
         if (rules.isEmpty()) {
-            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "instrument open rule is not configured");
+            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "该仪器未配置开放规则");
         }
         LocalDate reserveDate = reserveStart.toLocalDate();
         int weekDay = reserveDate.getDayOfWeek().getValue();
         LocalTime startTime = reserveStart.toLocalTime();
         LocalTime endTime = reserveEnd.toLocalTime();
         boolean matched = rules.stream().anyMatch(rule ->
-            rule.getWeekDay() != null && rule.getWeekDay() == weekDay
+            containsWeekDay(rule, weekDay)
                 && rule.getStartTime() != null && rule.getEndTime() != null
                 && isDateInEffectiveRange(reserveDate, rule.getEffectiveStartDate(), rule.getEffectiveEndDate())
                 && !startTime.isBefore(rule.getStartTime())
@@ -341,7 +351,7 @@ public class InstrumentService {
                 && reserveMinutes % defaultInt(rule.getStepMinutes(), stepMinutes) == 0
         );
         if (!matched) {
-            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "reserved time does not match open rules");
+            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "预约时间不符合开放规则");
         }
     }
 
@@ -357,7 +367,7 @@ public class InstrumentService {
     public void deleteCategory(Long id, SysUser operator) {
         assertAdmin(operator);
         if (categoryRepository.findById(id) == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "category not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "仪器分类不存在");
         }
         if (instrumentRepository.countByCategoryId(id) > 0) {
             throw new BizException(ErrorCodes.BIZ_ERROR, "category is referenced by instruments");
@@ -394,6 +404,23 @@ public class InstrumentService {
             .collect(Collectors.toList());
     }
 
+    public PageResponse<InstrumentOpenRule> pageOpenRules(Long instrumentId, Integer weekDay, String status,
+                                                          int pageNum, int pageSize, SysUser operator) {
+        assertAdminOrInstrumentManager(operator);
+        int safePageNum = Math.max(pageNum, 1);
+        int safePageSize = pageSize <= 0 ? 10 : Math.min(pageSize, 100);
+        int offset = (safePageNum - 1) * safePageSize;
+        String roleCode = defaultString(operator.getPrimaryRoleCode(), "INTERNAL_USER").toUpperCase();
+        String normalizedStatus = status == null ? null : status.trim();
+        List<InstrumentOpenRule> list = openRuleRepository.findPageByScope(
+            instrumentId, weekDay, normalizedStatus, roleCode, operator.getId(), operator.getDepartmentId(), offset, safePageSize
+        );
+        long total = openRuleRepository.countPageByScope(
+            instrumentId, weekDay, normalizedStatus, roleCode, operator.getId(), operator.getDepartmentId()
+        );
+        return new PageResponse<>(list, total, safePageNum, safePageSize);
+    }
+
     public List<InstrumentAttachment> allAttachments(SysUser operator) {
         assertAdminOrInstrumentManager(operator);
         if (hasRole(operator, "ADMIN")) {
@@ -405,13 +432,27 @@ public class InstrumentService {
             .collect(Collectors.toList());
     }
 
+    public PageResponse<InstrumentAttachment> pageAttachments(SysUser operator, int pageNum, int pageSize) {
+        assertAdminOrInstrumentManager(operator);
+        int safePageNum = Math.max(pageNum, 1);
+        int safePageSize = pageSize <= 0 ? 10 : Math.min(pageSize, 100);
+        int offset = (safePageNum - 1) * safePageSize;
+        String roleCode = defaultString(operator.getPrimaryRoleCode(), "INTERNAL_USER").toUpperCase();
+        Long departmentId = operator.getDepartmentId();
+        List<InstrumentAttachment> list = attachmentRepository.findPageByScope(
+            roleCode, operator.getId(), departmentId, offset, safePageSize
+        );
+        long total = attachmentRepository.countByScope(roleCode, operator.getId(), departmentId);
+        return new PageResponse<>(list, total, safePageNum, safePageSize);
+    }
+
     @Transactional
     public InstrumentAttachment saveAttachment(Long id, InstrumentAttachment request, SysUser operator) {
         Instrument instrument = getById(request.getInstrumentId());
         assertInstrumentManagePermission(instrument, operator);
         InstrumentAttachment attachment = id == null ? new InstrumentAttachment() : attachmentRepository.findById(id);
         if (id != null && attachment == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "attachment not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "附件不存在");
         }
         if (id != null && (attachment.getInstrumentId() == null || !attachment.getInstrumentId().equals(request.getInstrumentId()))) {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "instrumentId cannot be changed for existing attachment");
@@ -437,7 +478,7 @@ public class InstrumentService {
     public void deleteOpenRule(Long id, SysUser operator) {
         InstrumentOpenRule rule = openRuleRepository.findById(id);
         if (rule == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "open rule not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "开放规则不存在");
         }
         Instrument instrument = getById(rule.getInstrumentId());
         assertInstrumentManagePermission(instrument, operator);
@@ -449,7 +490,7 @@ public class InstrumentService {
     public void deleteAttachment(Long id, SysUser operator) {
         InstrumentAttachment attachment = attachmentRepository.findById(id);
         if (attachment == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "attachment not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "附件不存在");
         }
         Instrument instrument = getById(attachment.getInstrumentId());
         assertInstrumentManagePermission(instrument, operator);
@@ -529,16 +570,16 @@ public class InstrumentService {
 
     private void validateReserveRuleConfig(Integer minReserveMinutes, Integer maxReserveMinutes, Integer stepMinutes) {
         if (minReserveMinutes == null || maxReserveMinutes == null || stepMinutes == null) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "reserve rule config is invalid");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "预约规则配置不合法");
         }
         if (minReserveMinutes <= 0 || maxReserveMinutes <= 0 || stepMinutes <= 0) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "reserve rule config must be positive");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "预约规则配置必须为正数");
         }
         if (maxReserveMinutes < minReserveMinutes) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "maxReserveMinutes must be >= minReserveMinutes");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "最长预约时长不能小于最短预约时长");
         }
         if (minReserveMinutes % stepMinutes != 0 || maxReserveMinutes % stepMinutes != 0) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "reserve minutes must align with stepMinutes");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "预约时长必须与时间步长对齐");
         }
     }
 
@@ -561,21 +602,21 @@ public class InstrumentService {
 
     private String validateInstrumentStatus(String status) {
         if (!INSTRUMENT_STATUS_SET.contains(status)) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "invalid instrument status");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "仪器状态不合法");
         }
         return status;
     }
 
     private String validateOpenMode(String openMode) {
         if (!OPEN_MODE_SET.contains(openMode)) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "invalid openMode");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "开放模式不合法");
         }
         return openMode;
     }
 
     private String validateBookingUnit(String bookingUnit) {
         if (!BOOKING_UNIT_SET.contains(bookingUnit)) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "invalid bookingUnit");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "预约计费单位不合法");
         }
         return bookingUnit;
     }
@@ -640,19 +681,37 @@ public class InstrumentService {
         return runtime;
     }
 
-    private Integer resolveWeekDay(OpenRuleSaveRequest request) {
+    private List<Integer> resolveWeekDays(OpenRuleSaveRequest request) {
+        Set<Integer> weekDaySet = new java.util.LinkedHashSet<>();
         if (request.getWeekDay() != null) {
-            return request.getWeekDay();
+            weekDaySet.add(request.getWeekDay());
         }
         if (request.getOpenDays() != null && !request.getOpenDays().trim().isEmpty()) {
-            return Integer.parseInt(request.getOpenDays().trim());
+            String[] parts = request.getOpenDays().split(",");
+            for (String part : parts) {
+                String item = part == null ? "" : part.trim();
+                if (item.isEmpty()) {
+                    continue;
+                }
+                try {
+                    weekDaySet.add(Integer.parseInt(item));
+                } catch (NumberFormatException ex) {
+                    throw new BizException(ErrorCodes.INVALID_REQUEST, "星期格式不正确");
+                }
+            }
         }
-        throw new BizException(ErrorCodes.INVALID_REQUEST, "week day is required");
+        if (weekDaySet.isEmpty()) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "至少选择一个开放星期");
+        }
+        for (Integer day : weekDaySet) {
+            validateWeekDay(day);
+        }
+        return new java.util.ArrayList<>(weekDaySet);
     }
 
     private void validateWeekDay(Integer weekDay) {
         if (weekDay == null || weekDay < 1 || weekDay > 7) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "weekDay must be between 1 and 7");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "星期取值必须在1到7之间");
         }
     }
 
@@ -663,7 +722,7 @@ public class InstrumentService {
         if (request.getOpenTimeRange() != null && request.getOpenTimeRange().contains("-")) {
             return LocalTime.parse(request.getOpenTimeRange().split("-")[0].trim());
         }
-        throw new BizException(ErrorCodes.INVALID_REQUEST, "startTime is required");
+        throw new BizException(ErrorCodes.INVALID_REQUEST, "开始时间不能为空");
     }
 
     private LocalTime resolveEndTime(OpenRuleSaveRequest request) {
@@ -673,16 +732,16 @@ public class InstrumentService {
         if (request.getOpenTimeRange() != null && request.getOpenTimeRange().contains("-")) {
             return LocalTime.parse(request.getOpenTimeRange().split("-")[1].trim());
         }
-        throw new BizException(ErrorCodes.INVALID_REQUEST, "endTime is required");
+        throw new BizException(ErrorCodes.INVALID_REQUEST, "结束时间不能为空");
     }
 
-    private void assertOpenRuleNoOverlap(Long currentRuleId, Long instrumentId, Integer weekDay,
+    private void assertOpenRuleNoOverlap(Long currentRuleId, Long instrumentId, List<Integer> weekDays,
                                          LocalTime startTime, LocalTime endTime,
                                          LocalDate effectiveStartDate, LocalDate effectiveEndDate) {
         List<InstrumentOpenRule> rules = openRuleRepository.findByInstrumentId(instrumentId).stream()
             .filter(rule -> "ENABLED".equalsIgnoreCase(rule.getStatus()))
             .filter(rule -> currentRuleId == null || !currentRuleId.equals(rule.getId()))
-            .filter(rule -> weekDay != null && weekDay.equals(rule.getWeekDay()))
+            .filter(rule -> hasWeekDayIntersection(rule, weekDays))
             .collect(Collectors.toList());
         for (InstrumentOpenRule rule : rules) {
             if (rule.getStartTime() == null || rule.getEndTime() == null) {
@@ -693,9 +752,42 @@ public class InstrumentService {
                 continue;
             }
             if (isEffectiveDateOverlap(effectiveStartDate, effectiveEndDate, rule.getEffectiveStartDate(), rule.getEffectiveEndDate())) {
-                throw new BizException(ErrorCodes.INVALID_REQUEST, "open rule overlaps with existing rules");
+                throw new BizException(ErrorCodes.INVALID_REQUEST, "开放规则与已有规则冲突");
             }
         }
+    }
+
+    private boolean containsWeekDay(InstrumentOpenRule rule, int targetWeekDay) {
+        if (rule == null) {
+            return false;
+        }
+        String weekDays = rule.getWeekDays();
+        if (weekDays != null && !weekDays.trim().isEmpty()) {
+            String[] parts = weekDays.split(",");
+            for (String part : parts) {
+                if (String.valueOf(targetWeekDay).equals(part == null ? "" : part.trim())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return rule.getWeekDay() != null && rule.getWeekDay() == targetWeekDay;
+    }
+
+    private boolean hasWeekDayIntersection(InstrumentOpenRule rule, List<Integer> targetWeekDays) {
+        if (targetWeekDays == null || targetWeekDays.isEmpty()) {
+            return false;
+        }
+        for (Integer targetDay : targetWeekDays) {
+            if (targetDay != null && containsWeekDay(rule, targetDay)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String joinWeekDays(List<Integer> weekDays) {
+        return weekDays.stream().map(String::valueOf).collect(Collectors.joining(","));
     }
 
     private boolean isEffectiveDateOverlap(LocalDate start1, LocalDate end1, LocalDate start2, LocalDate end2) {
@@ -708,7 +800,7 @@ public class InstrumentService {
 
     private void assertInstrumentManagePermission(Instrument instrument, SysUser operator) {
         if (operator == null) {
-            throw new BizException(ErrorCodes.PERMISSION_DENIED, "permission denied");
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限执行该操作");
         }
         String roleCode = operator.getPrimaryRoleCode();
         if ("ADMIN".equalsIgnoreCase(roleCode)) {
@@ -724,12 +816,12 @@ public class InstrumentService {
             && instrument.getDepartmentId().equals(operator.getDepartmentId())) {
             return;
         }
-        throw new BizException(ErrorCodes.PERMISSION_DENIED, "permission denied for this instrument");
+        throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限管理该仪器");
     }
 
     private void assertAdmin(SysUser operator) {
         if (operator == null || !"ADMIN".equalsIgnoreCase(operator.getPrimaryRoleCode())) {
-            throw new BizException(ErrorCodes.PERMISSION_DENIED, "admin role required");
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "仅管理员可执行该操作");
         }
     }
 
@@ -737,7 +829,7 @@ public class InstrumentService {
         if (hasRole(operator, "ADMIN") || hasRole(operator, "INSTRUMENT_OWNER") || hasRole(operator, "DEPT_MANAGER")) {
             return;
         }
-        throw new BizException(ErrorCodes.PERMISSION_DENIED, "permission denied");
+        throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限执行该操作");
     }
 
     private boolean hasRole(SysUser user, String roleCode) {

@@ -22,10 +22,26 @@ export function getAdminRoles() {
   })
 }
 
+export function getAdminRolesPage(params) {
+  return request({
+    url: '/api/admin/system/roles/page',
+    method: 'get',
+    params
+  })
+}
+
 export function getAdminDepartments() {
   return request({
     url: '/api/admin/system/departments',
     method: 'get'
+  })
+}
+
+export function getAdminDepartmentsPage(params) {
+  return request({
+    url: '/api/admin/system/departments/page',
+    method: 'get',
+    params
   })
 }
 
@@ -113,6 +129,14 @@ export function getAdminInstrumentCategories() {
   })
 }
 
+export function getAdminInstrumentCategoriesPage(params) {
+  return request({
+    url: '/api/admin/instruments/categories/page',
+    method: 'get',
+    params
+  })
+}
+
 export function createInstrument(data) {
   return request({
     url: '/api/admin/instruments',
@@ -167,10 +191,11 @@ export function createOpenRule(data) {
   })
 }
 
-export function getAdminOpenRules() {
+export function getAdminOpenRulesPage(params) {
   return request({
     url: '/api/admin/instruments/open-rules',
-    method: 'get'
+    method: 'get',
+    params
   })
 }
 
@@ -209,6 +234,14 @@ export function getAdminAttachments() {
   return request({
     url: '/api/admin/instruments/attachments',
     method: 'get'
+  })
+}
+
+export function getAdminAttachmentsPage(params) {
+  return request({
+    url: '/api/admin/instruments/attachments/page',
+    method: 'get',
+    params
   })
 }
 
