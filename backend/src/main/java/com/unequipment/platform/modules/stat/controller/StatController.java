@@ -22,6 +22,10 @@ public class StatController {
     private static final DateTimeFormatter ISO_SECOND = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final DateTimeFormatter SPACE_SECOND = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    /**
+     * 前台统计总览：
+     * 支持可选时间区间，若时间为空则返回全局口径总览。
+     */
     @GetMapping("/overview")
     public ApiResponse<?> overview(
         @RequestParam(required = false) String startTime,
@@ -34,11 +38,19 @@ public class StatController {
         return ApiResponse.success(statService.overview(start, end));
     }
 
+    /**
+     * 前台平台成员列表（部门 + 仪器数）。
+     */
     @GetMapping("/platform-members")
     public ApiResponse<?> platformMembers() {
         return ApiResponse.success(statService.platformMembers());
     }
 
+    /**
+     * 时间解析兼容两种输入格式：
+     * 1) yyyy-MM-dd'T'HH:mm:ss
+     * 2) yyyy-MM-dd HH:mm:ss
+     */
     private LocalDateTime parseDateTime(String value) {
         if (value == null || value.trim().isEmpty()) {
             return null;

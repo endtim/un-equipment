@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.content.repository.NoticeRepository">
+
+  <select id="findAll" resultType="com.unequipment.platform.modules.content.entity.Notice">
+    select * from content_notice
+    where deleted = 0 and publish_status = 'PUBLISHED'
+    order by top_flag desc, publish_time desc, id desc
+  </select>
+
+  <select id="findPage" resultType="com.unequipment.platform.modules.content.entity.Notice">
+    <!-- 公告分页：支持关键字 + 发布状态过滤，前后台共用 -->
+    select * from content_notice
+    where deleted = 0
+    <if test="keyword != null and keyword != ''">
+      and (title like concat('%', #{keyword}, '%')
+      or summary like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="publishStatus != null and publishStatus != ''">
+      and publish_status = #{publishStatus}
+    </if>
+    order by top_flag desc, publish_time desc, id desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPage" resultType="long">
+    <!-- 与 findPage 完全同口径，确保分页总数一致 -->
+    select count(1) from content_notice
+    where deleted = 0
+    <if test="keyword != null and keyword != ''">
+      and (title like concat('%', #{keyword}, '%')
+      or summary like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="publishStatus != null and publishStatus != ''">
+      and publish_status = #{publishStatus}
+    </if>
+  </select>
+
+  <select id="findById" resultType="com.unequipment.platform.modules.content.entity.Notice">
+    select * from content_notice where id = #{id} and deleted = 0 limit 1
+  </select>
+
+  <select id="findPublishedById" resultType="com.unequipment.platform.modules.content.entity.Notice">
+    <!-- 前台详情专用：仅已发布 -->
+    select * from content_notice
+    where id = #{id} and deleted = 0 and publish_status = 'PUBLISHED'
+    limit 1
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into content_notice(
+      title, category, summary, content, cover_url, instrument_id, top_flag,
+      publish_status, publish_time, view_count, create_by, create_time, update_time, deleted
+    ) values (
+      #{title}, #{category}, #{summary}, #{content}, #{coverUrl}, #{instrumentId}, #{topFlag},
+      #{publishStatus}, #{publishTime}, #{viewCount}, #{createBy}, #{createTime}, #{updateTime}, #{deleted}
+    )
+  </insert>
+
+  <update id="update">
+    update content_notice
+    set title = #{title},
+        category = #{category},
+        summary = #{summary},
+        content = #{content},
+        cover_url = #{coverUrl},
+        instrument_id = #{instrumentId},
+        top_flag = #{topFlag},
+        publish_status = #{publishStatus},
+        publish_time = #{publishTime},
+        view_count = #{viewCount},
+        update_time = #{updateTime}
+    where id = #{id} and deleted = 0
+  </update>
+
+  <update id="softDelete">
+    update content_notice
+    set deleted = 1, update_time = #{updateTime}
+    where id = #{id} and deleted = 0
+  </update>
+
+</mapper>

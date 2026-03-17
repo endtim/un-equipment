@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.content.repository.UserMessageRepository">
+
+  <select id="findByUserId" resultType="com.unequipment.platform.modules.content.entity.UserMessage">
+    select * from sys_message where user_id = #{userId} order by create_time desc
+  </select>
+
+  <select id="findPageByUserId" resultType="com.unequipment.platform.modules.content.entity.UserMessage">
+    <!-- 用户消息按时间倒序分页，保证最近消息优先可见 -->
+    select * from sys_message
+    where user_id = #{userId}
+    order by create_time desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countByUserId" resultType="long">
+    select count(1) from sys_message where user_id = #{userId}
+  </select>
+
+  <select id="findByIdAndUserId" resultType="com.unequipment.platform.modules.content.entity.UserMessage">
+    <!-- 单条已读前的归属校验查询 -->
+    select * from sys_message where id = #{id} and user_id = #{userId} limit 1
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into sys_message(
+      user_id, msg_type, title, content, biz_type, biz_id, read_status, read_time, create_time
+    ) values (
+      #{userId}, #{msgType}, #{title}, #{content}, #{bizType}, #{bizId}, #{readStatus}, #{readTime}, #{createTime}
+    )
+  </insert>
+
+  <update id="markRead">
+    <!-- 单条已读：限定 user_id 防止越权标记他人消息 -->
+    update sys_message set read_status = 1, read_time = #{readTime}
+    where id = #{id} and user_id = #{userId}
+  </update>
+
+  <update id="markAllRead">
+    <!-- 全部已读：仅更新未读记录，减少无效写入 -->
+    update sys_message set read_status = 1, read_time = #{readTime}
+    where user_id = #{userId} and read_status = 0
+  </update>
+
+</mapper>

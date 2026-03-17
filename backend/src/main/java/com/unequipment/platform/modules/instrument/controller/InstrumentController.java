@@ -24,6 +24,9 @@ public class InstrumentController {
     private final InstrumentService instrumentService;
     private final OrderService orderService;
 
+    /**
+     * 前台仪器分页列表。
+     */
     @GetMapping
     public ApiResponse<PageResponse<Map<String, Object>>> page(
         @RequestParam(required = false) String keyword,
@@ -34,17 +37,26 @@ public class InstrumentController {
         return ApiResponse.success(instrumentService.page(keyword, categoryId, status, pageNum, pageSize));
     }
 
+    /**
+     * 前台仪器详情（包含开放规则与运行态等聚合信息）。
+     */
     @GetMapping("/{id}")
     public ApiResponse<Map<String, Object>> detail(@PathVariable Long id) {
         return ApiResponse.success(instrumentService.detail(id));
     }
 
+    /**
+     * 指定日期已占用时段查询（用于预约表单避让）。
+     */
     @GetMapping("/{id}/reserved-slots")
     public ApiResponse<List<ReservedSlotVO>> reservedSlots(@PathVariable Long id,
                                                            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
         return ApiResponse.success(orderService.listMachineReservedSlots(id, date));
     }
 
+    /**
+     * 仪器分类列表（前台筛选项）。
+     */
     @GetMapping("/categories")
     public ApiResponse<?> categories() {
         return ApiResponse.success(instrumentService.categories());

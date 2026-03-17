@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.instrument.repository.InstrumentCategoryRepository">
+
+  <select id="findAll" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentCategory">
+    select * from biz_instrument_category where deleted = 0 order by sort_no asc, id asc
+  </select>
+
+  <select id="findPage" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentCategory">
+    <!-- 仪器分类分页：按 sort_no 优先排序 -->
+    select * from biz_instrument_category
+    where deleted = 0
+    order by sort_no asc, id asc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPage" resultType="long">
+    select count(1) from biz_instrument_category where deleted = 0
+  </select>
+
+  <select id="findById" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentCategory">
+    select * from biz_instrument_category where id = #{id} and deleted = 0
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_instrument_category(parent_id, category_name, category_code, sort_no, status, create_time, update_time, deleted)
+    values(#{parentId}, #{categoryName}, #{categoryCode}, #{sortNo}, #{status}, #{createTime}, #{updateTime}, #{deleted})
+  </insert>
+
+  <update id="update">
+    update biz_instrument_category
+    set parent_id = #{parentId},
+        category_name = #{categoryName},
+        category_code = #{categoryCode},
+        sort_no = #{sortNo},
+        status = #{status},
+        update_time = #{updateTime}
+    where id = #{id}
+  </update>
+
+  <update id="softDelete">
+    update biz_instrument_category set deleted = 1, update_time = #{updateTime} where id = #{id}
+  </update>
+
+</mapper>

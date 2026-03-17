@@ -2,6 +2,7 @@ package com.unequipment.platform.modules.system.service;
 
 import com.unequipment.platform.common.exception.BizException;
 import com.unequipment.platform.common.exception.ErrorCodes;
+import com.unequipment.platform.common.util.RoleAuthUtils;
 import com.unequipment.platform.modules.log.service.OperationLogService;
 import com.unequipment.platform.modules.system.entity.SysDepartment;
 import com.unequipment.platform.modules.system.entity.SysRole;
@@ -30,12 +31,18 @@ public class SystemAdminService {
     private final OperationLogService operationLogService;
     private final PasswordEncoder passwordEncoder;
 
+    /**
+     * 角色新增/编辑：
+     * - 统一做角色编码标准化与唯一性校验
+     * - 角色禁用时清理用户-角色关系，防止禁用角色继续生效
+     */
     @Transactional
     public SysRole saveRole(Long id, SysRole request, SysUser operator) {
         assertAdmin(operator);
         if (request == null) {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "角色参数不能为空");
         }
+        // 角色编码作为系统唯一键：统一标准化后做唯一性校验。
         String roleCode = normalizeCode(request.getRoleCode(), "角色编码不能为空");
         ensureRoleCodeUnique(roleCode, id);
 
@@ -54,6 +61,7 @@ public class SystemAdminService {
             roleRepository.insert(role);
         } else {
             roleRepository.update(role);
+            // 角色禁用时立即解绑用户角色关系，避免禁用角色继续生效。
             if ("DISABLED".equalsIgnoreCase(role.getStatus())) {
                 userRoleRepository.deleteByRoleId(role.getId());
             }
@@ -62,12 +70,18 @@ public class SystemAdminService {
         return role;
     }
 
+    /**
+     * 部门新增/编辑：
+     * - 部门编码按统一口径标准化并校验唯一性
+     * - 更新时保留原有主键与审计信息，仅增量更新可变字段
+     */
     @Transactional
     public SysDepartment saveDepartment(Long id, SysDepartment request, SysUser operator) {
         assertAdmin(operator);
         if (request == null) {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "部门参数不能为空");
         }
+        // 部门编码与角色编码同口径：标准化 + 唯一性校验。
         String deptCode = normalizeCode(request.getDeptCode(), "部门编码不能为空");
         ensureDeptCodeUnique(deptCode, id);
 
@@ -103,11 +117,18 @@ public class SystemAdminService {
         return department;
     }
 
+    /**
+     * 用户新增/编辑：
+     * - 先校验“谁可以管谁”（ADMIN 全量；DEPT_MANAGER 仅本部门）
+     * - 新增时强制用户名唯一与初始密码
+     * - 用户角色采用覆盖式绑定，保证主角色唯一
+     */
     @Transactional
     public SysUser saveUser(Long id, SysUser request, SysUser operator) {
         if (request == null) {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "用户参数不能为空");
         }
+        // 用户管理权限边界：ADMIN 全量，DEPT_MANAGER 仅本部门。
         assertUserManagePermission(id, request, operator);
         SysUser user = id == null ? new SysUser() : userRepository.findById(id);
         if (id != null && user == null) {
@@ -119,6 +140,7 @@ public class SystemAdminService {
                 throw new BizException(ErrorCodes.INVALID_REQUEST, "用户名不能为空");
             }
             String username = request.getUsername().trim();
+            // 用户名全局唯一，创建时必须显式拦截重复。
             ensureUsernameUnique(username, null);
             user.setUsername(username);
             if (!StringUtils.hasText(request.getPassword())) {
@@ -126,6 +148,7 @@ public class SystemAdminService {
             }
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         } else if (StringUtils.hasText(request.getPassword())) {
+            // 编辑时仅在传入新密码时重置，避免误改。
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
 
@@ -151,11 +174,17 @@ public class SystemAdminService {
         } else {
             userRepository.update(user);
         }
+        // 用户-角色采用覆盖式绑定，保证主角色唯一。
         bindUserRole(user.getId(), roleCode);
         operationLogService.save(operator, "SYSTEM", id == null ? "CREATE_USER" : "UPDATE_USER", "user:" + user.getUsername());
         return userRepository.findById(user.getId());
     }
 
+    /**
+     * 删除部门：
+     * - 仅 ADMIN
+     * - 部门下仍有用户时禁止删除，避免产生孤儿用户
+     */
     @Transactional
     public void deleteDepartment(Long id, SysUser operator) {
         assertAdmin(operator);
@@ -169,6 +198,11 @@ public class SystemAdminService {
         operationLogService.save(operator, "SYSTEM", "DELETE_DEPARTMENT", "departmentId:" + id);
     }
 
+    /**
+     * 删除角色：
+     * - 禁止删除 ADMIN 角色
+     * - 角色仍被用户使用时禁止删除
+     */
     @Transactional
     public void deleteRole(Long id, SysUser operator) {
         assertAdmin(operator);
@@ -186,6 +220,11 @@ public class SystemAdminService {
         operationLogService.save(operator, "SYSTEM", "DELETE_ROLE", "roleId:" + id);
     }
 
+    /**
+     * 删除用户：
+     * - ADMIN 可删任意用户
+     * - DEPT_MANAGER 仅可删本部门用户
+     */
     @Transactional
     public void deleteUser(Long id, SysUser operator) {
         SysUser target = userRepository.findById(id);
@@ -204,11 +243,16 @@ public class SystemAdminService {
         operationLogService.save(operator, "SYSTEM", "DELETE_USER", "userId:" + id);
     }
 
+    /**
+     * 用户角色覆盖绑定：
+     * 先删旧关系再写新关系，确保单用户单主角色映射一致。
+     */
     private void bindUserRole(Long userId, String roleCode) {
         SysRole role = roleRepository.findByRoleCode(roleCode);
         if (role == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "角色不存在");
         }
+        // 先清理旧绑定，再写入新绑定，避免历史脏映射。
         userRoleRepository.deleteByUserId(userId);
         SysUserRole userRole = new SysUserRole();
         userRole.setUserId(userId);
@@ -217,10 +261,17 @@ public class SystemAdminService {
         userRoleRepository.insert(userRole);
     }
 
+    /**
+     * 用户管理权限边界：
+     * - 非 ADMIN 必须是 DEPT_MANAGER
+     * - 且目标用户属于本部门
+     * - 且不可分配 ADMIN 角色
+     */
     private void assertUserManagePermission(Long id, SysUser request, SysUser operator) {
         if (hasRole(operator, "ADMIN")) {
             return;
         }
+        // 部门管理员仅可管理本部门，且不得分配 ADMIN 角色。
         if (!hasRole(operator, "DEPT_MANAGER")) {
             throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限管理用户");
         }
@@ -246,6 +297,9 @@ public class SystemAdminService {
         }
     }
 
+    /**
+     * 用户名唯一性前置校验，避免数据库异常直接透出。
+     */
     private void ensureUsernameUnique(String username, Long excludeId) {
         int count = userRepository.countByUsernameExcludeId(username, excludeId);
         if (count > 0) {
@@ -253,6 +307,9 @@ public class SystemAdminService {
         }
     }
 
+    /**
+     * 角色编码唯一性前置校验。
+     */
     private void ensureRoleCodeUnique(String roleCode, Long excludeId) {
         int count = roleRepository.countByRoleCodeExcludeId(roleCode, excludeId);
         if (count > 0) {
@@ -260,6 +317,9 @@ public class SystemAdminService {
         }
     }
 
+    /**
+     * 部门编码唯一性前置校验。
+     */
     private void ensureDeptCodeUnique(String deptCode, Long excludeId) {
         int count = departmentRepository.countByDeptCodeExcludeId(deptCode, excludeId);
         if (count > 0) {
@@ -275,6 +335,6 @@ public class SystemAdminService {
     }
 
     private boolean hasRole(SysUser user, String roleCode) {
-        return user != null && roleCode.equalsIgnoreCase(user.getPrimaryRoleCode());
+        return RoleAuthUtils.hasRole(user, roleCode);
     }
 }

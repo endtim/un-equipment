@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.instrument.repository.InstrumentRepository">
+
+  <select id="findAll" resultType="com.unequipment.platform.modules.instrument.entity.Instrument">
+    select i.*, c.category_name, d.dept_name as department_name, u.real_name as owner_user_name
+    from biz_instrument i
+    left join biz_instrument_category c on c.id = i.category_id
+    left join sys_department d on d.id = i.department_id
+    left join sys_user u on u.id = i.owner_user_id
+    where i.deleted = 0
+    order by i.sort_no asc, i.id desc
+  </select>
+
+  <select id="findPageByCondition" resultType="com.unequipment.platform.modules.instrument.entity.Instrument">
+    select i.*, c.category_name, d.dept_name as department_name, u.real_name as owner_user_name
+    from biz_instrument i
+    left join biz_instrument_category c on c.id = i.category_id
+    left join sys_department d on d.id = i.department_id
+    left join sys_user u on u.id = i.owner_user_id
+    where i.deleted = 0
+    <if test="keyword != null and keyword != ''">
+      and (i.instrument_name like concat('%', #{keyword}, '%') or i.instrument_no like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="status != null and status != ''">
+      and i.status = #{status}
+    </if>
+    <if test="categoryId != null">
+      and i.category_id = #{categoryId}
+    </if>
+    order by i.sort_no asc, i.id desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="findPageByScope" resultType="com.unequipment.platform.modules.instrument.entity.Instrument">
+    <!-- 管理端仪器分页：按角色范围收敛（负责人/部门管理员） -->
+    select i.*, c.category_name, d.dept_name as department_name, u.real_name as owner_user_name
+    from biz_instrument i
+    left join biz_instrument_category c on c.id = i.category_id
+    left join sys_department d on d.id = i.department_id
+    left join sys_user u on u.id = i.owner_user_id
+    where i.deleted = 0
+    <if test="keyword != null and keyword != ''">
+      and (i.instrument_name like concat('%', #{keyword}, '%') or i.instrument_no like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="status != null and status != ''">
+      and i.status = #{status}
+    </if>
+    <if test="categoryId != null">
+      and i.category_id = #{categoryId}
+    </if>
+    <if test="roleCode == 'INSTRUMENT_OWNER'">
+      and i.owner_user_id = #{operatorId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and i.department_id = #{departmentId}
+    </if>
+    order by i.sort_no asc, i.id desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPageByCondition" resultType="long">
+    select count(1)
+    from biz_instrument i
+    where i.deleted = 0
+    <if test="keyword != null and keyword != ''">
+      and (i.instrument_name like concat('%', #{keyword}, '%') or i.instrument_no like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="status != null and status != ''">
+      and i.status = #{status}
+    </if>
+    <if test="categoryId != null">
+      and i.category_id = #{categoryId}
+    </if>
+  </select>
+
+  <select id="countPageByScope" resultType="long">
+    <!-- 与 findPageByScope 同口径 -->
+    select count(1)
+    from biz_instrument i
+    where i.deleted = 0
+    <if test="keyword != null and keyword != ''">
+      and (i.instrument_name like concat('%', #{keyword}, '%') or i.instrument_no like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="status != null and status != ''">
+      and i.status = #{status}
+    </if>
+    <if test="categoryId != null">
+      and i.category_id = #{categoryId}
+    </if>
+    <if test="roleCode == 'INSTRUMENT_OWNER'">
+      and i.owner_user_id = #{operatorId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and i.department_id = #{departmentId}
+    </if>
+  </select>
+
+  <select id="countAll" resultType="long">
+    select count(1) from biz_instrument where deleted = 0
+  </select>
+
+  <select id="countByCategoryId" resultType="long">
+    select count(1) from biz_instrument where category_id = #{categoryId} and deleted = 0
+  </select>
+
+  <select id="findById" resultType="com.unequipment.platform.modules.instrument.entity.Instrument">
+    select i.*, c.category_name, d.dept_name as department_name, u.real_name as owner_user_name
+    from biz_instrument i
+    left join biz_instrument_category c on c.id = i.category_id
+    left join sys_department d on d.id = i.department_id
+    left join sys_user u on u.id = i.owner_user_id
+    where i.id = #{id} and i.deleted = 0
+    limit 1
+  </select>
+
+  <select id="findPage" resultType="com.unequipment.platform.modules.instrument.entity.Instrument">
+    select i.*, c.category_name, d.dept_name as department_name, u.real_name as owner_user_name
+    from biz_instrument i
+    left join biz_instrument_category c on c.id = i.category_id
+    left join sys_department d on d.id = i.department_id
+    left join sys_user u on u.id = i.owner_user_id
+    where i.deleted = 0
+    order by i.sort_no asc, i.id desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_instrument(instrument_no, instrument_name, model, brand, asset_no, manufacturer, supplier, origin_country, purchase_date, production_date, equipment_source, service_contact_name, service_contact_phone, category_id, department_id, owner_user_id, location, status, open_mode, open_status, support_external, need_audit, require_training, booking_unit, price_internal, price_external, min_reserve_minutes, max_reserve_minutes, step_minutes, cover_url, intro, usage_desc, sample_desc, notice_text, technical_specs, main_functions, service_content, user_notice, charge_standard, is_hot, sort_no, create_time, update_time, deleted)
+    values(#{instrumentNo}, #{instrumentName}, #{model}, #{brand}, #{assetNo}, #{manufacturer}, #{supplier}, #{originCountry}, #{purchaseDate}, #{productionDate}, #{equipmentSource}, #{serviceContactName}, #{serviceContactPhone}, #{categoryId}, #{departmentId}, #{ownerUserId}, #{location}, #{status}, #{openMode}, #{openStatus}, #{supportExternal}, #{needAudit}, #{requireTraining}, #{bookingUnit}, #{priceInternal}, #{priceExternal}, #{minReserveMinutes}, #{maxReserveMinutes}, #{stepMinutes}, #{coverUrl}, #{intro}, #{usageDesc}, #{sampleDesc}, #{noticeText}, #{technicalSpecs}, #{mainFunctions}, #{serviceContent}, #{userNotice}, #{chargeStandard}, #{isHot}, #{sortNo}, #{createTime}, #{updateTime}, #{deleted})
+  </insert>
+
+  <update id="update">
+    update biz_instrument
+    set instrument_no=#{instrumentNo}, instrument_name=#{instrumentName}, model=#{model}, brand=#{brand}, asset_no=#{assetNo}, manufacturer=#{manufacturer}, supplier=#{supplier}, origin_country=#{originCountry}, purchase_date=#{purchaseDate}, production_date=#{productionDate}, equipment_source=#{equipmentSource}, service_contact_name=#{serviceContactName}, service_contact_phone=#{serviceContactPhone}, category_id=#{categoryId}, department_id=#{departmentId}, owner_user_id=#{ownerUserId}, location=#{location}, status=#{status}, open_mode=#{openMode}, open_status=#{openStatus}, support_external=#{supportExternal}, need_audit=#{needAudit}, require_training=#{requireTraining}, booking_unit=#{bookingUnit}, price_internal=#{priceInternal}, price_external=#{priceExternal}, min_reserve_minutes=#{minReserveMinutes}, max_reserve_minutes=#{maxReserveMinutes}, step_minutes=#{stepMinutes}, cover_url=#{coverUrl}, intro=#{intro}, usage_desc=#{usageDesc}, sample_desc=#{sampleDesc}, notice_text=#{noticeText}, technical_specs=#{technicalSpecs}, main_functions=#{mainFunctions}, service_content=#{serviceContent}, user_notice=#{userNotice}, charge_standard=#{chargeStandard}, is_hot=#{isHot}, sort_no=#{sortNo}, update_time=#{updateTime}
+    where id=#{id}
+  </update>
+
+  <update id="softDelete">
+    update biz_instrument set deleted = 1, update_time=#{updateTime} where id=#{id}
+  </update>
+
+</mapper>

@@ -1,0 +1,483 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.order.repository.ReservationOrderRepository">
+
+  <select id="findById" resultType="com.unequipment.platform.modules.order.entity.ReservationOrder">
+    select o.*, u.real_name as user_name, i.instrument_name
+    from biz_reservation_order o
+    left join sys_user u on u.id = o.user_id
+    left join biz_instrument i on i.id = o.instrument_id
+    where o.id = #{id} and o.deleted = 0
+    limit 1
+  </select>
+
+  <select id="findByIdForUpdate" resultType="com.unequipment.platform.modules.order.entity.ReservationOrder">
+    select o.*, u.real_name as user_name, i.instrument_name
+    from biz_reservation_order o
+    left join sys_user u on u.id = o.user_id
+    left join biz_instrument i on i.id = o.instrument_id
+    where o.id = #{id} and o.deleted = 0
+    limit 1
+    for update
+  </select>
+
+  <select id="findAll" resultType="com.unequipment.platform.modules.order.entity.ReservationOrder">
+    select o.*, u.real_name as user_name, i.instrument_name
+    from biz_reservation_order o
+    left join sys_user u on u.id = o.user_id
+    left join biz_instrument i on i.id = o.instrument_id
+    where o.deleted = 0
+    order by o.create_time desc
+  </select>
+
+  <select id="findPageForAdmin" resultType="com.unequipment.platform.modules.order.entity.ReservationOrder">
+    <!--
+      管理端订单分页：
+      1) 支持多维筛选（类型/状态/关键字/时间/金额/审核人）
+      2) 角色数据范围直接下推到 SQL（负责人/部门管理员）
+    -->
+    select o.*, u.real_name as user_name, i.instrument_name
+    from biz_reservation_order o
+    left join sys_user u on u.id = o.user_id
+    left join biz_instrument i on i.id = o.instrument_id
+    where o.deleted = 0
+    <if test="orderType != null and orderType != ''">
+      and o.order_type = #{orderType}
+    </if>
+    <if test="status != null and status != ''">
+      and o.order_status = #{status}
+    </if>
+    <if test="keyword != null and keyword != ''">
+      and (o.order_no like concat('%', #{keyword}, '%')
+      or u.real_name like concat('%', #{keyword}, '%')
+      or i.instrument_name like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="submitStart != null">
+      and o.submit_time &gt;= #{submitStart}
+    </if>
+    <if test="submitEnd != null">
+      and o.submit_time &lt;= #{submitEnd}
+    </if>
+    <if test="filterDepartmentId != null">
+      and o.department_id = #{filterDepartmentId}
+    </if>
+    <if test="auditorKeyword != null and auditorKeyword != ''">
+      and exists (
+      select 1 from biz_reservation_audit ar
+      left join sys_user au on au.id = ar.auditor_id
+      where ar.order_id = o.id and au.real_name like concat('%', #{auditorKeyword}, '%')
+      )
+    </if>
+    <if test="minAmount != null">
+      and coalesce(o.final_amount, o.estimated_amount, 0) &gt;= #{minAmount}
+    </if>
+    <if test="maxAmount != null">
+      and coalesce(o.final_amount, o.estimated_amount, 0) &lt;= #{maxAmount}
+    </if>
+    <if test="roleCode == 'INSTRUMENT_OWNER'">
+      and o.owner_user_id = #{operatorId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+    order by o.create_time desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countForAdmin" resultType="long">
+    <!-- 与 findPageForAdmin 过滤条件保持一致，确保分页总数与列表口径一致 -->
+    select count(1)
+    from biz_reservation_order o
+    where o.deleted = 0
+    <if test="orderType != null and orderType != ''">
+      and o.order_type = #{orderType}
+    </if>
+    <if test="status != null and status != ''">
+      and o.order_status = #{status}
+    </if>
+    <if test="keyword != null and keyword != ''">
+      and (o.order_no like concat('%', #{keyword}, '%')
+      or exists(select 1 from sys_user u where u.id = o.user_id and u.real_name like concat('%', #{keyword}, '%'))
+      or exists(select 1 from biz_instrument i where i.id = o.instrument_id and i.instrument_name like concat('%', #{keyword}, '%')))
+    </if>
+    <if test="submitStart != null">
+      and o.submit_time &gt;= #{submitStart}
+    </if>
+    <if test="submitEnd != null">
+      and o.submit_time &lt;= #{submitEnd}
+    </if>
+    <if test="filterDepartmentId != null">
+      and o.department_id = #{filterDepartmentId}
+    </if>
+    <if test="auditorKeyword != null and auditorKeyword != ''">
+      and exists (
+      select 1 from biz_reservation_audit ar
+      left join sys_user au on au.id = ar.auditor_id
+      where ar.order_id = o.id and au.real_name like concat('%', #{auditorKeyword}, '%')
+      )
+    </if>
+    <if test="minAmount != null">
+      and coalesce(o.final_amount, o.estimated_amount, 0) &gt;= #{minAmount}
+    </if>
+    <if test="maxAmount != null">
+      and coalesce(o.final_amount, o.estimated_amount, 0) &lt;= #{maxAmount}
+    </if>
+    <if test="roleCode == 'INSTRUMENT_OWNER'">
+      and o.owner_user_id = #{operatorId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="findByUserId" resultType="com.unequipment.platform.modules.order.entity.ReservationOrder">
+    select o.*, u.real_name as user_name, i.instrument_name
+    from biz_reservation_order o
+    left join sys_user u on u.id = o.user_id
+    left join biz_instrument i on i.id = o.instrument_id
+    where o.user_id = #{userId} and o.deleted = 0
+    order by o.create_time desc
+  </select>
+
+  <select id="findByUserIdAndOrderType" resultType="com.unequipment.platform.modules.order.entity.ReservationOrder">
+    select o.*, u.real_name as user_name, i.instrument_name
+    from biz_reservation_order o
+    left join sys_user u on u.id = o.user_id
+    left join biz_instrument i on i.id = o.instrument_id
+    where o.user_id = #{userId}
+      and o.order_type = #{orderType}
+      and o.deleted = 0
+    order by o.create_time desc
+  </select>
+
+  <select id="findPageByUser" resultType="com.unequipment.platform.modules.order.entity.ReservationOrder">
+    select o.*, u.real_name as user_name, i.instrument_name
+    from biz_reservation_order o
+    left join sys_user u on u.id = o.user_id
+    left join biz_instrument i on i.id = o.instrument_id
+    where o.user_id = #{userId}
+      and o.deleted = 0
+    <if test="orderType != null and orderType != ''">
+      and o.order_type = #{orderType}
+    </if>
+    order by o.create_time desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countByUser" resultType="long">
+    select count(1)
+    from biz_reservation_order o
+    where o.user_id = #{userId}
+      and o.deleted = 0
+    <if test="orderType != null and orderType != ''">
+      and o.order_type = #{orderType}
+    </if>
+  </select>
+
+  <select id="findPendingAuditExpired" resultType="com.unequipment.platform.modules.order.entity.ReservationOrder">
+    select o.*, u.real_name as user_name, i.instrument_name
+    from biz_reservation_order o
+    left join sys_user u on u.id = o.user_id
+    left join biz_instrument i on i.id = o.instrument_id
+    where o.deleted = 0
+      and o.order_status = 'PENDING_AUDIT'
+      and o.submit_time is not null
+      and o.submit_time &lt;= #{cutoffTime}
+    order by o.submit_time asc
+    limit #{limit}
+  </select>
+
+  <select id="countByInstrumentId" resultType="long">
+    select count(1) from biz_reservation_order where instrument_id = #{instrumentId} and deleted = 0
+  </select>
+
+  <select id="countDistinctUsersByInstrumentId" resultType="long">
+    select count(distinct user_id) from biz_reservation_order where instrument_id = #{instrumentId} and deleted = 0
+  </select>
+
+  <select id="countMachineConflict" resultType="int">
+    <!-- 冲突定义：同仪器 + MACHINE + 占用态(PENDING_AUDIT/WAITING_USE/IN_USE) + 时间段重叠 -->
+    select count(1) from biz_reservation_order
+    where instrument_id = #{instrumentId} and order_type = 'MACHINE' and deleted = 0
+    and order_status in ('PENDING_AUDIT', 'WAITING_USE', 'IN_USE')
+    and reserve_start &lt; #{reserveEnd} and reserve_end &gt; #{reserveStart}
+  </select>
+
+  <select id="countMachineConflictExcludeOrder" resultType="int">
+    <!-- 编辑/复核场景：在冲突判定中排除当前订单自身 -->
+    select count(1) from biz_reservation_order
+    where instrument_id = #{instrumentId} and order_type = 'MACHINE' and deleted = 0
+    and order_status in ('PENDING_AUDIT', 'WAITING_USE', 'IN_USE')
+    and reserve_start &lt; #{reserveEnd} and reserve_end &gt; #{reserveStart}
+    and id &lt;&gt; #{excludeOrderId}
+  </select>
+
+  <select id="findMachineReservedSlots" resultType="com.unequipment.platform.modules.order.entity.ReservationOrder">
+    select * from biz_reservation_order
+    where instrument_id = #{instrumentId} and order_type = 'MACHINE' and deleted = 0
+    and order_status in ('PENDING_AUDIT', 'WAITING_USE', 'IN_USE')
+    and reserve_start &lt; #{dayEnd} and reserve_end &gt; #{dayStart}
+    order by reserve_start asc
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_reservation_order(order_no, order_type, user_id, instrument_id, department_id, owner_user_id, contact_name, contact_phone, purpose, project_name, reserve_start, reserve_end, reserve_minutes, order_status, audit_status, pay_status, settlement_status, estimated_amount, final_amount, source, submit_time, approve_time, finish_time, cancel_reason, remark, create_time, update_time, deleted)
+    values(#{orderNo}, #{orderType}, #{userId}, #{instrumentId}, #{departmentId}, #{ownerUserId}, #{contactName}, #{contactPhone}, #{purpose}, #{projectName}, #{reserveStart}, #{reserveEnd}, #{reserveMinutes}, #{orderStatus}, #{auditStatus}, #{payStatus}, #{settlementStatus}, #{estimatedAmount}, #{finalAmount}, #{source}, #{submitTime}, #{approveTime}, #{finishTime}, #{cancelReason}, #{remark}, #{createTime}, #{updateTime}, #{deleted})
+  </insert>
+
+  <update id="update">
+    update biz_reservation_order
+    set order_status=#{orderStatus}, audit_status=#{auditStatus}, pay_status=#{payStatus}, settlement_status=#{settlementStatus}, final_amount=#{finalAmount}, approve_time=#{approveTime}, finish_time=#{finishTime}, cancel_reason=#{cancelReason}, remark=#{remark}, update_time=#{updateTime}
+    where id=#{id}
+  </update>
+
+  <update id="updateByIdAndStatus">
+    update biz_reservation_order
+    set order_status=#{order.orderStatus},
+        audit_status=#{order.auditStatus},
+        pay_status=#{order.payStatus},
+        settlement_status=#{order.settlementStatus},
+        final_amount=#{order.finalAmount},
+        approve_time=#{order.approveTime},
+        finish_time=#{order.finishTime},
+        cancel_reason=#{order.cancelReason},
+        remark=#{order.remark},
+        update_time=#{order.updateTime}
+    where id=#{order.id}
+      and deleted = 0
+      and order_status = #{expectedStatus}
+  </update>
+
+  <update id="markSettling">
+    update biz_reservation_order
+    set order_status='SETTLING', update_time=#{updateTime}
+    where id=#{id} and deleted=0 and order_status='WAITING_SETTLEMENT' and (pay_status is null or pay_status &lt;&gt; 'PAID')
+  </update>
+
+  <select id="tryAcquireNamedLock" resultType="int">
+    select get_lock(#{lockKey}, #{timeoutSeconds})
+  </select>
+
+  <select id="releaseNamedLock" resultType="int">
+    select release_lock(#{lockKey})
+  </select>
+
+  <select id="countByScopeAndCreateTime" resultType="long">
+    select count(1)
+    from biz_reservation_order o
+    where o.deleted = 0
+    <if test="startTime != null">
+      and o.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and o.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="countCompletedButUnsettledByScope" resultType="long">
+    select count(1)
+    from biz_reservation_order o
+    where o.deleted = 0
+      and o.order_status = 'COMPLETED'
+      and coalesce(o.settlement_status, '') not in ('CONFIRMED', 'REFUNDED')
+    <if test="startTime != null">
+      and o.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and o.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="countWaitingSettlementByScope" resultType="long">
+    select count(1)
+    from biz_reservation_order o
+    where o.deleted = 0
+      and o.order_status = 'WAITING_SETTLEMENT'
+    <if test="startTime != null">
+      and o.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and o.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="countConfirmedButUnpaidByScope" resultType="long">
+    select count(1)
+    from biz_reservation_order o
+    where o.deleted = 0
+      and o.settlement_status = 'CONFIRMED'
+      and coalesce(o.pay_status, '') &lt;&gt; 'PAID'
+    <if test="startTime != null">
+      and o.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and o.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="avgWaitingSettlementHoursByScope" resultType="java.math.BigDecimal">
+    select coalesce(avg(timestampdiff(minute, o.create_time, now()) / 60.0), 0)
+    from biz_reservation_order o
+    where o.deleted = 0
+      and o.order_status = 'WAITING_SETTLEMENT'
+    <if test="startTime != null">
+      and o.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and o.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <!--
+    财务异常明细统一口径：
+    通过 union all 汇总多类异常，再在外层分页与按类型过滤。
+  -->
+  <sql id="anomalyUnionSql">
+      select
+        'COMPLETED_UNSETTLED' as anomaly_type,
+        '已完成未结算' as anomaly_label,
+        o.id as order_id,
+        o.order_no as order_no,
+        s.id as settlement_id,
+        s.settlement_no as settlement_no,
+        o.user_id as user_id,
+        u.real_name as user_name,
+        '订单已完成但结算未确认' as detail,
+        o.create_time as create_time
+      from biz_reservation_order o
+      left join biz_settlement_record s on s.order_id = o.id
+      left join sys_user u on u.id = o.user_id
+      where o.deleted = 0
+        and o.order_status = 'COMPLETED'
+        and (s.id is null or s.settle_status = 'PENDING')
+      <if test="startTime != null">
+        and o.create_time &gt;= #{startTime}
+      </if>
+      <if test="endTime != null">
+        and o.create_time &lt;= #{endTime}
+      </if>
+      <if test="roleCode == 'DEPT_MANAGER'">
+        and o.department_id = #{scopeDepartmentId}
+      </if>
+      union all
+      select
+        'WAITING_SETTLEMENT' as anomaly_type,
+        '待结算滞留' as anomaly_label,
+        o.id as order_id,
+        o.order_no as order_no,
+        s.id as settlement_id,
+        s.settlement_no as settlement_no,
+        o.user_id as user_id,
+        u.real_name as user_name,
+        '订单长时间处于待结算状态' as detail,
+        o.create_time as create_time
+      from biz_reservation_order o
+      left join biz_settlement_record s on s.order_id = o.id
+      left join sys_user u on u.id = o.user_id
+      where o.deleted = 0
+        and o.order_status = 'WAITING_SETTLEMENT'
+      <if test="startTime != null">
+        and o.create_time &gt;= #{startTime}
+      </if>
+      <if test="endTime != null">
+        and o.create_time &lt;= #{endTime}
+      </if>
+      <if test="roleCode == 'DEPT_MANAGER'">
+        and o.department_id = #{scopeDepartmentId}
+      </if>
+      union all
+      select
+        'CONFIRMED_UNPAID' as anomaly_type,
+        '已结算未支付' as anomaly_label,
+        o.id as order_id,
+        o.order_no as order_no,
+        s.id as settlement_id,
+        s.settlement_no as settlement_no,
+        o.user_id as user_id,
+        u.real_name as user_name,
+        '结算已确认但订单支付状态不是已支付' as detail,
+        o.create_time as create_time
+      from biz_reservation_order o
+      inner join biz_settlement_record s on s.order_id = o.id and s.settle_status = 'CONFIRMED'
+      left join sys_user u on u.id = o.user_id
+      where o.deleted = 0
+        and coalesce(o.pay_status, '') &lt;&gt; 'PAID'
+      <if test="startTime != null">
+        and o.create_time &gt;= #{startTime}
+      </if>
+      <if test="endTime != null">
+        and o.create_time &lt;= #{endTime}
+      </if>
+      <if test="roleCode == 'DEPT_MANAGER'">
+        and o.department_id = #{scopeDepartmentId}
+      </if>
+      union all
+      select
+        'REFUNDED_UNMATCHED' as anomaly_type,
+        '已退款未冲正' as anomaly_label,
+        o.id as order_id,
+        o.order_no as order_no,
+        s.id as settlement_id,
+        s.settlement_no as settlement_no,
+        o.user_id as user_id,
+        u.real_name as user_name,
+        '订单支付已退款，但结算记录未标记为已退款' as detail,
+        o.create_time as create_time
+      from biz_reservation_order o
+      left join biz_settlement_record s on s.order_id = o.id
+      left join sys_user u on u.id = o.user_id
+      where o.deleted = 0
+        and o.pay_status = 'REFUNDED'
+        and (s.id is null or s.settle_status &lt;&gt; 'REFUNDED')
+      <if test="startTime != null">
+        and o.create_time &gt;= #{startTime}
+      </if>
+      <if test="endTime != null">
+        and o.create_time &lt;= #{endTime}
+      </if>
+      <if test="roleCode == 'DEPT_MANAGER'">
+        and o.department_id = #{scopeDepartmentId}
+      </if>
+  </sql>
+
+  <select id="findFinanceAnomalyPage" resultType="com.unequipment.platform.modules.finance.vo.FinanceAnomalyVO">
+    select *
+    from (
+      <include refid="anomalyUnionSql" />
+    ) anomaly
+    <if test="type != null and type != ''">
+      where upper(anomaly.anomaly_type) = upper(#{type})
+    </if>
+    order by anomaly.create_time desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countFinanceAnomaly" resultType="long">
+    select count(1)
+    from (
+      <include refid="anomalyUnionSql" />
+    ) anomaly
+    <if test="type != null and type != ''">
+      where upper(anomaly.anomaly_type) = upper(#{type})
+    </if>
+  </select>
+
+</mapper>
+

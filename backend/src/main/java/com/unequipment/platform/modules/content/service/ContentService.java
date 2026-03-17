@@ -28,6 +28,11 @@ public class ContentService {
         return noticeRepository.findAll();
     }
 
+    /**
+     * 公告分页统一入口：
+     * - 前台传 PUBLISHED，仅展示已发布
+     * - 管理端可传空或指定状态，查看全部生命周期内容
+     */
     public PageResponse<Notice> noticePage(String keyword, String publishStatus, int pageNum, int pageSize) {
         int safePageNum = normalizePageNum(pageNum);
         int safePageSize = normalizePageSize(pageSize);
@@ -44,6 +49,9 @@ public class ContentService {
         return noticeRepository.findById(id);
     }
 
+    /**
+     * 前台公告详情口径：必须是已发布状态。
+     */
     public Notice publishedNotice(Long id) {
         Notice notice = noticeRepository.findPublishedById(id);
         if (notice == null) {
@@ -56,6 +64,9 @@ public class ContentService {
         return helpDocRepository.findAll();
     }
 
+    /**
+     * 帮助文档分页统一入口，规则与公告保持一致。
+     */
     public PageResponse<HelpDoc> helpDocPage(String keyword, String publishStatus, int pageNum, int pageSize) {
         int safePageNum = normalizePageNum(pageNum);
         int safePageSize = normalizePageSize(pageSize);
@@ -72,6 +83,11 @@ public class ContentService {
         return Math.max(pageNum, 1);
     }
 
+    /**
+     * 分页大小兜底：
+     * - 非法值回落 10
+     * - 最大限制 100，避免一次请求拉取过大数据
+     */
     private int normalizePageSize(int pageSize) {
         if (pageSize <= 0) {
             return 10;
@@ -83,6 +99,9 @@ public class ContentService {
         return helpDocRepository.findById(id);
     }
 
+    /**
+     * 前台帮助文档详情口径：必须是已发布状态。
+     */
     public HelpDoc publishedHelpDoc(Long id) {
         HelpDoc helpDoc = helpDocRepository.findPublishedById(id);
         if (helpDoc == null) {
@@ -109,12 +128,18 @@ public class ContentService {
         operationLogService.save(operator, "CONTENT", "DELETE_HELP_DOC", "helpDocId:" + id);
     }
 
+    /**
+     * 公告保存（新增/编辑）：
+     * 默认发布策略为“立即发布”，便于管理端快速发文；
+     * 若前端显式传入发布状态与发布时间，则以传入值为准。
+     */
     @Transactional
     public Notice saveNotice(Long id, Notice request, SysUser user) {
         Notice notice = id == null ? new Notice() : noticeRepository.findById(id);
         if (notice == null) {
             notice = new Notice();
         }
+        // 公告默认发布策略：未传 publishStatus/publishTime 时按“立即发布 + 当前时间”处理。
         notice.setTitle(request.getTitle());
         notice.setCategory(request.getCategory() == null ? "NOTICE" : request.getCategory());
         notice.setSummary(request.getSummary());
@@ -138,12 +163,17 @@ public class ContentService {
         return notice;
     }
 
+    /**
+     * 帮助文档保存（新增/编辑）：
+     * 与公告共用同一发布口径，保持前后端行为一致。
+     */
     @Transactional
     public HelpDoc saveHelpDoc(Long id, HelpDoc request, SysUser user) {
         HelpDoc helpDoc = id == null ? new HelpDoc() : helpDocRepository.findById(id);
         if (helpDoc == null) {
             helpDoc = new HelpDoc();
         }
+        // 帮助文档与公告保持一致的发布口径，避免前后端默认值不一致。
         helpDoc.setTitle(request.getTitle());
         helpDoc.setDocType(request.getDocType() == null ? "HELP" : request.getDocType());
         helpDoc.setSummary(request.getSummary());

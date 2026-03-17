@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.instrument.repository.InstrumentClosePeriodRepository">
+
+  <select id="findByInstrumentId" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentClosePeriod">
+    <!-- 仪器关停区间：按关停开始时间倒序 -->
+    select * from biz_instrument_close_period where instrument_id = #{instrumentId} order by close_start desc
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_instrument_close_period(instrument_id, close_start, close_end, close_type, reason, create_time)
+    values(#{instrumentId}, #{closeStart}, #{closeEnd}, #{closeType}, #{reason}, #{createTime})
+  </insert>
+
+</mapper>

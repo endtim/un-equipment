@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.instrument.repository.InstrumentAttachmentRepository">
+
+  <select id="findAll" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentAttachment">
+    select * from biz_instrument_attachment where deleted = 0 order by instrument_id asc, sort_no asc, id asc
+  </select>
+
+  <select id="findAllByScope" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentAttachment">
+    select a.*
+    from biz_instrument_attachment a
+    inner join biz_instrument i on i.id = a.instrument_id and i.deleted = 0
+    where a.deleted = 0
+    <if test="roleCode == 'INSTRUMENT_OWNER'">
+      and i.owner_user_id = #{operatorId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and i.department_id = #{departmentId}
+    </if>
+    order by a.instrument_id asc, a.sort_no asc, a.id asc
+  </select>
+
+  <select id="findByInstrumentId" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentAttachment">
+    select * from biz_instrument_attachment
+    where instrument_id = #{instrumentId} and deleted = 0
+    order by sort_no asc, id asc
+  </select>
+
+  <select id="findPageByScope" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentAttachment">
+    <!-- 附件分页：按仪器管理角色范围过滤 -->
+    select a.*
+    from biz_instrument_attachment a
+    inner join biz_instrument i on i.id = a.instrument_id and i.deleted = 0
+    where a.deleted = 0
+    <if test="roleCode == 'INSTRUMENT_OWNER'">
+      and i.owner_user_id = #{operatorId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and i.department_id = #{departmentId}
+    </if>
+    order by a.instrument_id asc, a.sort_no asc, a.id asc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countByScope" resultType="long">
+    <!-- 与 findPageByScope 同口径 -->
+    select count(1)
+    from biz_instrument_attachment a
+    inner join biz_instrument i on i.id = a.instrument_id and i.deleted = 0
+    where a.deleted = 0
+    <if test="roleCode == 'INSTRUMENT_OWNER'">
+      and i.owner_user_id = #{operatorId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and i.department_id = #{departmentId}
+    </if>
+  </select>
+
+  <select id="findById" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentAttachment">
+    select * from biz_instrument_attachment where id = #{id} and deleted = 0
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_instrument_attachment(instrument_id, file_name, file_url, file_type, sort_no, create_time, deleted)
+    values(#{instrumentId}, #{fileName}, #{fileUrl}, #{fileType}, #{sortNo}, #{createTime}, #{deleted})
+  </insert>
+
+  <update id="update">
+    update biz_instrument_attachment
+    set instrument_id = #{instrumentId},
+        file_name = #{fileName},
+        file_url = #{fileUrl},
+        file_type = #{fileType},
+        sort_no = #{sortNo}
+    where id = #{id}
+  </update>
+
+  <update id="softDelete">
+    update biz_instrument_attachment set deleted = 1 where id = #{id}
+  </update>
+
+  <update id="softDeleteByInstrumentId">
+    update biz_instrument_attachment set deleted = 1 where instrument_id = #{instrumentId} and deleted = 0
+  </update>
+
+</mapper>

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.system.repository.SysRoleRepository">
+
+  <select id="findAll" resultType="com.unequipment.platform.modules.system.entity.SysRole">
+    select * from sys_role where deleted = 0 order by id asc
+  </select>
+
+  <select id="findAllNonAdmin" resultType="com.unequipment.platform.modules.system.entity.SysRole">
+    <!-- 部门管理员可见角色口径：排除 ADMIN -->
+    select * from sys_role where deleted = 0 and role_code &lt;&gt; 'ADMIN' order by id asc
+  </select>
+
+  <select id="findPage" resultType="com.unequipment.platform.modules.system.entity.SysRole">
+    select * from sys_role where deleted = 0 order by id asc limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPage" resultType="long">
+    select count(1) from sys_role where deleted = 0
+  </select>
+
+  <select id="findPageNonAdmin" resultType="com.unequipment.platform.modules.system.entity.SysRole">
+    <!-- 部门管理员角色分页口径：排除 ADMIN -->
+    select * from sys_role
+    where deleted = 0 and role_code &lt;&gt; 'ADMIN'
+    order by id asc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPageNonAdmin" resultType="long">
+    select count(1) from sys_role where deleted = 0 and role_code &lt;&gt; 'ADMIN'
+  </select>
+
+  <select id="findByRoleCode" resultType="com.unequipment.platform.modules.system.entity.SysRole">
+    select * from sys_role where role_code = #{roleCode} and deleted = 0 limit 1
+  </select>
+
+  <select id="findById" resultType="com.unequipment.platform.modules.system.entity.SysRole">
+    select * from sys_role where id = #{id} and deleted = 0
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into sys_role(role_name, role_code, status, remark, create_time, update_time, deleted)
+    values(#{roleName}, #{roleCode}, #{status}, #{remark}, #{createTime}, #{updateTime}, #{deleted})
+  </insert>
+
+  <update id="update">
+    update sys_role
+    set role_name = #{roleName},
+        role_code = #{roleCode},
+        status = #{status},
+        remark = #{remark},
+        update_time = #{updateTime}
+    where id = #{id}
+  </update>
+
+  <update id="softDelete">
+    update sys_role set deleted = 1, update_time = #{updateTime} where id = #{id}
+  </update>
+
+  <select id="countByRoleCodeExcludeId" resultType="int">
+    select count(1)
+    from sys_role
+    where role_code = #{roleCode}
+      and deleted = 0
+      and (#{excludeId} is null or id &lt;&gt; #{excludeId})
+  </select>
+
+</mapper>

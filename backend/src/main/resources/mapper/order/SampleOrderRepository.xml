@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.order.repository.SampleOrderRepository">
+
+  <select id="findByOrderId" resultType="com.unequipment.platform.modules.order.entity.SampleOrder">
+    <!-- 每个预约订单最多对应一条送样子单 -->
+    select * from biz_sample_order where order_id = #{orderId} limit 1
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_sample_order(
+      order_id, sample_name, sample_count, sample_type, sample_spec, test_requirement,
+      danger_flag, danger_desc, receive_status, received_time, receiver_user_id, testing_status,
+      result_summary, create_time, update_time
+    ) values (
+      #{orderId}, #{sampleName}, #{sampleCount}, #{sampleType}, #{sampleSpec}, #{testRequirement},
+      #{dangerFlag}, #{dangerDesc}, #{receiveStatus}, #{receivedTime}, #{receiverUserId}, #{testingStatus},
+      #{resultSummary}, #{createTime}, #{updateTime}
+    )
+  </insert>
+
+  <update id="update">
+    update biz_sample_order
+    set sample_name = #{sampleName},
+        sample_count = #{sampleCount},
+        sample_type = #{sampleType},
+        sample_spec = #{sampleSpec},
+        test_requirement = #{testRequirement},
+        danger_flag = #{dangerFlag},
+        danger_desc = #{dangerDesc},
+        receive_status = #{receiveStatus},
+        received_time = #{receivedTime},
+        receiver_user_id = #{receiverUserId},
+        testing_status = #{testingStatus},
+        result_summary = #{resultSummary},
+        update_time = #{updateTime}
+    where id = #{id}
+  </update>
+
+  <select id="sumSampleCountByInstrumentId" resultType="long">
+    select ifnull(sum(s.sample_count), 0)
+    from biz_sample_order s
+    join biz_reservation_order o on o.id = s.order_id
+    where o.instrument_id = #{instrumentId} and o.deleted = 0
+  </select>
+
+</mapper>

@@ -6,9 +6,17 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 @Mapper
+/**
+ * InstrumentOpenRuleRepository 数据访问接口。
+ * 负责对应模块的持久化读写，不承载业务决策。
+ */
 public interface InstrumentOpenRuleRepository {
 
     List<InstrumentOpenRule> findAll();
+
+    List<InstrumentOpenRule> findAllByScope(@Param("roleCode") String roleCode,
+                                            @Param("operatorId") Long operatorId,
+                                            @Param("scopeDepartmentId") Long scopeDepartmentId);
 
     List<InstrumentOpenRule> findPageByScope(@Param("instrumentId") Long instrumentId,
                                              @Param("weekDay") Integer weekDay,

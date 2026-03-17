@@ -1,15 +1,15 @@
 <template>
   <div class="account-page">
-    <div class="grid-3" style="margin-bottom: 18px;">
-      <div v-for="card in cards" :key="card.label" class="content-card" style="padding: 20px;">
-        <div style="color: var(--muted);">{{ card.label }}</div>
-        <div style="font-size: 32px; font-weight: 700; margin-top: 8px; color: var(--primary);">{{ card.value }}</div>
+    <div class="grid-3 account-cards">
+      <div v-for="card in cards" :key="card.label" class="content-card account-card">
+        <div class="account-card-label">{{ card.label }}</div>
+        <div class="account-card-value">{{ card.value }}</div>
       </div>
     </div>
 
-    <div v-if="isRechargePage" class="content-card" style="padding: 22px; margin-bottom: 18px;">
-      <div class="section-title" style="font-size: 22px;">充值申请</div>
-      <el-form :model="recharge" label-width="90px" style="max-width: 720px;">
+    <div v-if="isRechargePage" class="content-card recharge-form-card">
+      <div class="section-title account-title">充值申请</div>
+      <el-form :model="recharge" label-width="90px" class="recharge-form">
         <el-form-item label="充值金额">
           <el-input-number v-model="recharge.amount" :min="1" :step="100" style="width: 240px;" />
         </el-form-item>
@@ -29,16 +29,15 @@
 
     <div
       v-if="isAccountPage"
-      class="content-card"
-      style="padding: 18px 22px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center;"
+      class="content-card account-tip-card"
     >
-      <div style="color: #5f7897;">当前页展示资金明细与充值记录，充值操作请进入“充值申请”。</div>
+      <div class="account-tip-text">当前页展示资金明细与充值记录，充值操作请进入“充值申请”。</div>
       <el-button type="primary" plain @click="$router.push('/center/recharge')">去充值申请</el-button>
     </div>
 
-    <div class="grid-3">
-      <div class="content-card" style="padding: 24px; grid-column: span 2;">
-        <div class="section-title" style="font-size: 22px;">{{ isRechargePage ? '最近交易流水' : '交易流水' }}</div>
+    <div class="account-record-grid">
+      <div class="content-card account-record-card account-record-card--main">
+        <div class="section-title account-title">{{ isRechargePage ? '最近交易流水' : '交易流水' }}</div>
         <el-table :data="transactions" border>
           <el-table-column prop="txnType" label="交易类型" width="120">
             <template #default="{ row }">{{ txnTypeLabel(row.txnType) }}</template>
@@ -46,7 +45,9 @@
           <el-table-column prop="inoutType" label="收支方向" width="120">
             <template #default="{ row }">{{ inoutTypeLabel(row.inoutType) }}</template>
           </el-table-column>
-          <el-table-column prop="amount" label="金额" width="120" />
+          <el-table-column label="金额" width="120">
+            <template #default="{ row }">{{ formatAmount(row.amount) }}</template>
+          </el-table-column>
           <el-table-column prop="remark" label="备注" />
           <el-table-column prop="createTime" label="发生时间" width="180" :formatter="formatDateTimeCell" />
         </el-table>
@@ -62,11 +63,13 @@
         />
       </div>
 
-      <div class="content-card" style="padding: 24px;">
-        <div class="section-title" style="font-size: 22px;">{{ isRechargePage ? '充值进度' : '充值记录' }}</div>
+      <div class="content-card account-record-card account-record-card--side">
+        <div class="section-title account-title">{{ isRechargePage ? '充值进度' : '充值记录' }}</div>
         <el-table :data="recharges" border size="small">
           <el-table-column prop="rechargeNo" label="充值单号" />
-          <el-table-column prop="amount" label="金额" width="90" />
+          <el-table-column label="金额" width="90">
+            <template #default="{ row }">{{ formatAmount(row.amount) }}</template>
+          </el-table-column>
           <el-table-column prop="status" label="状态" width="120">
             <template #default="{ row }">
               <el-tag :type="rechargeTagType(row.status)" size="small">{{ rechargeStatusLabel(row.status) }}</el-tag>
@@ -77,8 +80,8 @@
         <el-pagination
           v-model:current-page="rechargeQuery.pageNum"
           v-model:page-size="rechargeQuery.pageSize"
-          class="pagination"
-          layout="total, sizes, prev, pager, next, jumper"
+          class="pagination pagination-compact"
+          layout="total, prev, pager, next"
           :page-sizes="[10, 20, 50]"
           :total="rechargeTotal"
           @current-change="loadRecharges"
@@ -137,13 +140,15 @@ export default {
     cards() {
       if (this.isRechargePage) {
         return [
-          { label: '当前可用余额', value: this.formatAmount(this.account.balance) },
+          { label: '当前可用余额', value: this.formatAmount(this.account.availableBalance) },
+          { label: '冻结金额', value: this.formatAmount(this.account.frozenAmount) },
           { label: '待处理充值单', value: String(this.account.pendingRechargeCount || 0) },
           { label: '累计充值', value: this.formatAmount(this.account.totalRecharge) }
         ]
       }
       return [
         { label: '当前余额', value: this.formatAmount(this.account.balance) },
+        { label: '当前可用余额', value: this.formatAmount(this.account.availableBalance) },
         { label: '累计充值', value: this.formatAmount(this.account.totalRecharge) },
         { label: '累计消费', value: this.formatAmount(this.account.totalConsume) }
       ]
@@ -207,8 +212,86 @@ export default {
 </script>
 
 <style scoped>
+.account-cards {
+  margin-bottom: 18px;
+}
+
+.account-card {
+  padding: 20px;
+}
+
+.account-card-label {
+  color: var(--muted);
+}
+
+.account-card-value {
+  font-size: 32px;
+  font-weight: 700;
+  margin-top: 8px;
+  color: var(--primary);
+}
+
+.recharge-form-card {
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.recharge-form {
+  max-width: 720px;
+}
+
+.account-tip-card {
+  padding: 18px 22px;
+  margin-bottom: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-tip-text {
+  color: #5f7897;
+}
+
+.account-record-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: 16px;
+}
+
+.account-record-card {
+  padding: 24px;
+  min-width: 0;
+}
+
+.account-title {
+  font-size: 22px;
+}
+
 .pagination {
   margin-top: 12px;
+}
+
+.pagination :deep(.el-pagination) {
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 1200px) {
+  .account-record-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pagination-compact :deep(.el-pagination) {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .account-tip-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>

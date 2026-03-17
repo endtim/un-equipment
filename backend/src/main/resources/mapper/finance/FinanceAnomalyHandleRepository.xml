@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.finance.repository.FinanceAnomalyHandleRepository">
+
+  <select id="findByTypeAndOrderId" resultType="com.unequipment.platform.modules.finance.entity.FinanceAnomalyHandle">
+    select h.*, u.real_name as handler_user_name
+    from biz_finance_anomaly_handle h
+    left join sys_user u on u.id = h.handler_user_id
+    where h.deleted = 0
+      and h.anomaly_type = #{anomalyType}
+      and h.order_id = #{orderId}
+    limit 1
+  </select>
+
+  <insert id="upsert">
+    insert into biz_finance_anomaly_handle(
+      anomaly_type, order_id, settlement_id, handle_status, handle_comment,
+      handler_user_id, handle_time, create_time, update_time, deleted
+    ) values (
+      #{anomalyType}, #{orderId}, #{settlementId}, #{handleStatus}, #{handleComment},
+      #{handlerUserId}, #{handleTime}, #{createTime}, #{updateTime}, 0
+    )
+    on duplicate key update
+      settlement_id = values(settlement_id),
+      handle_status = values(handle_status),
+      handle_comment = values(handle_comment),
+      handler_user_id = values(handler_user_id),
+      handle_time = values(handle_time),
+      update_time = values(update_time),
+      deleted = 0
+  </insert>
+
+</mapper>
+

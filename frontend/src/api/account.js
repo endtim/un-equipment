@@ -55,6 +55,14 @@ export function getReconciliationAnomalies(params) {
   })
 }
 
+export function handleReconciliationAnomaly(data) {
+  return request({
+    url: '/api/admin/finance/reconciliation/anomalies/handle',
+    method: 'post',
+    data
+  })
+}
+
 export function exportRechargeOrders(params) {
   return request({
     url: '/api/admin/finance/recharges/export',

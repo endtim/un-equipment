@@ -37,7 +37,7 @@
           end-placeholder="创建结束"
           value-format="YYYY-MM-DDTHH:mm:ss"
           style="width: 340px"
-          @change="onQueryChange"
+          @change="onCreateRangeChange"
         />
         <el-date-picker
           v-model="query.settledRange"
@@ -46,8 +46,14 @@
           end-placeholder="结算结束"
           value-format="YYYY-MM-DDTHH:mm:ss"
           style="width: 340px"
-          @change="onQueryChange"
+          @change="onSettledRangeChange"
         />
+        <el-button-group>
+          <el-button :type="quickRange === '7d' ? 'primary' : 'default'" @click="setQuickRange('7d')">近7天</el-button>
+          <el-button :type="quickRange === '30d' ? 'primary' : 'default'" @click="setQuickRange('30d')">近30天</el-button>
+          <el-button :type="quickRange === 'month' ? 'primary' : 'default'" @click="setQuickRange('month')">本月</el-button>
+          <el-button :type="quickRange === '' ? 'primary' : 'default'" @click="setQuickRange('')">清空快捷</el-button>
+        </el-button-group>
         <el-button type="primary" @click="onQueryChange">查询</el-button>
         <el-button @click="resetQuery">重置</el-button>
       </div>
@@ -58,7 +64,9 @@
         <el-table-column prop="userName" label="申请人" width="110" />
         <el-table-column prop="instrumentName" label="仪器名称" min-width="160" />
         <el-table-column prop="departmentName" label="申请部门" width="130" />
-        <el-table-column prop="finalAmount" label="金额" width="100" />
+        <el-table-column label="金额" width="110">
+          <template #default="{ row }">{{ num(row.finalAmount) }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="130">
           <template #default="{ row }">
             <el-tag :type="statusTag(row.settleStatus)">{{ statusLabel(row.settleStatus) }}</el-tag>
@@ -110,9 +118,26 @@
         <el-table-column prop="orderNo" label="订单号" width="180" />
         <el-table-column prop="settlementNo" label="结算单号" width="180" />
         <el-table-column prop="userName" label="用户" width="120" />
+        <el-table-column label="处理状态" width="120">
+          <template #default="{ row }">
+            <el-tag :type="anomalyHandleTag(row.handleStatus)">{{ anomalyHandleLabel(row.handleStatus) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="handlerUserName" label="处理人" width="100" />
+        <el-table-column label="处理时间" width="170">
+          <template #default="{ row }">{{ formatDateTime(row.handleTime) }}</template>
+        </el-table-column>
         <el-table-column prop="detail" label="说明" min-width="260" />
         <el-table-column prop="createTime" label="订单创建时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
+        </el-table-column>
+        <el-table-column label="处理" width="170">
+          <template #default="{ row }">
+            <div class="action-wrap">
+              <el-button link type="warning" @click="handleAnomaly(row, 'PROCESSING')">处理中</el-button>
+              <el-button link type="success" @click="handleAnomaly(row, 'RESOLVED')">已处理</el-button>
+            </div>
+          </template>
         </el-table-column>
       </el-table>
       <el-pagination
@@ -135,9 +160,9 @@
         <div><span class="k">仪器：</span>{{ detail.instrumentName }}</div>
         <div><span class="k">部门：</span>{{ detail.departmentName }}</div>
         <div><span class="k">账单类型：</span>{{ billTypeLabel(detail.billType) }}</div>
-        <div><span class="k">预估金额：</span>{{ detail.estimatedAmount }}</div>
-        <div><span class="k">优惠金额：</span>{{ detail.discountAmount }}</div>
-        <div><span class="k">最终金额：</span>{{ detail.finalAmount }}</div>
+        <div><span class="k">预估金额：</span>{{ num(detail.estimatedAmount) }}</div>
+        <div><span class="k">优惠金额：</span>{{ num(detail.discountAmount) }}</div>
+        <div><span class="k">最终金额：</span>{{ num(detail.finalAmount) }}</div>
         <div><span class="k">结算状态：</span>{{ statusLabel(detail.settleStatus) }}</div>
         <div><span class="k">订单状态：</span>{{ orderStatusLabel(detail.orderStatus) }}</div>
         <div><span class="k">支付状态：</span>{{ payStatusLabel(detail.payStatus) }}</div>
@@ -150,6 +175,7 @@
 </template>
 
 <script>
+import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAdminDepartments } from '../../../api/admin'
 import {
@@ -159,7 +185,7 @@ import {
   requestRefundAdminSettlement,
   settleAdminSettlement
 } from '../../../api/settlement'
-import { getReconciliationAnomalies, getReconciliationOverview } from '../../../api/account'
+import { getReconciliationAnomalies, getReconciliationOverview, handleReconciliationAnomaly } from '../../../api/account'
 import { formatDateTime } from '../../../utils/datetime'
 import {
   billTypeLabel as billTypeLabelDict,
@@ -196,6 +222,7 @@ export default {
       overview: {},
       anomalyList: [],
       anomalyTotal: 0,
+      quickRange: '',
       query: {
         keyword: '',
         status: '',
@@ -217,9 +244,20 @@ export default {
     dashboardCards() {
       return [
         { label: '充值金额', value: this.num(this.overview.rechargeAmount) },
+        { label: '充值通过率', value: `${this.num(this.overview.rechargePassRate)}%` },
         { label: '已结算金额', value: this.num(this.overview.settledAmount) },
         { label: '已退款金额', value: this.num(this.overview.refundedAmount) },
-        { label: '异常账数量', value: String((this.overview.completedButUnsettled || 0) + (this.overview.confirmedButUnpaidOrders || 0)) },
+        { label: '退款率', value: `${this.num(this.overview.refundRate)}%` },
+        { label: '平均结算时长(小时)', value: this.num(this.overview.avgSettleHours) },
+        { label: '待结算平均滞留(小时)', value: this.num(this.overview.avgWaitingSettlementHours) },
+        {
+          label: '异常账数量',
+          value: String(
+            (this.overview.completedButUnsettled || 0) +
+            (this.overview.waitingSettlementOrders || 0) +
+            (this.overview.confirmedButUnpaidOrders || 0)
+          )
+        },
         { label: '待结算订单', value: String(this.overview.waitingSettlementOrders || 0) },
         { label: '已结算未支付', value: String(this.overview.confirmedButUnpaidOrders || 0) }
       ]
@@ -244,6 +282,24 @@ export default {
     },
     statusTag(value) {
       return STATUS_TAG[value] || 'info'
+    },
+    anomalyHandleLabel(value) {
+      if (value === 'PROCESSING') {
+        return '处理中'
+      }
+      if (value === 'RESOLVED') {
+        return '已处理'
+      }
+      return '待处理'
+    },
+    anomalyHandleTag(value) {
+      if (value === 'PROCESSING') {
+        return 'warning'
+      }
+      if (value === 'RESOLVED') {
+        return 'success'
+      }
+      return 'info'
     },
     num(v) {
       const n = Number(v || 0)
@@ -290,12 +346,13 @@ export default {
     },
     async loadOverview() {
       await this.executeSafely(async () => {
-        this.overview = await getReconciliationOverview({})
+        this.overview = await getReconciliationOverview(this.buildReconciliationParams())
       })
     },
     async loadAnomalies() {
       await this.executeSafely(async () => {
         const page = await getReconciliationAnomalies({
+          ...this.buildReconciliationParams(),
           type: this.anomalyQuery.type || undefined,
           pageNum: this.anomalyQuery.pageNum,
           pageSize: this.anomalyQuery.pageSize
@@ -306,8 +363,18 @@ export default {
     },
     async onQueryChange() {
       this.query.pageNum = 1
+      this.anomalyQuery.pageNum = 1
       await this.load()
       await this.loadOverview()
+      await this.loadAnomalies()
+    },
+    async onCreateRangeChange() {
+      this.quickRange = ''
+      await this.onQueryChange()
+    },
+    async onSettledRangeChange() {
+      this.quickRange = ''
+      await this.onQueryChange()
     },
     async onSizeChange() {
       this.query.pageNum = 1
@@ -317,6 +384,39 @@ export default {
       this.anomalyQuery.pageNum = 1
       await this.loadAnomalies()
     },
+    buildReconciliationParams() {
+      const [createStart, createEnd] = this.query.createRange || []
+      const [settledStart, settledEnd] = this.query.settledRange || []
+      const startTime = createStart || settledStart
+      const endTime = createEnd || settledEnd
+      return {
+        startTime: startTime || undefined,
+        endTime: endTime || undefined
+      }
+    },
+    async setQuickRange(type) {
+      this.quickRange = type
+      if (!type) {
+        this.query.createRange = []
+      } else {
+        const now = dayjs()
+        let start = now.startOf('day')
+        let end = now.endOf('day')
+        if (type === '7d') {
+          start = now.subtract(6, 'day').startOf('day')
+        } else if (type === '30d') {
+          start = now.subtract(29, 'day').startOf('day')
+        } else if (type === 'month') {
+          start = now.startOf('month')
+        }
+        this.query.createRange = [
+          start.format('YYYY-MM-DDTHH:mm:ss'),
+          end.format('YYYY-MM-DDTHH:mm:ss')
+        ]
+      }
+      this.query.settledRange = []
+      await this.onQueryChange()
+    },
     async resetQuery() {
       this.query.keyword = ''
       this.query.status = ''
@@ -325,8 +425,11 @@ export default {
       this.query.createRange = []
       this.query.settledRange = []
       this.query.pageNum = 1
+      this.anomalyQuery.pageNum = 1
+      this.quickRange = ''
       await this.load()
       await this.loadOverview()
+      await this.loadAnomalies()
     },
     async showDetail(row) {
       await this.executeSafely(async () => {
@@ -381,6 +484,23 @@ export default {
         ElMessage.success('退款已完成')
         await this.load()
         await this.loadOverview()
+        await this.loadAnomalies()
+      })
+    },
+    async handleAnomaly(row, handleStatus) {
+      await this.executeSafely(async () => {
+        const { value } = await ElMessageBox.prompt('请输入处理备注（可选）', '更新异常账处理状态', {
+          confirmButtonText: '确认',
+          cancelButtonText: '取消'
+        })
+        await handleReconciliationAnomaly({
+          anomalyType: row.anomalyType,
+          orderId: row.orderId,
+          settlementId: row.settlementId,
+          handleStatus,
+          handleComment: String(value || '').trim()
+        })
+        ElMessage.success('异常账处理状态已更新')
         await this.loadAnomalies()
       })
     }

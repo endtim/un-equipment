@@ -29,6 +29,10 @@ public class OrderAdminController {
 
     private final OrderService orderService;
 
+    /**
+     * 管理端订单分页查询入口。
+     * 仅负责接收查询条件并转交 Service，状态流转与权限判定统一在 Service 层完成。
+     */
     @GetMapping
     public ApiResponse<PageResponse<OrderSummaryVO>> allOrders(@CurrentUser SysUser user,
                                                                @RequestParam(required = false) String orderType,
@@ -46,6 +50,9 @@ public class OrderAdminController {
             departmentId, auditorKeyword, minAmount, maxAmount, pageNum, pageSize));
     }
 
+    /**
+     * 订单审核动作入口（通过/拒绝）。
+     */
     @PostMapping("/{id}/audit")
     public ApiResponse<?> audit(@PathVariable Long id, @CurrentUser SysUser user, @Valid @RequestBody AuditRequest request) {
         return ApiResponse.success(orderService.audit(id, user, request));
@@ -66,11 +73,17 @@ public class OrderAdminController {
         return ApiResponse.success(orderService.finishMachine(id, user, request));
     }
 
+    /**
+     * 管理端执行结算入口。
+     */
     @PostMapping("/{id}/settle")
     public ApiResponse<?> settle(@PathVariable Long id, @CurrentUser SysUser user) {
         return ApiResponse.success(orderService.settle(id, user));
     }
 
+    /**
+     * 管理端关闭订单（非支付订单终止流程）。
+     */
     @PostMapping("/{id}/close")
     public ApiResponse<?> close(@PathVariable Long id, @CurrentUser SysUser user,
                                 @Valid @RequestBody OrderActionRequest request) {

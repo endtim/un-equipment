@@ -60,6 +60,19 @@
         <el-table-column prop="orderNo" label="订单编号" width="220" />
         <el-table-column prop="userName" label="申请人" width="130" />
         <el-table-column prop="instrumentName" label="仪器名称" min-width="170" />
+        <el-table-column label="预约时段" min-width="300">
+          <template #default="{ row }">
+            <span v-if="row.orderType === 'MACHINE'">
+              {{ formatRange(row.reservedStart, row.reservedEnd) }}
+            </span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="createdAt" label="提交时间" width="180">
+          <template #default="{ row }">
+            {{ formatDateTime(row.createdAt) }}
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="210">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
@@ -103,6 +116,7 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { orderStatusLabel as orderStatusLabelDict, orderStatusTagType as orderStatusTagTypeDict } from '../../../utils/dicts'
 import { getAdminDepartments } from '../../../api/admin'
+import { formatDateTime as formatDateTimeUtil } from '../../../utils/datetime'
 import {
   adjustAdminOrderAmount,
   auditOrder,
@@ -319,6 +333,17 @@ export default {
     },
     statusTagType(value) {
       return orderStatusTagTypeDict(value)
+    },
+    formatDateTime(value) {
+      return formatDateTimeUtil(value)
+    },
+    formatRange(start, end) {
+      const startText = this.formatDateTime(start)
+      const endText = this.formatDateTime(end)
+      if (startText === '-' && endText === '-') {
+        return '-'
+      }
+      return `${startText} ~ ${endText}`
     }
   }
 }

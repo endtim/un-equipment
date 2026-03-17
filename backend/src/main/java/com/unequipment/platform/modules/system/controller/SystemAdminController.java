@@ -28,6 +28,11 @@ public class SystemAdminController {
     private final SysRoleRepository roleRepository;
     private final SysDepartmentRepository departmentRepository;
 
+    /**
+     * 用户分页：
+     * - ADMIN：全量
+     * - DEPT_MANAGER：仅本部门
+     */
     @GetMapping("/users")
     public ApiResponse<PageResponse<SysUser>> users(
         @RequestParam(required = false) String keyword,
@@ -59,6 +64,11 @@ public class SystemAdminController {
         throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限操作");
     }
 
+    /**
+     * 角色全量列表（下拉专用）：
+     * - ADMIN：全部角色
+     * - DEPT_MANAGER：排除 ADMIN
+     */
     @GetMapping("/roles")
     public ApiResponse<List<SysRole>> roles(@CurrentUser SysUser currentUser) {
         // Full list endpoint: used by user/permission form dropdowns.
@@ -71,6 +81,9 @@ public class SystemAdminController {
         throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限操作");
     }
 
+    /**
+     * 角色分页列表，权限口径与 roles 接口一致。
+     */
     @GetMapping("/roles/page")
     public ApiResponse<PageResponse<SysRole>> rolePage(@CurrentUser SysUser currentUser,
                                                        @RequestParam(defaultValue = "1") int pageNum,
@@ -97,6 +110,11 @@ public class SystemAdminController {
         throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限操作");
     }
 
+    /**
+     * 部门全量列表（下拉专用）：
+     * - ADMIN：全部部门
+     * - DEPT_MANAGER：仅当前绑定部门
+     */
     @GetMapping("/departments")
     public ApiResponse<List<SysDepartment>> departments(@CurrentUser SysUser currentUser) {
         // Full list endpoint: used by user/order filter dropdowns.
@@ -115,6 +133,9 @@ public class SystemAdminController {
         throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限操作");
     }
 
+    /**
+     * 部门分页列表，权限口径与 departments 接口一致。
+     */
     @GetMapping("/departments/page")
     public ApiResponse<PageResponse<SysDepartment>> departmentPage(@CurrentUser SysUser currentUser,
                                                                    @RequestParam(defaultValue = "1") int pageNum,

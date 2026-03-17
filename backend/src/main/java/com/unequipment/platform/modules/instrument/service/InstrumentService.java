@@ -4,6 +4,7 @@ import com.unequipment.platform.common.api.PageResponse;
 import com.unequipment.platform.common.exception.BizException;
 import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.common.util.BizNoGenerator;
+import com.unequipment.platform.common.util.RoleAuthUtils;
 import com.unequipment.platform.modules.instrument.dto.InstrumentSaveRequest;
 import com.unequipment.platform.modules.instrument.dto.OpenRuleSaveRequest;
 import com.unequipment.platform.modules.instrument.entity.Instrument;
@@ -18,6 +19,7 @@ import com.unequipment.platform.modules.instrument.repository.InstrumentClosePer
 import com.unequipment.platform.modules.instrument.repository.InstrumentOpenRuleRepository;
 import com.unequipment.platform.modules.instrument.repository.InstrumentRepository;
 import com.unequipment.platform.modules.instrument.repository.MaintenanceRecordRepository;
+import com.unequipment.platform.modules.instrument.repository.TrainingQualificationRepository;
 import com.unequipment.platform.modules.log.service.OperationLogService;
 import com.unequipment.platform.modules.order.repository.ReservationOrderRepository;
 import com.unequipment.platform.modules.order.repository.SampleOrderRepository;
@@ -57,6 +59,7 @@ public class InstrumentService {
     private final InstrumentAttachmentRepository attachmentRepository;
     private final InstrumentClosePeriodRepository closePeriodRepository;
     private final MaintenanceRecordRepository maintenanceRecordRepository;
+    private final TrainingQualificationRepository trainingQualificationRepository;
     private final ReservationOrderRepository reservationOrderRepository;
     private final UsageRecordRepository usageRecordRepository;
     private final SampleOrderRepository sampleOrderRepository;
@@ -66,7 +69,7 @@ public class InstrumentService {
                                                   int pageNum, int pageSize, SysUser operator) {
         assertAdminOrInstrumentManager(operator);
         int offset = Math.max(pageNum - 1, 0) * pageSize;
-        String roleCode = operator == null ? "INTERNAL_USER" : defaultString(operator.getPrimaryRoleCode(), "INTERNAL_USER");
+        String roleCode = resolveManageRoleCode(operator);
         List<Instrument> scopedList;
         long total;
         if ("ADMIN".equalsIgnoreCase(roleCode)) {
@@ -164,7 +167,10 @@ public class InstrumentService {
         if (category == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "仪器分类不存在");
         }
-        if (id != null) {
+        if (id == null) {
+            // 仪器建档属于高风险操作，仅平台管理员可新增；负责人/部门管理员仅可维护已有归属仪器。
+            assertAdmin(operator);
+        } else {
             assertInstrumentManagePermission(instrument, operator);
         }
         instrument.setInstrumentNo(request.getCode() == null ? BizNoGenerator.next("INS") : request.getCode());
@@ -316,6 +322,9 @@ public class InstrumentService {
         if (reserveStart == null || reserveEnd == null || !reserveEnd.isAfter(reserveStart)) {
             throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "预约时间范围不合法");
         }
+        if (!reserveStart.isAfter(LocalDateTime.now())) {
+            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "预约开始时间必须晚于当前时间");
+        }
         if (!reserveStart.toLocalDate().equals(reserveEnd.toLocalDate())) {
             throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "暂不支持跨天预约");
         }
@@ -325,10 +334,10 @@ public class InstrumentService {
         Integer stepMinutes = defaultInt(instrument.getStepMinutes(), 30);
         validateReserveRuleConfig(minMinutes, maxMinutes, stepMinutes);
         if (reserveMinutes < minMinutes || reserveMinutes > maxMinutes) {
-            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "reserved duration exceeds limit");
+            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "预约时长超出允许范围");
         }
         if (reserveMinutes % stepMinutes != 0) {
-            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "reserved duration does not match step minutes");
+            throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "预约时长必须与时间步长对齐");
         }
 
         List<InstrumentOpenRule> rules = openRuleRepository.findByInstrumentId(instrument.getId()).stream()
@@ -358,7 +367,7 @@ public class InstrumentService {
     public Instrument getById(Long id) {
         Instrument instrument = instrumentRepository.findById(id);
         if (instrument == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "instrument not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "仪器不存在");
         }
         return instrument;
     }
@@ -370,7 +379,7 @@ public class InstrumentService {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "仪器分类不存在");
         }
         if (instrumentRepository.countByCategoryId(id) > 0) {
-            throw new BizException(ErrorCodes.BIZ_ERROR, "category is referenced by instruments");
+            throw new BizException(ErrorCodes.BIZ_ERROR, "该分类下存在仪器，无法删除");
         }
         categoryRepository.softDelete(id, LocalDateTime.now());
         operationLogService.save(operator, "INSTRUMENT", "DELETE_CATEGORY", "categoryId:" + id);
@@ -380,11 +389,11 @@ public class InstrumentService {
     public void deleteInstrument(Long id, SysUser operator) {
         Instrument instrument = instrumentRepository.findById(id);
         if (instrument == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "instrument not found");
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "仪器不存在");
         }
         assertInstrumentManagePermission(instrument, operator);
         if (reservationOrderRepository.countByInstrumentId(id) > 0) {
-            throw new BizException(ErrorCodes.BIZ_ERROR, "instrument has reservation history and cannot be deleted");
+            throw new BizException(ErrorCodes.BIZ_ERROR, "仪器存在预约记录，不能删除");
         }
         LocalDateTime now = LocalDateTime.now();
         openRuleRepository.softDeleteByInstrumentId(id, now);
@@ -395,13 +404,8 @@ public class InstrumentService {
 
     public List<InstrumentOpenRule> allOpenRules(SysUser operator) {
         assertAdminOrInstrumentManager(operator);
-        if (hasRole(operator, "ADMIN")) {
-            return openRuleRepository.findAll();
-        }
-        Set<Long> scopedInstrumentIds = accessibleInstrumentIds(operator);
-        return openRuleRepository.findAll().stream()
-            .filter(rule -> rule.getInstrumentId() != null && scopedInstrumentIds.contains(rule.getInstrumentId()))
-            .collect(Collectors.toList());
+        String roleCode = resolveManageRoleCode(operator);
+        return openRuleRepository.findAllByScope(roleCode, operator.getId(), operator.getDepartmentId());
     }
 
     public PageResponse<InstrumentOpenRule> pageOpenRules(Long instrumentId, Integer weekDay, String status,
@@ -410,7 +414,7 @@ public class InstrumentService {
         int safePageNum = Math.max(pageNum, 1);
         int safePageSize = pageSize <= 0 ? 10 : Math.min(pageSize, 100);
         int offset = (safePageNum - 1) * safePageSize;
-        String roleCode = defaultString(operator.getPrimaryRoleCode(), "INTERNAL_USER").toUpperCase();
+        String roleCode = resolveManageRoleCode(operator);
         String normalizedStatus = status == null ? null : status.trim();
         List<InstrumentOpenRule> list = openRuleRepository.findPageByScope(
             instrumentId, weekDay, normalizedStatus, roleCode, operator.getId(), operator.getDepartmentId(), offset, safePageSize
@@ -423,13 +427,8 @@ public class InstrumentService {
 
     public List<InstrumentAttachment> allAttachments(SysUser operator) {
         assertAdminOrInstrumentManager(operator);
-        if (hasRole(operator, "ADMIN")) {
-            return attachmentRepository.findAll();
-        }
-        Set<Long> scopedInstrumentIds = accessibleInstrumentIds(operator);
-        return attachmentRepository.findAll().stream()
-            .filter(item -> item.getInstrumentId() != null && scopedInstrumentIds.contains(item.getInstrumentId()))
-            .collect(Collectors.toList());
+        String roleCode = resolveManageRoleCode(operator);
+        return attachmentRepository.findAllByScope(roleCode, operator.getId(), operator.getDepartmentId());
     }
 
     public PageResponse<InstrumentAttachment> pageAttachments(SysUser operator, int pageNum, int pageSize) {
@@ -437,7 +436,7 @@ public class InstrumentService {
         int safePageNum = Math.max(pageNum, 1);
         int safePageSize = pageSize <= 0 ? 10 : Math.min(pageSize, 100);
         int offset = (safePageNum - 1) * safePageSize;
-        String roleCode = defaultString(operator.getPrimaryRoleCode(), "INTERNAL_USER").toUpperCase();
+        String roleCode = resolveManageRoleCode(operator);
         Long departmentId = operator.getDepartmentId();
         List<InstrumentAttachment> list = attachmentRepository.findPageByScope(
             roleCode, operator.getId(), departmentId, offset, safePageSize
@@ -455,7 +454,7 @@ public class InstrumentService {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "附件不存在");
         }
         if (id != null && (attachment.getInstrumentId() == null || !attachment.getInstrumentId().equals(request.getInstrumentId()))) {
-            throw new BizException(ErrorCodes.INVALID_REQUEST, "instrumentId cannot be changed for existing attachment");
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "已有附件不允许修改所属仪器");
         }
         attachment.setInstrumentId(request.getInstrumentId());
         attachment.setFileName(request.getFileName());
@@ -615,10 +614,15 @@ public class InstrumentService {
     }
 
     private String validateBookingUnit(String bookingUnit) {
-        if (!BOOKING_UNIT_SET.contains(bookingUnit)) {
+        String normalized = bookingUnit == null ? null : bookingUnit.trim().toUpperCase();
+        // 兼容历史值：SAMPLE/PROJECT 统一归并为 ITEM。
+        if ("SAMPLE".equals(normalized) || "PROJECT".equals(normalized)) {
+            normalized = "ITEM";
+        }
+        if (!BOOKING_UNIT_SET.contains(normalized)) {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "预约计费单位不合法");
         }
-        return bookingUnit;
+        return normalized;
     }
 
     private Map<String, Object> buildMetrics(Long instrumentId) {
@@ -630,6 +634,14 @@ public class InstrumentService {
         return metrics;
     }
 
+    /**
+     * 运行状态判定优先级：
+     * 1) 关停区间（最高优先级）
+     * 2) 维护记录
+     * 3) 仪器主状态（非 NORMAL）
+     * 4) 开放开关（openStatus != 1）
+     * 仅当以上都未命中时，视为可预约。
+     */
     private Map<String, Object> buildRuntimeStatus(Instrument instrument) {
         Map<String, Object> runtime = new HashMap<>();
         LocalDateTime now = LocalDateTime.now();
@@ -681,6 +693,12 @@ public class InstrumentService {
         return runtime;
     }
 
+    /**
+     * 统一解析开放星期：
+     * - 兼容旧字段 weekDay（单天）与新字段 openDays（多天，逗号分隔）
+     * - 自动去重并保持输入顺序
+     * - 至少保留一个有效星期值
+     */
     private List<Integer> resolveWeekDays(OpenRuleSaveRequest request) {
         Set<Integer> weekDaySet = new java.util.LinkedHashSet<>();
         if (request.getWeekDay() != null) {
@@ -735,6 +753,12 @@ public class InstrumentService {
         throw new BizException(ErrorCodes.INVALID_REQUEST, "结束时间不能为空");
     }
 
+    /**
+     * 开放规则冲突校验：
+     * - 只与同仪器、启用状态的规则比较
+     * - 编辑场景排除当前规则自身
+     * - 必须同时满足“星期有交集 + 时间段重叠 + 生效日期重叠”才判定冲突
+     */
     private void assertOpenRuleNoOverlap(Long currentRuleId, Long instrumentId, List<Integer> weekDays,
                                          LocalTime startTime, LocalTime endTime,
                                          LocalDate effectiveStartDate, LocalDate effectiveEndDate) {
@@ -790,6 +814,12 @@ public class InstrumentService {
         return weekDays.stream().map(String::valueOf).collect(Collectors.joining(","));
     }
 
+    /**
+     * 生效日期重叠判定（闭区间）：
+     * - 空开始日期按最小值处理
+     * - 空结束日期按最大值处理
+     * 用于支持“长期有效”规则与普通规则的统一比较。
+     */
     private boolean isEffectiveDateOverlap(LocalDate start1, LocalDate end1, LocalDate start2, LocalDate end2) {
         LocalDate s1 = start1 == null ? LocalDate.of(1970, 1, 1) : start1;
         LocalDate e1 = end1 == null ? LocalDate.of(2999, 12, 31) : end1;
@@ -798,6 +828,12 @@ public class InstrumentService {
         return !e1.isBefore(s2) && !e2.isBefore(s1);
     }
 
+    /**
+     * 仪器管理权限校验：
+     * - ADMIN：全量可管
+     * - INSTRUMENT_OWNER：仅可管理本人负责仪器
+     * - DEPT_MANAGER：仅可管理本部门仪器
+     */
     private void assertInstrumentManagePermission(Instrument instrument, SysUser operator) {
         if (operator == null) {
             throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限执行该操作");
@@ -833,26 +869,20 @@ public class InstrumentService {
     }
 
     private boolean hasRole(SysUser user, String roleCode) {
-        return user != null && roleCode.equalsIgnoreCase(user.getPrimaryRoleCode());
+        return RoleAuthUtils.hasRole(user, roleCode);
     }
 
-    private Set<Long> accessibleInstrumentIds(SysUser operator) {
-        return instrumentRepository.findAll().stream()
-            .filter(item -> canAccessByRole(item, operator))
-            .map(Instrument::getId)
-            .collect(Collectors.toSet());
-    }
-
-    private boolean canAccessByRole(Instrument instrument, SysUser operator) {
+    private String resolveManageRoleCode(SysUser operator) {
         if (hasRole(operator, "ADMIN")) {
-            return true;
+            return "ADMIN";
         }
         if (hasRole(operator, "INSTRUMENT_OWNER")) {
-            return instrument.getOwnerUserId() != null && instrument.getOwnerUserId().equals(operator.getId());
+            return "INSTRUMENT_OWNER";
         }
         if (hasRole(operator, "DEPT_MANAGER")) {
-            return instrument.getDepartmentId() != null && instrument.getDepartmentId().equals(operator.getDepartmentId());
+            return "DEPT_MANAGER";
         }
-        return false;
+        return defaultString(operator == null ? null : operator.getPrimaryRoleCode(), "INTERNAL_USER").toUpperCase();
     }
+
 }

@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.finance.repository.RechargeOrderRepository">
+
+  <select id="findByUserId" resultType="com.unequipment.platform.modules.finance.entity.RechargeOrder">
+    select r.*, u.real_name as user_name, au.real_name as audit_user_name,
+           fu.real_name as first_audit_user_name, su.real_name as second_audit_user_name
+    from biz_recharge_order r
+    left join sys_user u on u.id = r.user_id
+    left join sys_user au on au.id = r.audit_user_id
+    left join sys_user fu on fu.id = r.first_audit_user_id
+    left join sys_user su on su.id = r.second_audit_user_id
+    where r.user_id = #{userId}
+    order by r.create_time desc
+  </select>
+
+  <select id="findPageByUserId" resultType="com.unequipment.platform.modules.finance.entity.RechargeOrder">
+    select r.*, u.real_name as user_name, au.real_name as audit_user_name,
+           fu.real_name as first_audit_user_name, su.real_name as second_audit_user_name
+    from biz_recharge_order r
+    left join sys_user u on u.id = r.user_id
+    left join sys_user au on au.id = r.audit_user_id
+    left join sys_user fu on fu.id = r.first_audit_user_id
+    left join sys_user su on su.id = r.second_audit_user_id
+    where r.user_id = #{userId}
+    order by r.create_time desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countByUserId" resultType="long">
+    select count(1)
+    from biz_recharge_order
+    where user_id = #{userId}
+  </select>
+
+  <select id="countByUserIdAndStatus" resultType="long">
+    select count(1)
+    from biz_recharge_order
+    where user_id = #{userId}
+      and status = #{status}
+  </select>
+
+  <select id="findPageByScope" resultType="com.unequipment.platform.modules.finance.entity.RechargeOrder">
+    <!-- 管理端充值分页：支持多维过滤并下推 DEPT_MANAGER 范围 -->
+    select r.*, u.real_name as user_name, au.real_name as audit_user_name,
+           fu.real_name as first_audit_user_name, su.real_name as second_audit_user_name
+    from biz_recharge_order r
+    left join sys_user u on u.id = r.user_id
+    left join sys_user au on au.id = r.audit_user_id
+    left join sys_user fu on fu.id = r.first_audit_user_id
+    left join sys_user su on su.id = r.second_audit_user_id
+    where 1 = 1
+    <if test="keyword != null and keyword != ''">
+      and (r.recharge_no like concat('%', #{keyword}, '%')
+      or u.real_name like concat('%', #{keyword}, '%')
+      or r.remark like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="status != null and status != ''">
+      and r.status = #{status}
+    </if>
+    <if test="userId != null">
+      and r.user_id = #{userId}
+    </if>
+    <if test="auditUserId != null">
+      and r.audit_user_id = #{auditUserId}
+    </if>
+    <if test="minAmount != null">
+      and r.amount &gt;= #{minAmount}
+    </if>
+    <if test="maxAmount != null">
+      and r.amount &lt;= #{maxAmount}
+    </if>
+    <if test="startTime != null">
+      and r.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and r.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and u.department_id = #{scopeDepartmentId}
+    </if>
+    order by r.create_time desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPageByScope" resultType="long">
+    <!-- 与 findPageByScope 同口径 -->
+    select count(1)
+    from biz_recharge_order r
+    left join sys_user u on u.id = r.user_id
+    where 1 = 1
+    <if test="keyword != null and keyword != ''">
+      and (r.recharge_no like concat('%', #{keyword}, '%')
+      or u.real_name like concat('%', #{keyword}, '%')
+      or r.remark like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="status != null and status != ''">
+      and r.status = #{status}
+    </if>
+    <if test="userId != null">
+      and r.user_id = #{userId}
+    </if>
+    <if test="auditUserId != null">
+      and r.audit_user_id = #{auditUserId}
+    </if>
+    <if test="minAmount != null">
+      and r.amount &gt;= #{minAmount}
+    </if>
+    <if test="maxAmount != null">
+      and r.amount &lt;= #{maxAmount}
+    </if>
+    <if test="startTime != null">
+      and r.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and r.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and u.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="findById" resultType="com.unequipment.platform.modules.finance.entity.RechargeOrder">
+    select r.*, u.real_name as user_name, au.real_name as audit_user_name,
+           fu.real_name as first_audit_user_name, su.real_name as second_audit_user_name
+    from biz_recharge_order r
+    left join sys_user u on u.id = r.user_id
+    left join sys_user au on au.id = r.audit_user_id
+    left join sys_user fu on fu.id = r.first_audit_user_id
+    left join sys_user su on su.id = r.second_audit_user_id
+    where r.id = #{id}
+    limit 1
+  </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_recharge_order(
+      recharge_no, user_id, amount, pay_method, voucher_url, status, remark,
+      audit_user_id, audit_time, review_status, first_audit_user_id, first_audit_time,
+      second_audit_user_id, second_audit_time, create_time, update_time
+    ) values (
+      #{rechargeNo}, #{userId}, #{amount}, #{payMethod}, #{voucherUrl}, #{status}, #{remark},
+      #{auditUserId}, #{auditTime}, #{reviewStatus}, #{firstAuditUserId}, #{firstAuditTime},
+      #{secondAuditUserId}, #{secondAuditTime}, #{createTime}, #{updateTime}
+    )
+  </insert>
+
+  <update id="update">
+    update biz_recharge_order
+    set status = #{status},
+        remark = #{remark},
+        audit_user_id = #{auditUserId},
+        audit_time = #{auditTime},
+        update_time = #{updateTime}
+    where id = #{id}
+  </update>
+
+  <update id="updateIfPending">
+    <!-- 审核幂等保护：仅 PENDING 状态可被更新 -->
+    update biz_recharge_order
+    set status = #{status},
+        remark = #{remark},
+        audit_user_id = #{auditUserId},
+        audit_time = #{auditTime},
+        update_time = #{updateTime}
+    where id = #{id} and status = 'PENDING'
+  </update>
+
+  <update id="updateFirstApproveIfPending">
+    update biz_recharge_order
+    set status = #{status},
+        review_status = #{reviewStatus},
+        first_audit_user_id = #{firstAuditUserId},
+        first_audit_time = #{firstAuditTime},
+        audit_user_id = #{auditUserId},
+        audit_time = #{auditTime},
+        update_time = #{updateTime}
+    where id = #{id} and status = 'PENDING'
+  </update>
+
+  <update id="updateSecondApproveIfReviewPending">
+    update biz_recharge_order
+    set status = #{status},
+        review_status = #{reviewStatus},
+        second_audit_user_id = #{secondAuditUserId},
+        second_audit_time = #{secondAuditTime},
+        audit_user_id = #{auditUserId},
+        audit_time = #{auditTime},
+        update_time = #{updateTime}
+    where id = #{id} and status = 'REVIEW_PENDING'
+  </update>
+
+  <update id="rejectIfPendingOrReviewPending">
+    update biz_recharge_order
+    set status = #{status},
+        review_status = #{reviewStatus},
+        remark = #{remark},
+        audit_user_id = #{auditUserId},
+        audit_time = #{auditTime},
+        update_time = #{updateTime}
+    where id = #{id}
+      and status in ('PENDING', 'REVIEW_PENDING')
+  </update>
+
+  <select id="countByScopeAndCreateTime" resultType="long">
+    select count(1)
+    from biz_recharge_order r
+    left join sys_user u on u.id = r.user_id
+    where 1 = 1
+    <if test="startTime != null">
+      and r.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and r.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and u.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="sumAmountByStatusAndScope" resultType="java.math.BigDecimal">
+    select coalesce(sum(r.amount), 0)
+    from biz_recharge_order r
+    left join sys_user u on u.id = r.user_id
+    where r.status = #{status}
+    <if test="startTime != null">
+      and r.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and r.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and u.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="countByStatusAndScope" resultType="long">
+    select count(1)
+    from biz_recharge_order r
+    left join sys_user u on u.id = r.user_id
+    where r.status = #{status}
+    <if test="startTime != null">
+      and r.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and r.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and u.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+</mapper>

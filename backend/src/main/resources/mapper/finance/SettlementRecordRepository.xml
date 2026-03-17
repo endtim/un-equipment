@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.finance.repository.SettlementRecordRepository">
+
+  <select id="findAll" resultType="com.unequipment.platform.modules.finance.entity.SettlementRecord">
+    select * from biz_settlement_record order by create_time desc
+  </select>
+
+  <select id="findByOrderId" resultType="com.unequipment.platform.modules.finance.entity.SettlementRecord">
+    <!-- 一单一结算记录主查询 -->
+    select * from biz_settlement_record where order_id = #{orderId} limit 1
+  </select>
+
+  <select id="findById" resultType="com.unequipment.platform.modules.finance.entity.SettlementRecord">
+    select * from biz_settlement_record where id = #{id} limit 1
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_settlement_record(
+      settlement_no, order_id, user_id, instrument_id, bill_type, price_desc,
+      estimated_amount, discount_amount, final_amount, settle_status, settled_time,
+      operator_user_id, create_time
+    ) values (
+      #{settlementNo}, #{orderId}, #{userId}, #{instrumentId}, #{billType}, #{priceDesc},
+      #{estimatedAmount}, #{discountAmount}, #{finalAmount}, #{settleStatus}, #{settledTime},
+      #{operatorUserId}, #{createTime}
+    )
+  </insert>
+
+  <update id="updatePendingByOrderId">
+    <!-- 待结算阶段刷新金额口径：仅允许更新 PENDING 记录 -->
+    update biz_settlement_record
+    set bill_type = #{billType},
+        price_desc = #{priceDesc},
+        estimated_amount = #{estimatedAmount},
+        discount_amount = #{discountAmount},
+        final_amount = #{finalAmount}
+    where order_id = #{orderId} and settle_status = 'PENDING'
+  </update>
+
+  <update id="confirmByOrderId">
+    <!-- 结算确认：PENDING -> CONFIRMED -->
+    update biz_settlement_record
+    set settle_status = 'CONFIRMED',
+        final_amount = #{finalAmount},
+        settled_time = #{settledTime},
+        operator_user_id = #{operatorUserId}
+    where order_id = #{orderId} and settle_status = 'PENDING'
+  </update>
+
+  <update id="updateStatusByOrderId">
+    update biz_settlement_record
+    set settle_status = #{settleStatus},
+        settled_time = #{settledTime},
+        operator_user_id = #{operatorUserId},
+        final_amount = #{finalAmount}
+    where order_id = #{orderId}
+  </update>
+
+  <update id="updateStatusByIdWhenCurrent">
+    <!-- 乐观锁状态推进：仅当前状态匹配时更新 -->
+    update biz_settlement_record
+    set settle_status = #{targetStatus},
+        operator_user_id = #{operatorUserId},
+        settled_time = #{settledTime}
+    where id = #{id} and settle_status = #{currentStatus}
+  </update>
+
+  <select id="findRefundingTimeout" resultType="com.unequipment.platform.modules.finance.entity.SettlementRecord">
+    select *
+    from biz_settlement_record
+    where settle_status = 'REFUNDING'
+      and settled_time is not null
+      and settled_time &lt;= #{beforeTime}
+    order by settled_time asc
+    limit #{limit}
+  </select>
+
+  <update id="updateStatusById">
+    update biz_settlement_record
+    set settle_status = #{targetStatus},
+        operator_user_id = #{operatorUserId},
+        settled_time = #{settledTime}
+    where id = #{id}
+  </update>
+
+  <select id="countByScopeAndCreateTime" resultType="long">
+    <!-- 结算单数量统计：支持时间范围与部门管理员范围 -->
+    select count(1)
+    from biz_settlement_record s
+    left join sys_user u on u.id = s.user_id
+    where 1 = 1
+    <if test="startTime != null">
+      and s.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and s.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and u.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="sumFinalAmountByStatusAndScope" resultType="java.math.BigDecimal">
+    <!-- 结算金额汇总：按 settle_status 口径聚合 -->
+    select coalesce(sum(s.final_amount), 0)
+    from biz_settlement_record s
+    left join sys_user u on u.id = s.user_id
+    where s.settle_status = #{settleStatus}
+    <if test="startTime != null">
+      and s.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and s.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and u.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="avgSettleHoursByScope" resultType="java.math.BigDecimal">
+    select coalesce(avg(timestampdiff(minute, s.create_time, s.settled_time) / 60.0), 0)
+    from biz_settlement_record s
+    left join sys_user u on u.id = s.user_id
+    where s.settled_time is not null
+      and s.settle_status in ('CONFIRMED', 'REFUNDED')
+    <if test="startTime != null">
+      and s.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and s.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and u.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+</mapper>

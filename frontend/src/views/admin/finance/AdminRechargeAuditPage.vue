@@ -13,6 +13,7 @@
         />
         <el-select v-model="query.status" clearable placeholder="全部状态" style="width: 150px" @change="onQueryChange">
           <el-option label="待审核" value="PENDING" />
+          <el-option label="待复核" value="REVIEW_PENDING" />
           <el-option label="已通过" value="PASS" />
           <el-option label="已驳回" value="REJECT" />
         </el-select>
@@ -36,18 +37,41 @@
         <el-table-column prop="rechargeNo" label="充值单号" width="200" />
         <el-table-column prop="userName" label="申请人" width="140" />
         <el-table-column prop="auditUserName" label="审核人" width="120" />
-        <el-table-column prop="amount" label="金额" width="120" />
+        <el-table-column label="金额" width="120">
+          <template #default="{ row }">{{ formatAmount(row.amount) }}</template>
+        </el-table-column>
         <el-table-column prop="createTime" label="申请时间" width="180" />
+        <el-table-column label="审核时间" width="180">
+          <template #default="{ row }">
+            {{ formatDateTime(row.auditTime) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="firstAuditUserName" label="初审人" width="110" />
+        <el-table-column label="初审时间" width="180">
+          <template #default="{ row }">{{ formatDateTime(row.firstAuditTime) }}</template>
+        </el-table-column>
+        <el-table-column prop="secondAuditUserName" label="复核人" width="110" />
+        <el-table-column label="复核时间" width="180">
+          <template #default="{ row }">{{ formatDateTime(row.secondAuditTime) }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" />
+        <el-table-column label="备注">
+          <template #default="{ row }">
+            <span :class="{ 'reject-remark': row.status === 'REJECT' }">{{ row.remark || '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="180">
           <template #default="{ row }">
             <div v-if="row.status === 'PENDING'" class="action-wrap">
               <el-button link type="primary" @click="audit(row, 'APPROVE')">通过</el-button>
+              <el-button link type="danger" @click="audit(row, 'REJECT')">驳回</el-button>
+            </div>
+            <div v-else-if="row.status === 'REVIEW_PENDING'" class="action-wrap">
+              <el-button link type="primary" @click="audit(row, 'APPROVE')">复核通过</el-button>
               <el-button link type="danger" @click="audit(row, 'REJECT')">驳回</el-button>
             </div>
             <span v-else class="handled-text">已处理</span>
@@ -72,6 +96,7 @@
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { auditRecharge, exportRechargeOrders, getRechargeOrdersPage } from '../../../api/account'
+import { formatDateTime as formatDateTimeUtil } from '../../../utils/datetime'
 import { rechargeStatusLabel, rechargeStatusTagType } from '../../../utils/dicts'
 
 export default {
@@ -161,14 +186,31 @@ export default {
         if (action === 'REJECT') {
           const { value } = await ElMessageBox.prompt('请输入驳回原因', '驳回充值申请', {
             confirmButtonText: '确认',
-            cancelButtonText: '取消'
+            cancelButtonText: '取消',
+            inputValidator: (v) => {
+              if (!String(v || '').trim()) {
+                return '驳回原因不能为空'
+              }
+              return true
+            }
           })
-          comment = value || ''
+          comment = String(value || '').trim()
         }
-        await auditRecharge(row.id, { action, comment })
-        ElMessage.success('充值审核已完成')
+        const result = await auditRecharge(row.id, { action, comment })
+        if (action === 'APPROVE' && result && result.status === 'REVIEW_PENDING') {
+          ElMessage.success('审核已通过，充值单已进入复核流程')
+        } else {
+          ElMessage.success('充值审核已完成')
+        }
         await this.load()
       })
+    },
+    formatDateTime(value) {
+      return formatDateTimeUtil(value)
+    },
+    formatAmount(value) {
+      const numberValue = Number(value || 0)
+      return numberValue.toFixed(2)
     },
     statusLabel(value) {
       return rechargeStatusLabel(value)
@@ -195,6 +237,11 @@ export default {
 
 .handled-text {
   color: var(--muted);
+}
+
+.reject-remark {
+  color: #d94f35;
+  font-weight: 500;
 }
 
 .pagination {

@@ -1,5 +1,6 @@
-﻿import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import store from '../store'
+import { getUserInfo } from '../api/auth'
 import HomeLayout from '../views/layout/HomeLayout.vue'
 import CenterLayout from '../views/layout/CenterLayout.vue'
 import AdminLayout from '../views/layout/AdminLayout.vue'
@@ -33,6 +34,7 @@ import AdminNoticesPage from '../views/admin/content/AdminNoticesPage.vue'
 import AdminHelpDocsPage from '../views/admin/content/AdminHelpDocsPage.vue'
 
 const ADMIN_CORE_ROLES = ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER']
+let loadingUserPromise = null
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -187,30 +189,59 @@ function resolveRequiredRoles(to) {
   return roles[roles.length - 1]
 }
 
-router.beforeEach((to, from, next) => {
+async function ensureUserLoaded() {
+  const token = store.state.token
+  if (!token || store.state.user) {
+    return true
+  }
+  if (!loadingUserPromise) {
+    loadingUserPromise = getUserInfo()
+      .then(user => {
+        store.commit('setAuth', {
+          token,
+          user
+        })
+        return true
+      })
+      .catch(() => {
+        store.commit('clearAuth')
+        return false
+      })
+      .finally(() => {
+        loadingUserPromise = null
+      })
+  }
+  return loadingUserPromise
+}
+
+router.beforeEach(async to => {
+  const loaded = await ensureUserLoaded()
+  if (!loaded) {
+    if (to.path === '/login') {
+      return true
+    }
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
+
   const user = store.state.user
   const token = store.state.token
   if (to.matched.some(record => record.meta.auth) && !token) {
-    next({ path: '/login', query: { redirect: to.fullPath } })
-    return
+    return { path: '/login', query: { redirect: to.fullPath } }
   }
   if (to.path === '/login' && token) {
-    next('/home')
-    return
+    return '/home'
   }
   if (to.matched.some(record => record.meta.admin) &&
     (!user || ['INTERNAL_USER', 'EXTERNAL_USER'].includes(user.roleCode))) {
-    next('/home')
-    return
+    return '/home'
   }
 
   const requiredRoles = resolveRequiredRoles(to)
   if (requiredRoles && (!user || !requiredRoles.includes(user.roleCode))) {
-    next('/home')
-    return
+    return '/home'
   }
 
-  next()
+  return true
 })
 
 export default router

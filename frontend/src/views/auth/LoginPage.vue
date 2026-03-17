@@ -11,7 +11,16 @@
 
     <div class="login-shell">
       <section class="login-brand">
-        <div class="brand-mark">校</div>
+        <div class="brand-mark">
+          <img
+            v-if="!logoLoadFailed"
+            :src="schoolLogoSrc"
+            alt="学校校徽"
+            class="brand-mark-logo"
+            @error="logoLoadFailed = true"
+          />
+          <div v-else class="brand-mark-fallback">校</div>
+        </div>
         <div class="brand-title">高校大型仪器共享平台</div>
         <div class="brand-subtitle">统一预约 | 审核流转 | 结算管理</div>
         <div class="brand-tips">
@@ -71,6 +80,7 @@ export default {
   name: 'LoginPage',
   data() {
     return {
+      logoLoadFailed: false,
       submitting: false,
       form: {
         username: '',
@@ -80,6 +90,11 @@ export default {
         username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
         password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
       }
+    }
+  },
+  computed: {
+    schoolLogoSrc() {
+      return `${process.env.BASE_URL || '/'}school-logo.png`
     }
   },
   methods: {
@@ -182,13 +197,32 @@ export default {
   width: 74px;
   height: 74px;
   border-radius: 50%;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #d2e1f4;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 18px rgba(11, 78, 162, 0.24);
+}
+
+.brand-mark-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+}
+
+.brand-mark-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 34px;
   font-weight: 700;
   color: #fff;
   background: linear-gradient(135deg, #1f5fae, #0b4ea2);
-  box-shadow: 0 8px 18px rgba(11, 78, 162, 0.24);
 }
 
 .brand-title {

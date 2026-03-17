@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.order.repository.UsageRecordRepository">
+
+  <select id="findByOrderId" resultType="com.unequipment.platform.modules.order.entity.UsageRecord">
+    <!-- 每个上机订单最多对应一条使用记录 -->
+    select * from biz_usage_record where order_id = #{orderId} limit 1
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_usage_record(
+      order_id, instrument_id, operator_user_id, checkin_time, start_time, end_time, actual_minutes,
+      abnormal_flag, abnormal_desc, owner_confirm_user_id, owner_confirm_time, create_time, update_time
+    ) values (
+      #{orderId}, #{instrumentId}, #{operatorUserId}, #{checkinTime}, #{startTime}, #{endTime}, #{actualMinutes},
+      #{abnormalFlag}, #{abnormalDesc}, #{ownerConfirmUserId}, #{ownerConfirmTime}, #{createTime}, #{updateTime}
+    )
+  </insert>
+
+  <update id="update">
+    update biz_usage_record
+    set checkin_time = #{checkinTime},
+        start_time = #{startTime},
+        end_time = #{endTime},
+        actual_minutes = #{actualMinutes},
+        abnormal_flag = #{abnormalFlag},
+        abnormal_desc = #{abnormalDesc},
+        owner_confirm_user_id = #{ownerConfirmUserId},
+        owner_confirm_time = #{ownerConfirmTime},
+        update_time = #{updateTime}
+    where id = #{id}
+  </update>
+
+  <select id="sumActualMinutesByInstrumentId" resultType="long">
+    select ifnull(sum(actual_minutes), 0) from biz_usage_record where instrument_id = #{instrumentId}
+  </select>
+
+</mapper>

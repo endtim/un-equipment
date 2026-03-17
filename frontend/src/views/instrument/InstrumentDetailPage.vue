@@ -35,12 +35,12 @@
           <div class="price-item">
             <span>校内价格</span>
             <strong>{{ formatAmount(detail.priceInternal ?? detail.machinePricePerHour) }}</strong>
-            <em>元/{{ detail.bookingUnit === 'HOUR' ? '小时' : '单位' }}</em>
+            <em>元/{{ bookingUnitText }}</em>
           </div>
           <div class="price-item">
             <span>校外价格</span>
             <strong>{{ formatAmount(detail.priceExternal ?? detail.samplePricePerItem) }}</strong>
-            <em>元/{{ detail.bookingUnit === 'HOUR' ? '小时' : '单位' }}</em>
+            <em>元/{{ bookingUnitText }}</em>
           </div>
         </div>
         <div class="hero-actions">
@@ -64,7 +64,7 @@
             <el-descriptions-item label="负责人">{{ detail.ownerUserName || '-' }}</el-descriptions-item>
             <el-descriptions-item label="放置地点">{{ detail.location || '-' }}</el-descriptions-item>
             <el-descriptions-item label="品牌型号">{{ detail.brand || '-' }} {{ detail.model || '' }}</el-descriptions-item>
-            <el-descriptions-item label="预约单位">{{ detail.bookingUnit || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="预约单位">{{ bookingUnitText }}</el-descriptions-item>
             <el-descriptions-item label="资产编号">{{ detail.assetNo || '-' }}</el-descriptions-item>
             <el-descriptions-item label="生产厂家">{{ detail.manufacturer || '-' }}</el-descriptions-item>
             <el-descriptions-item label="供应商">{{ detail.supplier || '-' }}</el-descriptions-item>
@@ -248,7 +248,7 @@
 import dayjs from 'dayjs'
 import { getInstrumentDetail, getInstrumentReservedSlots } from '../../api/instrument'
 import { createMachineReservation, createSampleReservation } from '../../api/order'
-import { openModeLabel } from '../../utils/dicts'
+import { bookingUnitLabel, openModeLabel, orderStatusLabel } from '../../utils/dicts'
 import { formatDateTime as formatDateTimeUtil } from '../../utils/datetime'
 
 export default {
@@ -307,6 +307,9 @@ export default {
         return ''
       }
       return this.detail?.runtimeStatus?.reason || '当前仪器处于停用、维护或未开放状态，暂不可预约。'
+    },
+    bookingUnitText() {
+      return bookingUnitLabel(this.detail?.bookingUnit)
     }
   },
   watch: {
@@ -353,13 +356,34 @@ export default {
       const endAt = this.resolveDateTime(item.reservedEnd, item.endTime)
       const startText = startAt ? dayjs(startAt).format('HH:mm') : ''
       const endText = endAt ? dayjs(endAt).format('HH:mm') : ''
+      const statusLabel = this.normalizeSlotStatusLabel(item.status, item.statusLabel)
       return {
         ...item,
         startAt,
         endAt,
         text: item.text || `${startText} - ${endText} 已占用`,
-        statusLabel: item.statusLabel || '已占用'
+        statusLabel
       }
+    },
+    normalizeSlotStatusLabel(status, rawLabel) {
+      if (status) {
+        const labelByStatus = orderStatusLabel(status)
+        if (labelByStatus && labelByStatus !== status) {
+          return labelByStatus
+        }
+      }
+      const mapping = {
+        'Pending Audit': '待审核',
+        'Waiting Use': '待使用',
+        'Waiting Receive': '待接样',
+        'In Use': '使用中',
+        'Waiting Settlement': '待结算',
+        Reserved: '已占用'
+      }
+      if (rawLabel && mapping[rawLabel]) {
+        return mapping[rawLabel]
+      }
+      return rawLabel || '已占用'
     },
     resolveDateTime(dateTimeValue, timeValue) {
       if (dateTimeValue) {

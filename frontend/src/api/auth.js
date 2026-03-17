@@ -15,3 +15,10 @@ export function register(data) {
     data
   })
 }
+
+export function getUserInfo() {
+  return request({
+    url: '/api/auth/info',
+    method: 'get'
+  })
+}

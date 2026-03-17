@@ -22,6 +22,9 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 @RequiredArgsConstructor
 public class OperationLogService {
 
+    /**
+     * 从 detail 文本提取业务主键（orderId/rechargeId/...），用于日志检索与关联追踪。
+     */
     private static final Pattern BIZ_ID_PATTERN = Pattern.compile(
         "(?i)(?:bizId|orderId|rechargeId|ruleId|categoryId|instrumentId|attachmentId|helpDocId|noticeId|userId|roleId|departmentId)\\s*[:=]\\s*(\\d+)");
     private static final Map<String, String> MODULE_LABELS = new HashMap<>();
@@ -83,6 +86,10 @@ public class OperationLogService {
         ACTION_LABELS.put("DELETE_HELP_DOC", "删除帮助文档");
     }
 
+    /**
+     * 统一日志落库入口：
+     * 自动补齐请求方法、URI、来源 IP、结果状态与业务主键。
+     */
     public void save(SysUser user, String module, String action, String detail) {
         HttpServletRequest request = currentRequest();
 
@@ -100,6 +107,9 @@ public class OperationLogService {
         operationLogRepository.insert(log);
     }
 
+    /**
+     * 日志分页查询并映射展示文案（模块名/动作名）。
+     */
     public PageResponse<OperationLogVO> page(String moduleName, String keyword, int pageNum, int pageSize) {
         int offset = Math.max(pageNum - 1, 0) * pageSize;
         List<OperationLogVO> list = operationLogRepository.findPage(moduleName, keyword, offset, pageSize)
@@ -144,6 +154,10 @@ public class OperationLogService {
         return request.getRemoteAddr();
     }
 
+    /**
+     * detail 解析业务 ID：
+     * 支持“key:value”与“key=value”两种格式。
+     */
     private Long resolveBizId(String detail) {
         if (detail == null || detail.trim().isEmpty()) {
             return null;

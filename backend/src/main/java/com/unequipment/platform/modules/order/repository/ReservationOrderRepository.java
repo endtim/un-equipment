@@ -9,6 +9,10 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 @Mapper
+/**
+ * ReservationOrderRepository 数据访问接口。
+ * 负责对应模块的持久化读写，不承载业务决策。
+ */
 public interface ReservationOrderRepository {
 
     ReservationOrder findById(@Param("id") Long id);
@@ -58,6 +62,9 @@ public interface ReservationOrderRepository {
     long countByUser(@Param("userId") Long userId,
                      @Param("orderType") String orderType);
 
+    List<ReservationOrder> findPendingAuditExpired(@Param("cutoffTime") LocalDateTime cutoffTime,
+                                                   @Param("limit") int limit);
+
     long countByInstrumentId(@Param("instrumentId") Long instrumentId);
 
     long countDistinctUsersByInstrumentId(@Param("instrumentId") Long instrumentId);
@@ -79,7 +86,15 @@ public interface ReservationOrderRepository {
 
     int update(ReservationOrder order);
 
+    int updateByIdAndStatus(@Param("order") ReservationOrder order,
+                            @Param("expectedStatus") String expectedStatus);
+
     int markSettling(@Param("id") Long id, @Param("updateTime") LocalDateTime updateTime);
+
+    Integer tryAcquireNamedLock(@Param("lockKey") String lockKey,
+                                @Param("timeoutSeconds") int timeoutSeconds);
+
+    Integer releaseNamedLock(@Param("lockKey") String lockKey);
 
     long countByScopeAndCreateTime(@Param("startTime") LocalDateTime startTime,
                                    @Param("endTime") LocalDateTime endTime,
@@ -100,6 +115,11 @@ public interface ReservationOrderRepository {
                                         @Param("endTime") LocalDateTime endTime,
                                         @Param("roleCode") String roleCode,
                                         @Param("scopeDepartmentId") Long scopeDepartmentId);
+
+    BigDecimal avgWaitingSettlementHoursByScope(@Param("startTime") LocalDateTime startTime,
+                                                @Param("endTime") LocalDateTime endTime,
+                                                @Param("roleCode") String roleCode,
+                                                @Param("scopeDepartmentId") Long scopeDepartmentId);
 
     List<FinanceAnomalyVO> findFinanceAnomalyPage(@Param("type") String type,
                                                   @Param("startTime") LocalDateTime startTime,

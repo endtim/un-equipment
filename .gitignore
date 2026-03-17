@@ -35,6 +35,27 @@ backend/target/
 *.pid
 *.seed
 *.tmp
+*.class
 
 # Local secret config
 backend/src/main/resources/application-local.yml
+
+# Local Maven user settings
+settings.xml
+
+# Test artifacts
+frontend/playwright-report/
+frontend/test-results/
+
+# Local script build outputs
+scripts/.build-*/
+
+# Docx extracted/temp artifacts
+docs/_tmp_review/
+docs/_tmp_review.zip
+docs/_tmp_funding_text.txt
+docs/_rels/
+docs/customXml/
+docs/docProps/
+docs/word/
+docs/[Content_Types].xml

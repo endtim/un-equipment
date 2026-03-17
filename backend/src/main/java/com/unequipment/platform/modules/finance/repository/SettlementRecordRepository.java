@@ -8,6 +8,10 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 @Mapper
+/**
+ * SettlementRecordRepository 数据访问接口。
+ * 负责对应模块的持久化读写，不承载业务决策。
+ */
 public interface SettlementRecordRepository {
 
     List<SettlementRecord> findAll();
@@ -42,6 +46,14 @@ public interface SettlementRecordRepository {
                                     @Param("operatorUserId") Long operatorUserId,
                                     @Param("settledTime") LocalDateTime settledTime);
 
+    List<SettlementRecord> findRefundingTimeout(@Param("beforeTime") LocalDateTime beforeTime,
+                                                @Param("limit") int limit);
+
+    int updateStatusById(@Param("id") Long id,
+                         @Param("targetStatus") String targetStatus,
+                         @Param("operatorUserId") Long operatorUserId,
+                         @Param("settledTime") LocalDateTime settledTime);
+
     long countByScopeAndCreateTime(@Param("startTime") LocalDateTime startTime,
                                    @Param("endTime") LocalDateTime endTime,
                                    @Param("roleCode") String roleCode,
@@ -52,4 +64,9 @@ public interface SettlementRecordRepository {
                                               @Param("endTime") LocalDateTime endTime,
                                               @Param("roleCode") String roleCode,
                                               @Param("scopeDepartmentId") Long scopeDepartmentId);
+
+    BigDecimal avgSettleHoursByScope(@Param("startTime") LocalDateTime startTime,
+                                     @Param("endTime") LocalDateTime endTime,
+                                     @Param("roleCode") String roleCode,
+                                     @Param("scopeDepartmentId") Long scopeDepartmentId);
 }

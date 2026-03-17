@@ -24,11 +24,17 @@ public class AccountController {
 
     private final FinanceService financeService;
 
+    /**
+     * 当前用户资金账户概览。
+     */
     @GetMapping("/account/me")
     public ApiResponse<?> me(@CurrentUser SysUser user) {
         return ApiResponse.success(financeService.accountInfo(user));
     }
 
+    /**
+     * 当前用户资金流水分页。
+     */
     @GetMapping("/account/transactions")
     public ApiResponse<PageResponse<TransactionRecord>> transactions(
         @CurrentUser SysUser user,
@@ -37,6 +43,9 @@ public class AccountController {
         return ApiResponse.success(financeService.pageMyTransactions(user, pageNum, pageSize));
     }
 
+    /**
+     * 当前用户充值记录分页。
+     */
     @GetMapping("/account/recharges")
     public ApiResponse<PageResponse<RechargeOrder>> recharges(
         @CurrentUser SysUser user,
@@ -45,6 +54,9 @@ public class AccountController {
         return ApiResponse.success(financeService.pageMyRecharges(user, pageNum, pageSize));
     }
 
+    /**
+     * 提交充值申请（待财务审核）。
+     */
     @PostMapping("/recharges")
     public ApiResponse<?> submitRecharge(@CurrentUser SysUser user, @Valid @RequestBody RechargeRequest request) {
         return ApiResponse.success(financeService.submitRecharge(user, request));

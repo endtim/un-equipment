@@ -2,6 +2,7 @@ package com.unequipment.platform.modules.finance.controller;
 
 import com.unequipment.platform.common.api.ApiResponse;
 import com.unequipment.platform.common.api.PageResponse;
+import com.unequipment.platform.modules.finance.dto.FinanceAnomalyHandleRequest;
 import com.unequipment.platform.modules.finance.dto.RechargeAuditRequest;
 import com.unequipment.platform.modules.finance.entity.RechargeOrder;
 import com.unequipment.platform.modules.finance.vo.FinanceAnomalyVO;
@@ -32,6 +33,10 @@ public class FinanceAdminController {
 
     private final FinanceService financeService;
 
+    /**
+     * 充值审核单分页查询。
+     * 角色范围与过滤条件由后端统一处理，前端不再做权限筛选。
+     */
     @GetMapping("/recharges/page")
     public ApiResponse<PageResponse<RechargeOrder>> rechargePage(
         @CurrentUser SysUser user,
@@ -50,6 +55,10 @@ public class FinanceAdminController {
         ));
     }
 
+    /**
+     * 充值审核单导出（CSV）。
+     * 导出口径与分页查询保持一致，避免“看得到导不出/导出范围不一致”。
+     */
     @GetMapping(value = "/recharges/export", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<String> exportRechargeCsv(
         @CurrentUser SysUser user,
@@ -70,6 +79,9 @@ public class FinanceAdminController {
             .body(csv);
     }
 
+    /**
+     * 对账总览：返回充值、结算、退款与异常类汇总指标。
+     */
     @GetMapping("/reconciliation/overview")
     public ApiResponse<Map<String, Object>> reconciliationOverview(
         @CurrentUser SysUser user,
@@ -78,6 +90,9 @@ public class FinanceAdminController {
         return ApiResponse.success(financeService.reconciliationOverview(user, startTime, endTime));
     }
 
+    /**
+     * 对账异常分页：按异常类型与时间窗口查询。
+     */
     @GetMapping("/reconciliation/anomalies")
     public ApiResponse<PageResponse<FinanceAnomalyVO>> reconciliationAnomalies(
         @CurrentUser SysUser user,
@@ -95,5 +110,12 @@ public class FinanceAdminController {
     public ApiResponse<?> audit(@PathVariable Long id, @Valid @RequestBody RechargeAuditRequest request,
                                 @CurrentUser SysUser user) {
         return ApiResponse.success(financeService.auditRecharge(id, request, user));
+    }
+
+    @PostMapping("/reconciliation/anomalies/handle")
+    public ApiResponse<?> handleAnomaly(@CurrentUser SysUser user,
+                                        @Valid @RequestBody FinanceAnomalyHandleRequest request) {
+        financeService.handleReconciliationAnomaly(user, request);
+        return ApiResponse.success(null);
     }
 }

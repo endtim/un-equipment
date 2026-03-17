@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.stat.repository.DailySnapshotRepository">
+
+  <select id="findAll" resultType="com.unequipment.platform.modules.stat.entity.DailySnapshot">
+    select * from stat_daily_snapshot order by stat_date desc
+  </select>
+
+  <select id="findLatestLimit" resultType="com.unequipment.platform.modules.stat.entity.DailySnapshot">
+    <!-- 读取最近 N 天快照，供“无时间筛选”趋势优先使用 -->
+    select *
+    from stat_daily_snapshot
+    order by stat_date desc
+    limit #{limit}
+  </select>
+
+  <select id="findByDateRange" resultType="com.unequipment.platform.modules.stat.entity.DailySnapshot">
+    <!-- 按日期区间查询快照（闭区间） -->
+    select *
+    from stat_daily_snapshot
+    where stat_date >= #{startDate}
+      and stat_date &lt;= #{endDate}
+    order by stat_date asc
+  </select>
+
+</mapper>

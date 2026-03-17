@@ -93,7 +93,7 @@ public class InstrumentSaveRequest {
     @Min(value = 0, message = "是否需要培训必须为0或1")
     @Max(value = 1, message = "是否需要培训必须为0或1")
     private Integer requireTraining;
-    @Pattern(regexp = "^(HOUR|SAMPLE|PROJECT)?$", message = "计费单位取值不合法")
+    @Pattern(regexp = "^(HOUR|ITEM|SAMPLE|PROJECT)?$", message = "计费单位取值不合法")
     private String bookingUnit;
     @Min(value = 1, message = "最小预约时长必须大于等于1")
     private Integer minReserveMinutes;

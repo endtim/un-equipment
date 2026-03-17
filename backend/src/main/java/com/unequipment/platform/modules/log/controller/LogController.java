@@ -17,6 +17,10 @@ public class LogController {
 
     private final OperationLogService operationLogService;
 
+    /**
+     * 操作日志分页查询：
+     * 支持按模块和关键字检索，关键字匹配动作名与请求地址。
+     */
     @GetMapping
     public ApiResponse<PageResponse<OperationLogVO>> logs(
         @RequestParam(required = false) String moduleName,

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.log.repository.OperationLogRepository">
+
+  <select id="findAll" resultType="com.unequipment.platform.modules.log.entity.OperationLog">
+    select l.*, u.real_name as operator_name
+    from sys_operation_log l
+    left join sys_user u on u.id = l.user_id
+    order by l.create_time desc, l.id desc
+  </select>
+
+  <select id="findPage" resultType="com.unequipment.platform.modules.log.entity.OperationLog">
+    <!-- 操作日志分页：支持模块精确过滤 + 关键字模糊过滤 -->
+    select l.*, u.real_name as operator_name
+    from sys_operation_log l
+    left join sys_user u on u.id = l.user_id
+    where 1 = 1
+    <if test="moduleName != null and moduleName != ''">
+      and l.module_name = #{moduleName}
+    </if>
+    <if test="keyword != null and keyword != ''">
+      and (l.action_name like concat('%', #{keyword}, '%')
+      or l.request_uri like concat('%', #{keyword}, '%'))
+    </if>
+    order by l.create_time desc, l.id desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPage" resultType="long">
+    <!-- 与 findPage 保持同口径过滤 -->
+    select count(1) from sys_operation_log l
+    where 1 = 1
+    <if test="moduleName != null and moduleName != ''">
+      and l.module_name = #{moduleName}
+    </if>
+    <if test="keyword != null and keyword != ''">
+      and (l.action_name like concat('%', #{keyword}, '%')
+      or l.request_uri like concat('%', #{keyword}, '%'))
+    </if>
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    <!-- 统一操作日志落库 -->
+    insert into sys_operation_log(
+      user_id, module_name, action_name, request_method, request_uri, request_ip, result_code, result_msg, biz_id, create_time
+    ) values (
+      #{userId}, #{moduleName}, #{actionName}, #{requestMethod}, #{requestUri}, #{requestIp}, #{resultCode}, #{resultMsg}, #{bizId}, #{createTime}
+    )
+  </insert>
+
+</mapper>

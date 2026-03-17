@@ -4,14 +4,18 @@ import com.unequipment.platform.common.api.PageResponse;
 import com.unequipment.platform.common.exception.BizException;
 import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.common.util.BizNoGenerator;
+import com.unequipment.platform.common.util.RoleAuthUtils;
 import com.unequipment.platform.modules.content.service.MessageService;
 import com.unequipment.platform.modules.finance.dto.RechargeAuditRequest;
 import com.unequipment.platform.modules.finance.dto.RechargeRequest;
 import com.unequipment.platform.modules.finance.entity.Account;
+import com.unequipment.platform.modules.finance.entity.FinanceAnomalyHandle;
 import com.unequipment.platform.modules.finance.entity.RechargeOrder;
 import com.unequipment.platform.modules.finance.entity.SettlementRecord;
 import com.unequipment.platform.modules.finance.entity.TransactionRecord;
 import com.unequipment.platform.modules.finance.repository.AccountRepository;
+import com.unequipment.platform.modules.finance.dto.FinanceAnomalyHandleRequest;
+import com.unequipment.platform.modules.finance.repository.FinanceAnomalyHandleRepository;
 import com.unequipment.platform.modules.finance.repository.RechargeOrderRepository;
 import com.unequipment.platform.modules.finance.repository.SettlementRecordRepository;
 import com.unequipment.platform.modules.finance.repository.TransactionRecordRepository;
@@ -22,19 +26,26 @@ import com.unequipment.platform.modules.order.repository.ReservationOrderReposit
 import com.unequipment.platform.modules.system.entity.SysUser;
 import com.unequipment.platform.modules.system.repository.SysUserRepository;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 public class FinanceService {
+    private static final int MAX_PAGE_SIZE = 200;
+    private static final int EXPORT_MAX_ROWS = 10000;
+    private static final long RECONCILIATION_OVERVIEW_CACHE_MILLIS = Duration.ofSeconds(45).toMillis();
 
     private final AccountRepository accountRepository;
     private final RechargeOrderRepository rechargeOrderRepository;
@@ -44,12 +55,22 @@ public class FinanceService {
     private final OperationLogService operationLogService;
     private final SysUserRepository userRepository;
     private final ReservationOrderRepository orderRepository;
+    private final FinanceAnomalyHandleRepository financeAnomalyHandleRepository;
+    private final Map<String, CacheEntry> reconciliationOverviewCache = new ConcurrentHashMap<>();
+
+    @Value("${app.finance.recharge-double-review-threshold:5000}")
+    private BigDecimal rechargeDoubleReviewThreshold;
 
     public Map<String, Object> accountInfo(SysUser user) {
         Account account = getAccount(user.getId());
+        BigDecimal balance = nullSafe(account.getBalance());
+        BigDecimal frozenAmount = nullSafe(account.getFrozenAmount());
+        BigDecimal availableBalance = balance.subtract(frozenAmount);
         Map<String, Object> result = new HashMap<>();
         result.put("id", account.getId());
-        result.put("balance", account.getBalance());
+        result.put("balance", balance);
+        result.put("frozenAmount", frozenAmount);
+        result.put("availableBalance", availableBalance);
         result.put("status", account.getStatus());
         result.put("totalRecharge", account.getTotalRecharge());
         result.put("totalConsume", account.getTotalConsume());
@@ -58,8 +79,8 @@ public class FinanceService {
     }
 
     public PageResponse<TransactionRecord> pageMyTransactions(SysUser user, int pageNum, int pageSize) {
-        int safePageNum = Math.max(pageNum, 1);
-        int safePageSize = Math.max(pageSize, 1);
+        int safePageNum = sanitizePageNum(pageNum);
+        int safePageSize = sanitizePageSize(pageSize);
         int offset = (safePageNum - 1) * safePageSize;
         List<TransactionRecord> list = transactionRecordRepository.findPageByUserId(user.getId(), offset, safePageSize);
         long total = transactionRecordRepository.countByUserId(user.getId());
@@ -67,8 +88,8 @@ public class FinanceService {
     }
 
     public PageResponse<RechargeOrder> pageMyRecharges(SysUser user, int pageNum, int pageSize) {
-        int safePageNum = Math.max(pageNum, 1);
-        int safePageSize = Math.max(pageSize, 1);
+        int safePageNum = sanitizePageNum(pageNum);
+        int safePageSize = sanitizePageSize(pageSize);
         int offset = (safePageNum - 1) * safePageSize;
         List<RechargeOrder> list = rechargeOrderRepository.findPageByUserId(user.getId(), offset, safePageSize);
         long total = rechargeOrderRepository.countByUserId(user.getId());
@@ -84,10 +105,12 @@ public class FinanceService {
         order.setPayMethod("OFFLINE");
         order.setVoucherUrl(request.getProofUrl());
         order.setStatus("PENDING");
+        order.setReviewStatus("NONE");
         order.setRemark(request.getRemark());
         order.setCreateTime(LocalDateTime.now());
         order.setUpdateTime(LocalDateTime.now());
         rechargeOrderRepository.insert(order);
+        clearFinanceCache();
         operationLogService.save(user, "FINANCE", "SUBMIT_RECHARGE", "recharge:" + order.getRechargeNo());
         return order;
     }
@@ -106,29 +129,102 @@ public class FinanceService {
         String action = request.getAction() == null ? "" : request.getAction().trim().toUpperCase(Locale.ROOT);
         String targetStatus;
         String targetRemark = order.getRemark();
-        if ("APPROVE".equals(action)) {
-            targetStatus = "PASS";
-        } else if ("REJECT".equals(action)) {
+        boolean needDoubleReview = needDoubleReview(order);
+        String currentStatus = order.getStatus() == null ? "" : order.getStatus().trim().toUpperCase(Locale.ROOT);
+        if ("REJECT".equals(action)) {
+            if (request.getComment() == null || request.getComment().trim().isEmpty()) {
+                throw new BizException(ErrorCodes.INVALID_REQUEST, "驳回原因不能为空");
+            }
             targetStatus = "REJECT";
-            targetRemark = request.getComment();
+            targetRemark = request.getComment().trim();
+            int rejected = rechargeOrderRepository.rejectIfPendingOrReviewPending(
+                order.getId(),
+                targetStatus,
+                "NONE",
+                targetRemark,
+                auditor == null ? null : auditor.getId(),
+                now,
+                now
+            );
+            if (rejected <= 0) {
+                throw new BizException(ErrorCodes.BIZ_ERROR, "充值单已被处理，请刷新后重试");
+            }
+            messageService.send(simpleUser(order.getUserId()), "充值审核未通过", "您的充值申请未通过审核。");
+            clearFinanceCache();
+            operationLogService.save(
+                auditor,
+                "FINANCE",
+                "AUDIT_RECHARGE",
+                "rechargeId:" + id + ":" + targetStatus
+            );
+            return rechargeOrderRepository.findById(id);
+        } else if ("APPROVE".equals(action)) {
+            if (needDoubleReview) {
+                if ("PENDING".equals(currentStatus)) {
+                    int changed = rechargeOrderRepository.updateFirstApproveIfPending(
+                        order.getId(),
+                        "REVIEW_PENDING",
+                        "PENDING",
+                        auditor == null ? null : auditor.getId(),
+                        now,
+                        auditor == null ? null : auditor.getId(),
+                        now,
+                        now
+                    );
+                    if (changed <= 0) {
+                        throw new BizException(ErrorCodes.BIZ_ERROR, "充值单状态已变化，请刷新后重试");
+                    }
+                    messageService.send(simpleUser(order.getUserId()), "充值申请进入复核", "您的大额充值申请已进入复核流程。");
+                    clearFinanceCache();
+                    operationLogService.save(
+                        auditor,
+                        "FINANCE",
+                        "AUDIT_RECHARGE_FIRST_PASS",
+                        "rechargeId:" + id + ":REVIEW_PENDING"
+                    );
+                    return rechargeOrderRepository.findById(id);
+                }
+                if (!"REVIEW_PENDING".equals(currentStatus)) {
+                    throw new BizException(ErrorCodes.BIZ_ERROR, "当前状态不支持通过审核");
+                }
+                if (auditor != null && order.getFirstAuditUserId() != null
+                    && order.getFirstAuditUserId().equals(auditor.getId())) {
+                    throw new BizException(ErrorCodes.BIZ_ERROR, "大额充值需双人复核，复核人不能与初审人相同");
+                }
+                int changed = rechargeOrderRepository.updateSecondApproveIfReviewPending(
+                    order.getId(),
+                    "PASS",
+                    "PASS",
+                    auditor == null ? null : auditor.getId(),
+                    now,
+                    auditor == null ? null : auditor.getId(),
+                    now,
+                    now
+                );
+                if (changed <= 0) {
+                    throw new BizException(ErrorCodes.BIZ_ERROR, "充值单状态已变化，请刷新后重试");
+                }
+                targetStatus = "PASS";
+            } else {
+                int changed = rechargeOrderRepository.updateIfPending(
+                    order.getId(),
+                    "PASS",
+                    targetRemark,
+                    auditor == null ? null : auditor.getId(),
+                    now,
+                    now
+                );
+                if (changed <= 0) {
+                    throw new BizException(ErrorCodes.BIZ_ERROR, "充值单已被处理，请刷新后重试");
+                }
+                targetStatus = "PASS";
+            }
         } else {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "充值审核动作不合法");
         }
 
-        int changed = rechargeOrderRepository.updateIfPending(
-            order.getId(),
-            targetStatus,
-            targetRemark,
-            auditor == null ? null : auditor.getId(),
-            now,
-            now
-        );
-        if (changed <= 0) {
-            throw new BizException(ErrorCodes.BIZ_ERROR, "充值单已被处理，请刷新后重试");
-        }
-
         SysUser notifyUser = simpleUser(order.getUserId());
-        if ("APPROVE".equals(action)) {
+        if ("PASS".equals(targetStatus)) {
             Account account = getAccount(order.getUserId());
             BigDecimal before = nullSafe(account.getBalance());
             int updated = accountRepository.increaseBalanceForRecharge(account.getId(), order.getAmount(), now);
@@ -147,9 +243,8 @@ public class FinanceService {
                 "充值审核通过"
             );
             messageService.send(notifyUser, "充值审核通过", "您的充值申请已审核通过。");
-        } else {
-            messageService.send(notifyUser, "充值审核未通过", "您的充值申请未通过审核。");
         }
+        clearFinanceCache();
 
         operationLogService.save(
             auditor,
@@ -165,12 +260,17 @@ public class FinanceService {
         Account account = getAccount(order.getUserId());
         BigDecimal amount = settlementAmount(order);
         BigDecimal frozenAmount = frozenAmount(order);
+        BigDecimal accountFrozen = nullSafe(account.getFrozenAmount());
+        BigDecimal releasableFrozen = accountFrozen.min(frozenAmount).min(amount);
+        if (releasableFrozen.compareTo(BigDecimal.ZERO) < 0) {
+            releasableFrozen = BigDecimal.ZERO;
+        }
         BigDecimal before = nullSafe(account.getBalance());
         BigDecimal after = before.subtract(amount);
         int changed = accountRepository.consumeWithFreeze(
             account.getId(),
             amount,
-            frozenAmount,
+            releasableFrozen,
             LocalDateTime.now()
         );
         if (changed <= 0) {
@@ -230,6 +330,7 @@ public class FinanceService {
             "SETTLE_ORDER",
             "orderId:" + order.getId() + ",before=" + before + ",after=" + after + ",finalAmount=" + amount
         );
+        clearFinanceCache();
     }
 
     @Transactional
@@ -239,8 +340,21 @@ public class FinanceService {
 
     @Transactional
     public void refundForOrder(ReservationOrder order, String reason, SysUser operator) {
+        SettlementRecord settlement = settlementRecordRepository.findByOrderId(order.getId());
+        if (settlement != null) {
+            String settleStatus = settlement.getSettleStatus() == null ? "" : settlement.getSettleStatus().trim().toUpperCase();
+            if ("REFUNDED".equals(settleStatus)) {
+                throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "订单已退款，请勿重复操作");
+            }
+            if ("REFUNDING".equals(settleStatus)) {
+                throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "订单退款处理中，请稍后再试");
+            }
+        }
         Account account = getAccount(order.getUserId());
         BigDecimal amount = settlementAmount(order);
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "退款金额必须大于0");
+        }
         BigDecimal before = nullSafe(account.getBalance());
         int changed = accountRepository.increaseBalanceForRefund(account.getId(), amount, LocalDateTime.now());
         if (changed <= 0) {
@@ -270,6 +384,7 @@ public class FinanceService {
             "REFUND_ORDER",
             "orderId:" + order.getId() + ",before=" + before + ",after=" + before.add(amount) + ",refund=" + amount
         );
+        clearFinanceCache();
     }
 
     @Transactional
@@ -292,6 +407,7 @@ public class FinanceService {
             settlement.setSettleStatus("PENDING");
             settlement.setCreateTime(LocalDateTime.now());
             settlementRecordRepository.insert(settlement);
+            clearFinanceCache();
             return;
         }
         settlementRecordRepository.updatePendingByOrderId(
@@ -302,6 +418,7 @@ public class FinanceService {
             BigDecimal.ZERO,
             finalAmount
         );
+        clearFinanceCache();
     }
 
     @Transactional
@@ -337,6 +454,7 @@ public class FinanceService {
             operator == null ? null : operator.getId(),
             finalAmount
         );
+        clearFinanceCache();
     }
 
     public PageResponse<RechargeOrder> pageRecharges(SysUser requester, String keyword, String status,
@@ -344,8 +462,10 @@ public class FinanceService {
                                                      BigDecimal minAmount, BigDecimal maxAmount,
                                                      LocalDateTime startTime, LocalDateTime endTime,
                                                      int pageNum, int pageSize) {
-        int safePageNum = Math.max(pageNum, 1);
-        int safePageSize = Math.max(pageSize, 1);
+        validateAmountRange(minAmount, maxAmount);
+        validateTimeRange(startTime, endTime, "充值申请时间范围不合法，开始时间不能晚于结束时间");
+        int safePageNum = sanitizePageNum(pageNum);
+        int safePageSize = sanitizePageSize(pageSize);
         int offset = (safePageNum - 1) * safePageSize;
         String roleCode = normalizeRole(requester);
         Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
@@ -393,7 +513,7 @@ public class FinanceService {
             startTime,
             endTime,
             1,
-            Integer.MAX_VALUE
+            EXPORT_MAX_ROWS
         ).getList();
         StringBuilder sb = new StringBuilder();
         sb.append("充值单号,申请人,审核人,金额,状态,申请时间,审核时间,备注\n");
@@ -402,7 +522,7 @@ public class FinanceService {
                 .append(csv(item.getUserName())).append(",")
                 .append(csv(item.getAuditUserName())).append(",")
                 .append(csv(item.getAmount())).append(",")
-                .append(csv(item.getStatus())).append(",")
+                .append(csv(rechargeStatusLabel(item.getStatus()))).append(",")
                 .append(csv(item.getCreateTime())).append(",")
                 .append(csv(item.getAuditTime())).append(",")
                 .append(csv(item.getRemark())).append("\n");
@@ -411,6 +531,13 @@ public class FinanceService {
     }
 
     public Map<String, Object> reconciliationOverview(SysUser requester, LocalDateTime startTime, LocalDateTime endTime) {
+        validateTimeRange(startTime, endTime, "对账时间范围不合法，开始时间不能晚于结束时间");
+        String cacheKey = buildReconciliationOverviewCacheKey(requester, startTime, endTime);
+        CacheEntry cached = reconciliationOverviewCache.get(cacheKey);
+        long nowMillis = System.currentTimeMillis();
+        if (cached != null && cached.expireAtMillis > nowMillis && cached.value != null) {
+            return cached.value;
+        }
         String roleCode = normalizeRole(requester);
         Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
 
@@ -434,6 +561,10 @@ public class FinanceService {
             () -> settlementRecordRepository.sumFinalAmountByStatusAndScope("REFUNDED", startTime, endTime, roleCode, scopeDepartmentId),
             BigDecimal.ZERO
         ));
+        long rechargePassCount = safeGet(
+            () -> rechargeOrderRepository.countByStatusAndScope("PASS", startTime, endTime, roleCode, scopeDepartmentId),
+            0L
+        );
         long completedButUnsettled = safeGet(
             () -> orderRepository.countCompletedButUnsettledByScope(startTime, endTime, roleCode, scopeDepartmentId),
             0L
@@ -446,26 +577,41 @@ public class FinanceService {
             () -> orderRepository.countConfirmedButUnpaidByScope(startTime, endTime, roleCode, scopeDepartmentId),
             0L
         );
+        BigDecimal avgSettleHours = nullSafe(safeGet(
+            () -> settlementRecordRepository.avgSettleHoursByScope(startTime, endTime, roleCode, scopeDepartmentId),
+            BigDecimal.ZERO
+        ));
+        BigDecimal avgWaitingSettlementHours = nullSafe(safeGet(
+            () -> orderRepository.avgWaitingSettlementHoursByScope(startTime, endTime, roleCode, scopeDepartmentId),
+            BigDecimal.ZERO
+        ));
 
         Map<String, Object> result = new HashMap<>();
         result.put("rechargeCount", rechargeCount);
+        result.put("rechargePassCount", rechargePassCount);
         result.put("rechargeAmount", rechargeAmount);
         result.put("settlementCount", settlementCount);
         result.put("settledAmount", settledAmount);
         result.put("refundedAmount", refundedAmount);
+        result.put("rechargePassRate", calculatePercent(rechargePassCount, rechargeCount));
+        result.put("refundRate", calculatePercent(refundedAmount, settledAmount));
+        result.put("avgSettleHours", avgSettleHours);
+        result.put("avgWaitingSettlementHours", avgWaitingSettlementHours);
         result.put("completedButUnsettled", completedButUnsettled);
         result.put("waitingSettlementOrders", waitingSettlement);
         result.put("confirmedButUnpaidOrders", confirmedButUnpaid);
         result.put("rangeStart", startTime);
         result.put("rangeEnd", endTime);
+        reconciliationOverviewCache.put(cacheKey, new CacheEntry(result, nowMillis + RECONCILIATION_OVERVIEW_CACHE_MILLIS));
         return result;
     }
 
     public PageResponse<FinanceAnomalyVO> reconciliationAnomalies(SysUser requester, String type,
                                                                   LocalDateTime startTime, LocalDateTime endTime,
                                                                   int pageNum, int pageSize) {
-        int safePageNum = Math.max(pageNum, 1);
-        int safePageSize = Math.max(pageSize, 1);
+        validateTimeRange(startTime, endTime, "对账时间范围不合法，开始时间不能晚于结束时间");
+        int safePageNum = sanitizePageNum(pageNum);
+        int safePageSize = sanitizePageSize(pageSize);
         int offset = (safePageNum - 1) * safePageSize;
         String roleCode = normalizeRole(requester);
         Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
@@ -489,7 +635,37 @@ public class FinanceService {
             roleCode,
             scopeDepartmentId
         );
+        for (FinanceAnomalyVO item : list) {
+            fillAnomalyHandleInfo(item);
+        }
         return new PageResponse<>(list, total, safePageNum, safePageSize);
+    }
+
+    @Transactional
+    public void handleReconciliationAnomaly(SysUser requester, FinanceAnomalyHandleRequest request) {
+        if (requester == null || (!hasRole(requester, "ADMIN") && !hasRole(requester, "DEPT_MANAGER"))) {
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权处理异常账");
+        }
+        String anomalyType = request.getAnomalyType().trim().toUpperCase(Locale.ROOT);
+        Long orderId = request.getOrderId();
+        LocalDateTime now = LocalDateTime.now();
+        financeAnomalyHandleRepository.upsert(
+            anomalyType,
+            orderId,
+            request.getSettlementId(),
+            request.getHandleStatus(),
+            trimToNull(request.getHandleComment()),
+            requester.getId(),
+            now,
+            now,
+            now
+        );
+        operationLogService.save(
+            requester,
+            "FINANCE",
+            "HANDLE_RECONCILIATION_ANOMALY",
+            "type:" + anomalyType + ",orderId:" + orderId + ",status:" + request.getHandleStatus()
+        );
     }
 
     public Account getAccount(SysUser user) {
@@ -568,10 +744,15 @@ public class FinanceService {
     }
 
     private String normalizeRole(SysUser user) {
-        if (user == null || user.getPrimaryRoleCode() == null || user.getPrimaryRoleCode().trim().isEmpty()) {
-            return "INTERNAL_USER";
+        if (hasRole(user, "ADMIN")) {
+            return "ADMIN";
         }
-        return user.getPrimaryRoleCode().trim().toUpperCase(Locale.ROOT);
+        if (hasRole(user, "DEPT_MANAGER")) {
+            return "DEPT_MANAGER";
+        }
+        return user == null || user.getPrimaryRoleCode() == null || user.getPrimaryRoleCode().trim().isEmpty()
+            ? "INTERNAL_USER"
+            : user.getPrimaryRoleCode().trim().toUpperCase(Locale.ROOT);
     }
 
     private String resolveBillType(Long userId) {
@@ -609,7 +790,7 @@ public class FinanceService {
     }
 
     private boolean hasRole(SysUser user, String roleCode) {
-        return user != null && roleCode.equalsIgnoreCase(user.getPrimaryRoleCode());
+        return RoleAuthUtils.hasRole(user, roleCode);
     }
 
     private <T> T safeGet(Supplier<T> supplier, T fallback) {
@@ -618,6 +799,126 @@ public class FinanceService {
             return value == null ? fallback : value;
         } catch (Exception ignored) {
             return fallback;
+        }
+    }
+
+    private int sanitizePageNum(int pageNum) {
+        return Math.max(pageNum, 1);
+    }
+
+    private int sanitizePageSize(int pageSize) {
+        return Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
+    }
+
+    private void validateTimeRange(LocalDateTime startTime, LocalDateTime endTime, String message) {
+        if (startTime != null && endTime != null && startTime.isAfter(endTime)) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, message);
+        }
+    }
+
+    private void validateAmountRange(BigDecimal minAmount, BigDecimal maxAmount) {
+        if (minAmount != null && minAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "最小金额不能小于0");
+        }
+        if (maxAmount != null && maxAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "最大金额不能小于0");
+        }
+        if (minAmount != null && maxAmount != null && minAmount.compareTo(maxAmount) > 0) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "金额区间不合法，最小金额不能大于最大金额");
+        }
+    }
+
+    private String rechargeStatusLabel(String status) {
+        if ("PENDING".equalsIgnoreCase(status)) {
+            return "待审核";
+        }
+        if ("REVIEW_PENDING".equalsIgnoreCase(status)) {
+            return "待复核";
+        }
+        if ("PASS".equalsIgnoreCase(status)) {
+            return "已通过";
+        }
+        if ("REJECT".equalsIgnoreCase(status) || "REJECTED".equalsIgnoreCase(status)) {
+            return "已驳回";
+        }
+        return status == null ? "" : status;
+    }
+
+    private boolean needDoubleReview(RechargeOrder order) {
+        BigDecimal threshold = rechargeDoubleReviewThreshold == null ? BigDecimal.ZERO : rechargeDoubleReviewThreshold;
+        if (threshold.compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        return nullSafe(order.getAmount()).compareTo(threshold) >= 0;
+    }
+
+    private BigDecimal calculatePercent(long numerator, long denominator) {
+        if (denominator <= 0 || numerator <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return BigDecimal.valueOf(numerator)
+            .multiply(BigDecimal.valueOf(100))
+            .divide(BigDecimal.valueOf(denominator), 2, java.math.RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculatePercent(BigDecimal numerator, BigDecimal denominator) {
+        BigDecimal safeNumerator = nullSafe(numerator);
+        BigDecimal safeDenominator = nullSafe(denominator);
+        if (safeNumerator.compareTo(BigDecimal.ZERO) <= 0 || safeDenominator.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return safeNumerator
+            .multiply(BigDecimal.valueOf(100))
+            .divide(safeDenominator, 2, java.math.RoundingMode.HALF_UP);
+    }
+
+    private void fillAnomalyHandleInfo(FinanceAnomalyVO anomaly) {
+        if (anomaly == null || anomaly.getOrderId() == null || anomaly.getAnomalyType() == null) {
+            return;
+        }
+        FinanceAnomalyHandle handle = financeAnomalyHandleRepository.findByTypeAndOrderId(
+            anomaly.getAnomalyType(),
+            anomaly.getOrderId()
+        );
+        if (handle == null) {
+            anomaly.setHandleStatus("PENDING");
+            return;
+        }
+        anomaly.setHandleStatus(handle.getHandleStatus());
+        anomaly.setHandleComment(handle.getHandleComment());
+        anomaly.setHandlerUserId(handle.getHandlerUserId());
+        anomaly.setHandlerUserName(handle.getHandlerUserName());
+        anomaly.setHandleTime(handle.getHandleTime());
+    }
+
+    private void clearFinanceCache() {
+        reconciliationOverviewCache.clear();
+    }
+
+    public void notifyFinanceDataChanged() {
+        clearFinanceCache();
+    }
+
+    private String buildReconciliationOverviewCacheKey(SysUser requester, LocalDateTime startTime, LocalDateTime endTime) {
+        Long requesterId = requester == null ? null : requester.getId();
+        Long departmentId = requester == null ? null : requester.getDepartmentId();
+        return String.join("|",
+            "overview",
+            normalizeRole(requester),
+            Objects.toString(requesterId, "-"),
+            Objects.toString(departmentId, "-"),
+            Objects.toString(startTime, "-"),
+            Objects.toString(endTime, "-")
+        );
+    }
+
+    private static class CacheEntry {
+        private final Map<String, Object> value;
+        private final long expireAtMillis;
+
+        private CacheEntry(Map<String, Object> value, long expireAtMillis) {
+            this.value = value;
+            this.expireAtMillis = expireAtMillis;
         }
     }
 }

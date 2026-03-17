@@ -56,6 +56,10 @@ public class InstrumentAdminController {
         return ApiResponse.success(instrumentService.pageCategories(pageNum, pageSize, operator));
     }
 
+    /**
+     * 开放规则分页查询入口。
+     * weekDay 参数支持“单天命中 week_day 或多天命中 week_days”两种存量数据口径。
+     */
     @GetMapping("/open-rules")
     public ApiResponse<PageResponse<InstrumentOpenRule>> openRules(
         @RequestParam(required = false) Long instrumentId,
@@ -120,12 +124,18 @@ public class InstrumentAdminController {
         return ApiResponse.success("ok");
     }
 
+    /**
+     * 新增开放规则（支持多天）。
+     */
     @PostMapping("/open-rules")
     public ApiResponse<InstrumentOpenRule> saveRule(@Valid @RequestBody OpenRuleSaveRequest request,
                                                     @CurrentUser SysUser operator) {
         return ApiResponse.success(instrumentService.saveRule(request, operator));
     }
 
+    /**
+     * 编辑开放规则（支持多天）。
+     */
     @PutMapping("/open-rules/{id}")
     public ApiResponse<InstrumentOpenRule> updateRule(@PathVariable Long id,
                                                       @Valid @RequestBody OpenRuleSaveRequest request,

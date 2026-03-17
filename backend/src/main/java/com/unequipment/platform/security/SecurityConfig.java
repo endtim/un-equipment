@@ -1,10 +1,16 @@
 package com.unequipment.platform.security;
 
 import com.unequipment.platform.common.exception.ErrorCodes;
+import com.unequipment.platform.modules.system.entity.SysRole;
 import com.unequipment.platform.modules.system.entity.SysUser;
+import com.unequipment.platform.modules.system.entity.SysUserRole;
+import com.unequipment.platform.modules.system.repository.SysRoleRepository;
 import com.unequipment.platform.modules.system.repository.SysUserRepository;
+import com.unequipment.platform.modules.system.repository.SysUserRoleRepository;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
@@ -93,6 +99,8 @@ public class SecurityConfig {
 
         private final TokenService tokenService;
         private final SysUserRepository userRepository;
+        private final SysUserRoleRepository userRoleRepository;
+        private final SysRoleRepository roleRepository;
 
         @Override
         protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -109,10 +117,11 @@ public class SecurityConfig {
                         return;
                     }
                     String roleCode = user.getPrimaryRoleCode() == null ? "INTERNAL_USER" : user.getPrimaryRoleCode();
+                    List<String> authorities = resolveRoleAuthorities(user, roleCode);
                     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         user.getUsername(),
                         null,
-                        AuthorityUtils.createAuthorityList("ROLE_" + roleCode)
+                        AuthorityUtils.createAuthorityList(authorities.toArray(new String[0]))
                     );
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                     request.setAttribute("currentUser", user);
@@ -124,6 +133,34 @@ public class SecurityConfig {
                 }
             }
             filterChain.doFilter(request, response);
+        }
+
+        private List<String> resolveRoleAuthorities(SysUser user, String fallbackRoleCode) {
+            List<String> authorities = new ArrayList<>();
+            if (fallbackRoleCode != null && !fallbackRoleCode.trim().isEmpty()) {
+                authorities.add("ROLE_" + fallbackRoleCode.trim().toUpperCase());
+            }
+            if (user == null || user.getId() == null) {
+                return authorities;
+            }
+            List<SysUserRole> userRoles = userRoleRepository.findByUserId(user.getId());
+            if (userRoles == null || userRoles.isEmpty()) {
+                return authorities;
+            }
+            for (SysUserRole userRole : userRoles) {
+                if (userRole == null || userRole.getRoleId() == null) {
+                    continue;
+                }
+                SysRole role = roleRepository.findById(userRole.getRoleId());
+                if (role == null || role.getRoleCode() == null || role.getRoleCode().trim().isEmpty()) {
+                    continue;
+                }
+                String authority = "ROLE_" + role.getRoleCode().trim().toUpperCase();
+                if (!authorities.contains(authority)) {
+                    authorities.add(authority);
+                }
+            }
+            return authorities;
         }
     }
 }

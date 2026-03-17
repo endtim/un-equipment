@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.finance.repository.SettlementAdminRepository">
+
+  <select id="findPage" resultType="com.unequipment.platform.modules.finance.vo.SettlementAdminVO">
+    <!--
+      结算管理分页：
+      角色范围限制在 SQL 层完成，DEPT_MANAGER 仅可见本部门订单结算单。
+    -->
+    select s.id, s.settlement_no, s.order_id, o.order_no, s.user_id, u.real_name as user_name,
+    s.instrument_id, i.instrument_name, o.department_id, d.dept_name as department_name,
+    s.bill_type, s.estimated_amount, s.discount_amount, s.final_amount, s.settle_status,
+    s.create_time, s.settled_time, s.operator_user_id, op.real_name as operator_name,
+    o.order_status, o.pay_status, o.settlement_status
+    from biz_settlement_record s
+    left join biz_reservation_order o on o.id = s.order_id
+    left join sys_user u on u.id = s.user_id
+    left join biz_instrument i on i.id = s.instrument_id
+    left join sys_department d on d.id = o.department_id
+    left join sys_user op on op.id = s.operator_user_id
+    where 1=1
+    <if test="status != null and status != ''">and s.settle_status = #{status}</if>
+    <if test="departmentId != null">and o.department_id = #{departmentId}</if>
+    <if test="orderId != null">and s.order_id = #{orderId}</if>
+    <if test="keyword != null and keyword != ''">
+      and (s.settlement_no like concat('%', #{keyword}, '%')
+      or o.order_no like concat('%', #{keyword}, '%')
+      or u.real_name like concat('%', #{keyword}, '%')
+      or i.instrument_name like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="createStart != null">and s.create_time &gt;= #{createStart}</if>
+    <if test="createEnd != null">and s.create_time &lt;= #{createEnd}</if>
+    <if test="settledStart != null">and s.settled_time &gt;= #{settledStart}</if>
+    <if test="settledEnd != null">and s.settled_time &lt;= #{settledEnd}</if>
+    <if test="roleCode == 'DEPT_MANAGER'">and o.department_id = #{scopeDepartmentId}</if>
+    order by s.create_time desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPage" resultType="long">
+    <!-- 与 findPage 保持完全一致的过滤条件，避免总数偏差 -->
+    select count(1)
+    from biz_settlement_record s
+    left join biz_reservation_order o on o.id = s.order_id
+    left join sys_user u on u.id = s.user_id
+    left join biz_instrument i on i.id = s.instrument_id
+    where 1=1
+    <if test="status != null and status != ''">and s.settle_status = #{status}</if>
+    <if test="departmentId != null">and o.department_id = #{departmentId}</if>
+    <if test="orderId != null">and s.order_id = #{orderId}</if>
+    <if test="keyword != null and keyword != ''">
+      and (s.settlement_no like concat('%', #{keyword}, '%')
+      or o.order_no like concat('%', #{keyword}, '%')
+      or u.real_name like concat('%', #{keyword}, '%')
+      or i.instrument_name like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="createStart != null">and s.create_time &gt;= #{createStart}</if>
+    <if test="createEnd != null">and s.create_time &lt;= #{createEnd}</if>
+    <if test="settledStart != null">and s.settled_time &gt;= #{settledStart}</if>
+    <if test="settledEnd != null">and s.settled_time &lt;= #{settledEnd}</if>
+    <if test="roleCode == 'DEPT_MANAGER'">and o.department_id = #{scopeDepartmentId}</if>
+  </select>
+
+  <select id="findDetail" resultType="com.unequipment.platform.modules.finance.vo.SettlementAdminVO">
+    <!-- 详情也受部门范围约束，防止通过 ID 直接越权读取 -->
+    select s.id, s.settlement_no, s.order_id, o.order_no, s.user_id, u.real_name as user_name,
+    s.instrument_id, i.instrument_name, o.department_id, d.dept_name as department_name,
+    s.bill_type, s.estimated_amount, s.discount_amount, s.final_amount, s.settle_status,
+    s.create_time, s.settled_time, s.operator_user_id, op.real_name as operator_name,
+    o.order_status, o.pay_status, o.settlement_status
+    from biz_settlement_record s
+    left join biz_reservation_order o on o.id = s.order_id
+    left join sys_user u on u.id = s.user_id
+    left join biz_instrument i on i.id = s.instrument_id
+    left join sys_department d on d.id = o.department_id
+    left join sys_user op on op.id = s.operator_user_id
+    where s.id = #{id}
+    <if test="roleCode == 'DEPT_MANAGER'">and o.department_id = #{scopeDepartmentId}</if>
+    limit 1
+  </select>
+
+</mapper>

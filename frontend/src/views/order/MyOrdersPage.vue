@@ -17,9 +17,10 @@
           <template #default="{ row }">{{ orderTypeLabel(row.orderType) }}</template>
         </el-table-column>
         <el-table-column prop="instrumentName" label="仪器名称" min-width="160" />
-        <el-table-column v-if="isMachinePage" prop="reservedStart" label="预约开始" width="170" :formatter="formatDateTimeCell" />
-        <el-table-column v-if="isMachinePage" prop="reservedEnd" label="预约结束" width="170" :formatter="formatDateTimeCell" />
-        <el-table-column v-if="isSamplePage" prop="createdAt" label="申请时间" width="170" :formatter="formatDateTimeCell" />
+        <el-table-column v-if="isMachinePage" label="预约时段" min-width="320">
+          <template #default="{ row }">{{ formatRange(row.reservedStart, row.reservedEnd) }}</template>
+        </el-table-column>
+        <el-table-column prop="createdAt" label="提交时间" width="180" :formatter="formatDateTimeCell" />
         <el-table-column label="状态" width="170">
           <template #default="{ row }">{{ orderStatusLabel(row.status) }}</template>
         </el-table-column>
@@ -181,6 +182,14 @@ export default {
   methods: {
     formatDateTimeCell(row, column, value) {
       return this.formatDateTime(value)
+    },
+    formatRange(start, end) {
+      const startText = this.formatDateTime(start)
+      const endText = this.formatDateTime(end)
+      if (startText === '-' && endText === '-') {
+        return '-'
+      }
+      return `${startText} ~ ${endText}`
     },
     async load() {
       const params = {

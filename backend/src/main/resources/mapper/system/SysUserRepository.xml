@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.system.repository.SysUserRepository">
+
+  <select id="findById" resultType="com.unequipment.platform.modules.system.entity.SysUser">
+    select u.*, d.dept_name as department_name, r.role_code as primary_role_code
+    from sys_user u
+    left join sys_department d on d.id = u.department_id
+    left join sys_user_role ur on ur.user_id = u.id
+    left join sys_role r on r.id = ur.role_id and r.deleted = 0 and r.status = 'ENABLED'
+    where u.id = #{id} and u.deleted = 0
+    limit 1
+  </select>
+
+  <select id="findByUsername" resultType="com.unequipment.platform.modules.system.entity.SysUser">
+    select u.*, d.dept_name as department_name, r.role_code as primary_role_code
+    from sys_user u
+    left join sys_department d on d.id = u.department_id
+    left join sys_user_role ur on ur.user_id = u.id
+    left join sys_role r on r.id = ur.role_id and r.deleted = 0 and r.status = 'ENABLED'
+    where u.username = #{username} and u.deleted = 0
+    limit 1
+  </select>
+
+  <select id="findAll" resultType="com.unequipment.platform.modules.system.entity.SysUser">
+    select u.*, d.dept_name as department_name, r.role_code as primary_role_code
+    from sys_user u
+    left join sys_department d on d.id = u.department_id
+    left join sys_user_role ur on ur.user_id = u.id
+    left join sys_role r on r.id = ur.role_id and r.deleted = 0 and r.status = 'ENABLED'
+    where u.deleted = 0
+    order by u.id asc
+  </select>
+
+  <select id="findPage" resultType="com.unequipment.platform.modules.system.entity.SysUser">
+    <!-- 用户分页（全量口径）：支持用户名/姓名关键字 -->
+    select u.*, d.dept_name as department_name, r.role_code as primary_role_code
+    from sys_user u
+    left join sys_department d on d.id = u.department_id
+    left join sys_user_role ur on ur.user_id = u.id
+    left join sys_role r on r.id = ur.role_id and r.deleted = 0 and r.status = 'ENABLED'
+    where u.deleted = 0
+    <if test="keyword != null and keyword != ''">
+      and (u.username like concat('%', #{keyword}, '%') or u.real_name like concat('%', #{keyword}, '%'))
+    </if>
+    order by u.id asc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="findPageByDepartment" resultType="com.unequipment.platform.modules.system.entity.SysUser">
+    <!-- 用户分页（部门口径）：部门管理员仅看本部门 -->
+    select u.*, d.dept_name as department_name, r.role_code as primary_role_code
+    from sys_user u
+    left join sys_department d on d.id = u.department_id
+    left join sys_user_role ur on ur.user_id = u.id
+    left join sys_role r on r.id = ur.role_id and r.deleted = 0 and r.status = 'ENABLED'
+    where u.deleted = 0 and u.department_id = #{departmentId}
+    <if test="keyword != null and keyword != ''">
+      and (u.username like concat('%', #{keyword}, '%') or u.real_name like concat('%', #{keyword}, '%'))
+    </if>
+    order by u.id asc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPage" resultType="long">
+    select count(1)
+    from sys_user u
+    where u.deleted = 0
+    <if test="keyword != null and keyword != ''">
+      and (u.username like concat('%', #{keyword}, '%') or u.real_name like concat('%', #{keyword}, '%'))
+    </if>
+  </select>
+
+  <select id="countPageByDepartment" resultType="long">
+    <!-- 与 findPageByDepartment 同口径 -->
+    select count(1)
+    from sys_user u
+    where u.deleted = 0 and u.department_id = #{departmentId}
+    <if test="keyword != null and keyword != ''">
+      and (u.username like concat('%', #{keyword}, '%') or u.real_name like concat('%', #{keyword}, '%'))
+    </if>
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into sys_user(username, password, real_name, user_type, user_no, gender, phone, email, avatar_url, auth_type, department_id, unit_name, title_name, status, last_login_time, remark, create_time, update_time, deleted)
+    values(#{username}, #{password}, #{realName}, #{userType}, #{userNo}, #{gender}, #{phone}, #{email}, #{avatarUrl}, #{authType}, #{departmentId}, #{unitName}, #{titleName}, #{status}, #{lastLoginTime}, #{remark}, #{createTime}, #{updateTime}, #{deleted})
+  </insert>
+
+  <update id="update">
+    update sys_user
+    set real_name=#{realName}, user_type=#{userType}, user_no=#{userNo}, gender=#{gender}, phone=#{phone}, email=#{email}, avatar_url=#{avatarUrl}, auth_type=#{authType}, department_id=#{departmentId}, unit_name=#{unitName}, title_name=#{titleName}, status=#{status}, remark=#{remark}, update_time=#{updateTime}
+    where id=#{id}
+  </update>
+
+  <update id="updateLastLoginTime">
+    update sys_user set last_login_time = #{lastLoginTime}, update_time = #{lastLoginTime} where id = #{id}
+  </update>
+
+  <update id="updatePassword">
+    update sys_user set password = #{password}, update_time = #{updateTime} where id = #{id}
+  </update>
+
+  <update id="softDelete">
+    update sys_user set deleted = 1, update_time = #{updateTime} where id = #{id}
+  </update>
+
+  <select id="countByDepartmentId" resultType="long">
+    select count(1) from sys_user where department_id = #{departmentId} and deleted = 0
+  </select>
+
+  <select id="countByUsernameExcludeId" resultType="int">
+    select count(1)
+    from sys_user
+    where username = #{username}
+      and deleted = 0
+      and (#{excludeId} is null or id &lt;&gt; #{excludeId})
+  </select>
+
+</mapper>

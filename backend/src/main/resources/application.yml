@@ -28,9 +28,17 @@ springdoc:
 app:
   auth:
     default-department-code: ${APP_AUTH_DEFAULT_DEPARTMENT_CODE:TEST_CENTER}
+  order:
+    pending-audit-timeout-minutes: ${APP_ORDER_PENDING_AUDIT_TIMEOUT_MINUTES:1440}
+    pending-audit-timeout-batch-size: ${APP_ORDER_PENDING_AUDIT_TIMEOUT_BATCH_SIZE:200}
+    pending-audit-timeout-cron: ${APP_ORDER_PENDING_AUDIT_TIMEOUT_CRON:0 */5 * * * ?}
   finance:
     internal-single-limit: ${APP_FINANCE_INTERNAL_SINGLE_LIMIT:0}
     external-single-limit: ${APP_FINANCE_EXTERNAL_SINGLE_LIMIT:0}
+    recharge-double-review-threshold: ${APP_FINANCE_RECHARGE_DOUBLE_REVIEW_THRESHOLD:5000}
+    refund-compensation-timeout-minutes: ${APP_FINANCE_REFUND_COMPENSATION_TIMEOUT_MINUTES:30}
+    refund-compensation-batch-size: ${APP_FINANCE_REFUND_COMPENSATION_BATCH_SIZE:100}
+    refund-compensation-cron: ${APP_FINANCE_REFUND_COMPENSATION_CRON:0 */10 * * * ?}
   security:
     token-prefix: Bearer
     token-header: Authorization

@@ -22,48 +22,75 @@ public class SystemAdminWriteController {
 
     private final SystemAdminService systemAdminService;
 
+    /**
+     * 新增部门。
+     */
     @PostMapping("/departments")
     public ApiResponse<SysDepartment> createDepartment(@RequestBody SysDepartment department, @CurrentUser SysUser user) {
         return ApiResponse.success(systemAdminService.saveDepartment(null, department, user));
     }
 
+    /**
+     * 编辑部门。
+     */
     @PutMapping("/departments/{id}")
     public ApiResponse<SysDepartment> updateDepartment(@PathVariable Long id, @RequestBody SysDepartment department, @CurrentUser SysUser user) {
         return ApiResponse.success(systemAdminService.saveDepartment(id, department, user));
     }
 
+    /**
+     * 新增角色。
+     */
     @PostMapping("/roles")
     public ApiResponse<SysRole> createRole(@RequestBody SysRole role, @CurrentUser SysUser user) {
         return ApiResponse.success(systemAdminService.saveRole(null, role, user));
     }
 
+    /**
+     * 编辑角色。
+     */
     @PutMapping("/roles/{id}")
     public ApiResponse<SysRole> updateRole(@PathVariable Long id, @RequestBody SysRole role, @CurrentUser SysUser user) {
         return ApiResponse.success(systemAdminService.saveRole(id, role, user));
     }
 
+    /**
+     * 删除部门（软删除）。
+     */
     @DeleteMapping("/departments/{id}")
     public ApiResponse<?> deleteDepartment(@PathVariable Long id, @CurrentUser SysUser user) {
         systemAdminService.deleteDepartment(id, user);
         return ApiResponse.success("ok");
     }
 
+    /**
+     * 删除角色（软删除）。
+     */
     @DeleteMapping("/roles/{id}")
     public ApiResponse<?> deleteRole(@PathVariable Long id, @CurrentUser SysUser user) {
         systemAdminService.deleteRole(id, user);
         return ApiResponse.success("ok");
     }
 
+    /**
+     * 新增用户。
+     */
     @PostMapping("/users")
     public ApiResponse<SysUser> createUser(@RequestBody SysUser target, @CurrentUser SysUser user) {
         return ApiResponse.success(systemAdminService.saveUser(null, target, user));
     }
 
+    /**
+     * 编辑用户。
+     */
     @PutMapping("/users/{id}")
     public ApiResponse<SysUser> updateUser(@PathVariable Long id, @RequestBody SysUser target, @CurrentUser SysUser user) {
         return ApiResponse.success(systemAdminService.saveUser(id, target, user));
     }
 
+    /**
+     * 删除用户（软删除）。
+     */
     @DeleteMapping("/users/{id}")
     public ApiResponse<?> deleteUser(@PathVariable Long id, @CurrentUser SysUser user) {
         systemAdminService.deleteUser(id, user);

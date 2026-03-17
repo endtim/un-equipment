@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.system.repository.SysDepartmentRepository">
+
+  <select id="findAll" resultType="com.unequipment.platform.modules.system.entity.SysDepartment">
+    select * from sys_department where deleted = 0 order by sort_no asc, id asc
+  </select>
+
+  <select id="findPage" resultType="com.unequipment.platform.modules.system.entity.SysDepartment">
+    <!-- 部门分页：按 sort_no、id 稳定排序 -->
+    select * from sys_department
+    where deleted = 0
+    order by sort_no asc, id asc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPage" resultType="long">
+    select count(1) from sys_department where deleted = 0
+  </select>
+
+  <select id="findById" resultType="com.unequipment.platform.modules.system.entity.SysDepartment">
+    select * from sys_department where id = #{id} and deleted = 0
+  </select>
+
+  <select id="findFirst" resultType="com.unequipment.platform.modules.system.entity.SysDepartment">
+    select * from sys_department where deleted = 0 order by id asc limit 1
+  </select>
+
+  <select id="findByDeptCode" resultType="com.unequipment.platform.modules.system.entity.SysDepartment">
+    select * from sys_department where dept_code = #{deptCode} and deleted = 0 limit 1
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into sys_department(
+      parent_id, dept_name, dept_code, leader_user_id, phone, email, sort_no, status, remark,
+      create_by, create_time, update_by, update_time, deleted
+    ) values (
+      #{parentId}, #{deptName}, #{deptCode}, #{leaderUserId}, #{phone}, #{email}, #{sortNo}, #{status}, #{remark},
+      #{createBy}, #{createTime}, #{updateBy}, #{updateTime}, #{deleted}
+    )
+  </insert>
+
+  <update id="update">
+    update sys_department
+    set parent_id = #{parentId},
+        dept_name = #{deptName},
+        dept_code = #{deptCode},
+        leader_user_id = #{leaderUserId},
+        phone = #{phone},
+        email = #{email},
+        sort_no = #{sortNo},
+        status = #{status},
+        remark = #{remark},
+        update_by = #{updateBy},
+        update_time = #{updateTime}
+    where id = #{id}
+  </update>
+
+  <update id="softDelete">
+    update sys_department
+    set deleted = 1, update_by = #{operatorId}, update_time = #{updateTime}
+    where id = #{id}
+  </update>
+
+  <select id="countByDeptCodeExcludeId" resultType="int">
+    <!-- 部门编码唯一性校验（编辑场景排除自身） -->
+    select count(1)
+    from sys_department
+    where dept_code = #{deptCode}
+      and deleted = 0
+      and (#{excludeId} is null or id &lt;&gt; #{excludeId})
+  </select>
+
+</mapper>

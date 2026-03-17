@@ -8,6 +8,10 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 @Mapper
+/**
+ * RechargeOrderRepository 数据访问接口。
+ * 负责对应模块的持久化读写，不承载业务决策。
+ */
 public interface RechargeOrderRepository {
 
     List<RechargeOrder> findByUserId(Long userId);
@@ -57,6 +61,32 @@ public interface RechargeOrderRepository {
                         @Param("auditTime") LocalDateTime auditTime,
                         @Param("updateTime") LocalDateTime updateTime);
 
+    int updateFirstApproveIfPending(@Param("id") Long id,
+                                    @Param("status") String status,
+                                    @Param("reviewStatus") String reviewStatus,
+                                    @Param("firstAuditUserId") Long firstAuditUserId,
+                                    @Param("firstAuditTime") LocalDateTime firstAuditTime,
+                                    @Param("auditUserId") Long auditUserId,
+                                    @Param("auditTime") LocalDateTime auditTime,
+                                    @Param("updateTime") LocalDateTime updateTime);
+
+    int updateSecondApproveIfReviewPending(@Param("id") Long id,
+                                           @Param("status") String status,
+                                           @Param("reviewStatus") String reviewStatus,
+                                           @Param("secondAuditUserId") Long secondAuditUserId,
+                                           @Param("secondAuditTime") LocalDateTime secondAuditTime,
+                                           @Param("auditUserId") Long auditUserId,
+                                           @Param("auditTime") LocalDateTime auditTime,
+                                           @Param("updateTime") LocalDateTime updateTime);
+
+    int rejectIfPendingOrReviewPending(@Param("id") Long id,
+                                       @Param("status") String status,
+                                       @Param("reviewStatus") String reviewStatus,
+                                       @Param("remark") String remark,
+                                       @Param("auditUserId") Long auditUserId,
+                                       @Param("auditTime") LocalDateTime auditTime,
+                                       @Param("updateTime") LocalDateTime updateTime);
+
     long countByScopeAndCreateTime(@Param("startTime") LocalDateTime startTime,
                                    @Param("endTime") LocalDateTime endTime,
                                    @Param("roleCode") String roleCode,
@@ -67,4 +97,10 @@ public interface RechargeOrderRepository {
                                          @Param("endTime") LocalDateTime endTime,
                                          @Param("roleCode") String roleCode,
                                          @Param("scopeDepartmentId") Long scopeDepartmentId);
+
+    long countByStatusAndScope(@Param("status") String status,
+                               @Param("startTime") LocalDateTime startTime,
+                               @Param("endTime") LocalDateTime endTime,
+                               @Param("roleCode") String roleCode,
+                               @Param("scopeDepartmentId") Long scopeDepartmentId);
 }

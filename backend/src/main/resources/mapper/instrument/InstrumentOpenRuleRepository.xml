@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.instrument.repository.InstrumentOpenRuleRepository">
+
+  <select id="findAll" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentOpenRule">
+    select *
+    from biz_instrument_open_rule
+    where deleted = 0
+    order by instrument_id asc, week_day asc, start_time asc
+  </select>
+
+  <select id="findAllByScope" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentOpenRule">
+    select r.*
+    from biz_instrument_open_rule r
+    inner join biz_instrument i on i.id = r.instrument_id and i.deleted = 0
+    where r.deleted = 0
+    <if test="roleCode == 'INSTRUMENT_OWNER'">
+      and i.owner_user_id = #{operatorId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and i.department_id = #{scopeDepartmentId}
+    </if>
+    order by r.instrument_id asc, r.week_day asc, r.start_time asc
+  </select>
+
+  <select id="findPageByScope" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentOpenRule">
+    <!--
+      开放规则分页（兼容单天与多天）：
+      - week_day：历史单天字段
+      - week_days：新多天字段，使用 find_in_set 命中
+    -->
+    select r.*
+    from biz_instrument_open_rule r
+    left join biz_instrument i on i.id = r.instrument_id and i.deleted = 0
+    where r.deleted = 0
+    <if test="instrumentId != null">
+      and r.instrument_id = #{instrumentId}
+    </if>
+    <if test="weekDay != null">
+      and (
+        r.week_day = #{weekDay}
+        or (r.week_days is not null and r.week_days != '' and find_in_set(cast(#{weekDay} as char), r.week_days) > 0)
+      )
+    </if>
+    <if test="status != null and status != ''">
+      and r.status = #{status}
+    </if>
+    <if test="roleCode == 'INSTRUMENT_OWNER'">
+      and i.owner_user_id = #{operatorId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and i.department_id = #{scopeDepartmentId}
+    </if>
+    order by r.update_time desc, r.id desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPageByScope" resultType="long">
+    <!-- 与 findPageByScope 保持同口径过滤 -->
+    select count(1)
+    from biz_instrument_open_rule r
+    left join biz_instrument i on i.id = r.instrument_id and i.deleted = 0
+    where r.deleted = 0
+    <if test="instrumentId != null">
+      and r.instrument_id = #{instrumentId}
+    </if>
+    <if test="weekDay != null">
+      and (
+        r.week_day = #{weekDay}
+        or (r.week_days is not null and r.week_days != '' and find_in_set(cast(#{weekDay} as char), r.week_days) > 0)
+      )
+    </if>
+    <if test="status != null and status != ''">
+      and r.status = #{status}
+    </if>
+    <if test="roleCode == 'INSTRUMENT_OWNER'">
+      and i.owner_user_id = #{operatorId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and i.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="findByInstrumentId" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentOpenRule">
+    select * from biz_instrument_open_rule
+    where instrument_id = #{instrumentId} and deleted = 0
+    order by week_day asc, start_time asc
+  </select>
+
+  <select id="findById" resultType="com.unequipment.platform.modules.instrument.entity.InstrumentOpenRule">
+    select * from biz_instrument_open_rule where id = #{id} and deleted = 0
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_instrument_open_rule(
+      instrument_id, week_day, week_days, start_time, end_time, max_reserve_minutes, step_minutes,
+      effective_start_date, effective_end_date, status, create_time, update_time, deleted
+    ) values (
+      #{instrumentId}, #{weekDay}, #{weekDays}, #{startTime}, #{endTime}, #{maxReserveMinutes}, #{stepMinutes},
+      #{effectiveStartDate}, #{effectiveEndDate}, #{status}, #{createTime}, #{updateTime}, #{deleted}
+    )
+  </insert>
+
+  <update id="update">
+    update biz_instrument_open_rule
+    set instrument_id = #{instrumentId},
+        week_day = #{weekDay},
+        week_days = #{weekDays},
+        start_time = #{startTime},
+        end_time = #{endTime},
+        max_reserve_minutes = #{maxReserveMinutes},
+        step_minutes = #{stepMinutes},
+        effective_start_date = #{effectiveStartDate},
+        effective_end_date = #{effectiveEndDate},
+        status = #{status},
+        update_time = #{updateTime}
+    where id = #{id}
+  </update>
+
+  <update id="softDelete">
+    update biz_instrument_open_rule set deleted = 1, update_time = #{updateTime} where id = #{id}
+  </update>
+
+  <update id="softDeleteByInstrumentId">
+    update biz_instrument_open_rule
+    set deleted = 1, update_time = #{updateTime}
+    where instrument_id = #{instrumentId} and deleted = 0
+  </update>
+
+</mapper>

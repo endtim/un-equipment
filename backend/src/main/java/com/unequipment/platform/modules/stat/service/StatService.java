@@ -27,6 +27,10 @@ public class StatService {
         return platformMembers(null);
     }
 
+    /**
+     * 平台成员统计：
+     * 输出部门维度及其所属仪器数量，结果字段做统一归一化。
+     */
     public List<Map<String, Object>> platformMembers(SysUser user) {
         String roleCode = roleCode(user);
         Long scopeDepartmentId = scopeDepartmentId(user);
@@ -46,9 +50,15 @@ public class StatService {
         return overview(startTime, endTime, null);
     }
 
+    /**
+     * 统计总览统一口径：
+     * - 所有指标按“时间范围 + 角色范围”过滤
+     * - 指标异常时单项降级，不影响整体返回
+     */
     public Map<String, Object> overview(LocalDateTime startTime, LocalDateTime endTime, SysUser user) {
         String roleCode = roleCode(user);
         Long scopeDepartmentId = scopeDepartmentId(user);
+        // 统计总览口径：订单量、结算量、收入与客单价均按“时间范围 + 角色数据范围”过滤。
         long reservationCount = safeGet(
             () -> statQueryRepository.countOrders(startTime, endTime, roleCode, scopeDepartmentId), 0L
         );
@@ -94,9 +104,15 @@ public class StatService {
         return result;
     }
 
+    /**
+     * 趋势构建策略：
+     * - 无时间筛选时优先读取日快照
+     * - 有时间筛选时优先日聚合，缺失再回退月聚合
+     */
     private Map<String, Long> buildTrend(LocalDateTime startTime, LocalDateTime endTime,
                                          String roleCode, Long scopeDepartmentId) {
         if (startTime == null && endTime == null) {
+            // 无时间筛选时优先走快照，避免全量实时聚合带来性能波动。
             List<DailySnapshot> snapshots = safeGet(() -> dailySnapshotRepository.findLatestLimit(30), new ArrayList<>());
             if (snapshots != null && !snapshots.isEmpty()) {
                 Map<String, Long> trend = new LinkedHashMap<>();
@@ -110,6 +126,7 @@ public class StatService {
             }
         }
 
+        // 有时间筛选时优先按日聚合，若没有数据再回退到按月聚合。
         List<Map<String, Object>> dailyRows = safeGet(
             () -> statQueryRepository.queryDailyTrend(startTime, endTime, roleCode, scopeDepartmentId),
             new ArrayList<>()
@@ -125,6 +142,10 @@ public class StatService {
         return toOrderedMap(monthlyRows);
     }
 
+    /**
+     * 角色归一化：
+     * 无登录上下文时按 ADMIN 口径统计（用于前台总览接口）。
+     */
     private String roleCode(SysUser user) {
         if (user == null || user.getPrimaryRoleCode() == null) {
             return "ADMIN";
@@ -132,6 +153,9 @@ public class StatService {
         return user.getPrimaryRoleCode().toUpperCase();
     }
 
+    /**
+     * 角色范围辅助：部门管理员按 department_id 收敛范围。
+     */
     private Long scopeDepartmentId(SysUser user) {
         if (user == null) {
             return null;
@@ -139,6 +163,9 @@ public class StatService {
         return user.getDepartmentId();
     }
 
+    /**
+     * 统计列表归一化为 key/value 结构，避免前端适配多种字段名。
+     */
     private List<Map<String, Object>> normalizeKeyValueList(List<Map<String, Object>> rows) {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map<String, Object> row : rows) {
@@ -185,11 +212,16 @@ public class StatService {
         }
     }
 
+    /**
+     * 统计接口降级器：
+     * 任一指标查询失败时返回 fallback，保证总览接口稳定可用。
+     */
     private <T> T safeGet(Supplier<T> supplier, T fallback) {
         try {
             T value = supplier.get();
             return value == null ? fallback : value;
         } catch (Exception ignored) {
+            // 统计接口采用降级策略，单个指标异常不影响整体返回。
             return fallback;
         }
     }

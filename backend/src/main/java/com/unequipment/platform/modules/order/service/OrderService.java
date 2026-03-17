@@ -4,6 +4,7 @@ import com.unequipment.platform.common.api.PageResponse;
 import com.unequipment.platform.common.exception.BizException;
 import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.common.util.BizNoGenerator;
+import com.unequipment.platform.common.util.RoleAuthUtils;
 import com.unequipment.platform.modules.content.service.MessageService;
 import com.unequipment.platform.modules.finance.service.FinanceService;
 import com.unequipment.platform.modules.instrument.entity.Instrument;
@@ -213,8 +214,11 @@ public class OrderService {
 
     @Transactional
     public ReservationOrder audit(Long orderId, SysUser auditor, AuditRequest request) {
-        ReservationOrder order = getOrder(orderId);
+        ReservationOrder order = getOrderForUpdate(orderId);
         assertManageable(order, auditor);
+        if (auditor != null && order.getUserId() != null && order.getUserId().equals(auditor.getId())) {
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "不能审核自己提交的订单");
+        }
         assertActionAllowed(order, ACTION_AUDIT);
 
         String action = request.getAction() == null ? "" : request.getAction().trim().toUpperCase();
@@ -247,7 +251,7 @@ public class OrderService {
 
     @Transactional
     public ReservationOrder checkIn(Long orderId, SysUser operator) {
-        ReservationOrder order = getOrder(orderId);
+        ReservationOrder order = getOrderForUpdate(orderId);
         assertManageable(order, operator);
         assertActionAllowed(order, ACTION_CHECK_IN);
         assertMachineCheckInTime(order, LocalDateTime.now());
@@ -376,6 +380,7 @@ public class OrderService {
     @Transactional
     public ReservationOrder settle(Long orderId, SysUser operator) {
         ReservationOrder order = getOrder(orderId);
+        assertFinancialManagePermission(operator);
         assertManageable(order, operator);
         assertActionAllowed(order, ACTION_SETTLE);
 
@@ -403,7 +408,9 @@ public class OrderService {
         if (!order.getUserId().equals(user.getId())) {
             throw new BizException(ErrorCodes.PERMISSION_DENIED, "不能取消他人的订单");
         }
+        String expectedStatus = order.getOrderStatus();
         assertActionAllowed(order, ACTION_CANCEL);
+        assertUserCancelable(order);
         if ("PAID".equalsIgnoreCase(order.getPayStatus())) {
             financeService.refundForOrder(order, "用户取消订单", user);
             order.setPayStatus("REFUNDED");
@@ -417,7 +424,7 @@ public class OrderService {
         order.setOrderStatus("CANCELED");
         order.setCancelReason("用户取消");
         order.setUpdateTime(LocalDateTime.now());
-        orderRepository.update(order);
+        updateOrderWithExpectedStatus(order, expectedStatus, "订单状态已变化，请刷新后重试");
         appendAudit(order, user, "PASS", "CANCEL", "用户取消订单");
         messageService.send(user, "订单已取消", "您的订单已取消。");
         operationLogService.save(user, "ORDER", "CANCEL_ORDER", "orderId:" + orderId);
@@ -427,7 +434,9 @@ public class OrderService {
     @Transactional
     public ReservationOrder close(Long orderId, SysUser user, OrderActionRequest request) {
         ReservationOrder order = getOrder(orderId);
+        assertFinancialManagePermission(user);
         assertManageable(order, user);
+        String expectedStatus = order.getOrderStatus();
         assertActionAllowed(order, ACTION_CLOSE);
         if ("PAID".equalsIgnoreCase(order.getPayStatus())) {
             throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "已支付订单不能直接关闭，请走退款流程");
@@ -439,7 +448,7 @@ public class OrderService {
             ? "管理员关闭订单"
             : request.getComment().trim());
         order.setUpdateTime(LocalDateTime.now());
-        orderRepository.update(order);
+        updateOrderWithExpectedStatus(order, expectedStatus, "订单状态已变化，请刷新后重试");
         financeService.markSettlementVoid(order, user);
         appendAudit(order, user, "PASS", "CLOSE", order.getCancelReason());
         operationLogService.save(user, "ORDER", "CLOSE_ORDER", "orderId:" + orderId);
@@ -449,6 +458,7 @@ public class OrderService {
     @Transactional
     public ReservationOrder adjustAmount(Long orderId, SysUser user, OrderAmountAdjustRequest request) {
         ReservationOrder order = getOrder(orderId);
+        assertFinancialManagePermission(user);
         assertManageable(order, user);
         assertActionAllowed(order, ACTION_ADJUST_AMOUNT);
         order.setFinalAmount(nullSafe(request.getFinalAmount()));
@@ -486,6 +496,29 @@ public class OrderService {
             .collect(Collectors.toList()));
     }
 
+    @Transactional
+    public int autoCloseExpiredPendingAudit(LocalDateTime cutoffTime, int batchSize) {
+        int safeBatch = Math.max(1, Math.min(batchSize, 500));
+        List<ReservationOrder> expiredOrders = orderRepository.findPendingAuditExpired(cutoffTime, safeBatch);
+        int closed = 0;
+        for (ReservationOrder row : expiredOrders) {
+            ReservationOrder order = getOrderForUpdate(row.getId());
+            if (!"PENDING_AUDIT".equals(order.getOrderStatus())) {
+                continue;
+            }
+            order.setOrderStatus("CANCELED");
+            order.setAuditStatus("REJECT");
+            order.setSettlementStatus("VOID");
+            order.setCancelReason("审核超时自动关闭");
+            order.setUpdateTime(LocalDateTime.now());
+            updateOrderWithExpectedStatus(order, "PENDING_AUDIT", "订单状态已变化，请刷新后重试");
+            appendAudit(order, null, "REJECT", "TIMEOUT_CLOSE", "待审核超时自动关闭");
+            messageService.send(simpleUser(order.getUserId()), "订单已自动关闭", "您的订单因审核超时已自动关闭");
+            closed++;
+        }
+        return closed;
+    }
+
     public PageResponse<OrderSummaryVO> pageOrders(SysUser user, String orderType, String status,
                                                    String keyword, LocalDateTime submitStart, LocalDateTime submitEnd,
                                                    Long filterDepartmentId, String auditorKeyword,
@@ -498,7 +531,7 @@ public class OrderService {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "最小金额不能大于最大金额");
         }
         int offset = Math.max(pageNum - 1, 0) * pageSize;
-        String roleCode = defaultString(user.getPrimaryRoleCode(), "INTERNAL_USER").toUpperCase();
+        String roleCode = resolveManageRoleCode(user);
         List<ReservationOrder> list = orderRepository.findPageForAdmin(
             orderType, status, keyword, submitStart, submitEnd,
             filterDepartmentId, auditorKeyword, minAmount, maxAmount,
@@ -528,6 +561,21 @@ public class OrderService {
             throw new BizException(ErrorCodes.ORDER_NOT_FOUND, "订单不存在");
         }
         return order;
+    }
+
+    private ReservationOrder getOrderForUpdate(Long orderId) {
+        ReservationOrder order = orderRepository.findByIdForUpdate(orderId);
+        if (order == null) {
+            throw new BizException(ErrorCodes.ORDER_NOT_FOUND, "订单不存在");
+        }
+        return order;
+    }
+
+    private void updateOrderWithExpectedStatus(ReservationOrder order, String expectedStatus, String failMessage) {
+        int changed = orderRepository.updateByIdAndStatus(order, expectedStatus);
+        if (changed <= 0) {
+            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, failMessage);
+        }
     }
 
     private ReservationOrder buildBaseOrder(SysUser user, Instrument instrument, String orderType) {
@@ -561,8 +609,16 @@ public class OrderService {
         auditRecord.setOrderId(order.getId());
         Integer maxNode = auditRecordRepository.findMaxNodeNo(order.getId());
         auditRecord.setNodeNo(maxNode == null ? 1 : maxNode + 1);
-        auditRecord.setAuditorId(operator == null ? null : operator.getId());
-        auditRecord.setAuditorRole(operator == null ? null : operator.getPrimaryRoleCode());
+        Long auditorId = operator == null ? null : operator.getId();
+        if (auditorId == null) {
+            // 定时任务等系统动作没有登录用户时，使用订单关联用户兜底，避免审计记录主键约束失败
+            auditorId = order.getOwnerUserId() != null ? order.getOwnerUserId() : order.getUserId();
+        }
+        if (auditorId == null) {
+            auditorId = 1L;
+        }
+        auditRecord.setAuditorId(auditorId);
+        auditRecord.setAuditorRole(operator == null ? "SYSTEM" : operator.getPrimaryRoleCode());
         auditRecord.setAuditResult(result);
         auditRecord.setAuditOpinion(action + (opinion == null ? "" : ": " + opinion));
         auditRecord.setAuditTime(LocalDateTime.now());
@@ -645,6 +701,21 @@ public class OrderService {
         }
     }
 
+    private void assertUserCancelable(ReservationOrder order) {
+        if (!TYPE_MACHINE.equals(order.getOrderType())) {
+            return;
+        }
+        if (!"WAITING_USE".equals(order.getOrderStatus())) {
+            return;
+        }
+        if (order.getReserveStart() == null) {
+            return;
+        }
+        if (!LocalDateTime.now().plusHours(2).isBefore(order.getReserveStart())) {
+            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "开机前2小时内不可自行取消，请联系管理员处理");
+        }
+    }
+
     private SysUser simpleUser(Long userId) {
         SysUser user = new SysUser();
         user.setId(userId);
@@ -684,11 +755,31 @@ public class OrderService {
     }
 
     private boolean hasRole(SysUser user, String roleCode) {
-        return user != null && roleCode.equalsIgnoreCase(user.getPrimaryRoleCode());
+        return RoleAuthUtils.hasRole(user, roleCode);
     }
 
     private boolean canManageAsAdmin(SysUser user) {
         return hasRole(user, "ADMIN") || hasRole(user, "INSTRUMENT_OWNER") || hasRole(user, "DEPT_MANAGER");
+    }
+
+    private void assertFinancialManagePermission(SysUser user) {
+        if (hasRole(user, "ADMIN") || hasRole(user, "DEPT_MANAGER")) {
+            return;
+        }
+        throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权执行结算或金额调整操作");
+    }
+
+    private String resolveManageRoleCode(SysUser user) {
+        if (hasRole(user, "ADMIN")) {
+            return "ADMIN";
+        }
+        if (hasRole(user, "INSTRUMENT_OWNER")) {
+            return "INSTRUMENT_OWNER";
+        }
+        if (hasRole(user, "DEPT_MANAGER")) {
+            return "DEPT_MANAGER";
+        }
+        return defaultString(user == null ? null : user.getPrimaryRoleCode(), "INTERNAL_USER").toUpperCase();
     }
 
     private String defaultString(String value, String fallback) {

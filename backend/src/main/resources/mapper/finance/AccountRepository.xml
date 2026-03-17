@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.finance.repository.AccountRepository">
+
+  <select id="findByUserId" resultType="com.unequipment.platform.modules.finance.entity.Account">
+    select * from biz_account where user_id = #{userId} limit 1
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_account(user_id, balance, frozen_amount, total_recharge, total_consume, status, create_time, update_time)
+    values(#{userId}, #{balance}, #{frozenAmount}, #{totalRecharge}, #{totalConsume}, #{status}, #{createTime}, #{updateTime})
+  </insert>
+
+  <update id="update">
+    update biz_account
+    set balance=#{balance}, frozen_amount=#{frozenAmount}, total_recharge=#{totalRecharge}, total_consume=#{totalConsume}, status=#{status}, update_time=#{updateTime}
+    where id=#{id}
+  </update>
+
+  <update id="increaseBalanceForRecharge">
+    update biz_account
+    set balance = balance + #{amount}, total_recharge = ifnull(total_recharge, 0) + #{amount}, update_time = #{updateTime}
+    where id = #{accountId}
+  </update>
+
+  <update id="decreaseBalanceForConsume">
+    update biz_account
+    set balance = balance - #{amount}, total_consume = ifnull(total_consume, 0) + #{amount}, update_time = #{updateTime}
+    where id = #{accountId} and balance >= #{amount}
+  </update>
+
+  <update id="increaseBalanceForRefund">
+    update biz_account
+    set balance = balance + #{amount}, update_time = #{updateTime}
+    where id = #{accountId}
+  </update>
+
+  <update id="freezeAmountIfAvailable">
+    <!-- 冻结预估金额：仅在可用余额充足时成功 -->
+    update biz_account
+    set frozen_amount = ifnull(frozen_amount, 0) + #{amount}, update_time = #{updateTime}
+    where id = #{accountId} and (balance - ifnull(frozen_amount, 0)) >= #{amount}
+  </update>
+
+  <update id="unfreezeAmount">
+    update biz_account
+    set frozen_amount = frozen_amount - #{amount}, update_time = #{updateTime}
+    where id = #{accountId} and frozen_amount >= #{amount}
+  </update>
+
+  <update id="consumeWithFreeze">
+    <!--
+      结算扣费原子口径：
+      1) 扣减 balance(finalAmount)
+      2) 释放 frozen_amount(frozenAmount)
+      3) 同步累计 total_consume
+    -->
+    update biz_account
+    set balance = balance - #{finalAmount},
+        frozen_amount = frozen_amount - #{frozenAmount},
+        total_consume = ifnull(total_consume, 0) + #{finalAmount},
+        update_time = #{updateTime}
+    where id = #{accountId}
+      and frozen_amount >= #{frozenAmount}
+      and (balance - ifnull(frozen_amount, 0) + #{frozenAmount}) >= #{finalAmount}
+  </update>
+
+</mapper>

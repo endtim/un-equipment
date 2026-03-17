@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.stat.repository.StatQueryRepository">
+
+  <select id="countInstruments" resultType="long">
+    select count(1) from biz_instrument where deleted = 0
+  </select>
+
+  <select id="countDepartments" resultType="long">
+    select count(1) from sys_department where deleted = 0
+  </select>
+
+  <select id="countOrders" resultType="long">
+    <!-- 订单总量口径：按提交时间过滤，并在 SQL 层下推部门管理员范围 -->
+    select count(1)
+    from biz_reservation_order
+    where deleted = 0
+    <if test="startTime != null">
+      and submit_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and submit_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="countOrdersByStatus" resultType="long">
+    <!-- 状态维度订单计数：用于 completed/waiting_settlement 等核心指标 -->
+    select count(1)
+    from biz_reservation_order
+    where deleted = 0
+      and order_status = #{status}
+    <if test="startTime != null">
+      and submit_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and submit_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="avgOrderFinalAmount" resultType="java.math.BigDecimal">
+    select coalesce(avg(coalesce(final_amount, 0)), 0)
+    from biz_reservation_order
+    where deleted = 0
+    <if test="startTime != null">
+      and submit_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and submit_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="countSettlementsByStatus" resultType="long">
+    <!-- 结算状态计数：通过订单关联实现部门范围收敛 -->
+    select count(1)
+    from biz_settlement_record s
+    left join biz_reservation_order o on o.id = s.order_id
+    where s.settle_status = #{status}
+    <if test="startTime != null">
+      and s.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and s.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="sumSettlementAmountByStatus" resultType="java.math.BigDecimal">
+    <!-- 结算金额汇总：仅统计目标结算状态 -->
+    select coalesce(sum(coalesce(s.final_amount, 0)), 0)
+    from biz_settlement_record s
+    left join biz_reservation_order o on o.id = s.order_id
+    where s.settle_status = #{status}
+    <if test="startTime != null">
+      and s.create_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and s.create_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="queryTopInstruments" resultType="map">
+    <!-- 仪器热度 TOP：按订单量排序，排除已取消/已拒绝订单 -->
+    select
+      max(coalesce(nullif(i.instrument_name, ''), concat('仪器#', o.instrument_id))) as `key`,
+      count(1) as `value`
+    from biz_reservation_order o
+    left join biz_instrument i on i.id = o.instrument_id
+    where o.deleted = 0
+      and o.instrument_id is not null
+      and o.order_status not in ('CANCELED', 'REJECTED')
+    <if test="startTime != null">
+      and o.submit_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and o.submit_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+    group by o.instrument_id
+    order by `value` desc, o.instrument_id asc
+    limit #{limit}
+  </select>
+
+  <select id="queryDepartmentDistribution" resultType="map">
+    <!-- 部门分布：按订单量聚合，空部门名归一为“未知部门” -->
+    select
+      coalesce(nullif(d.dept_name, ''), '未知部门') as `key`,
+      count(1) as `value`
+    from biz_reservation_order o
+    left join sys_department d on d.id = o.department_id
+    where o.deleted = 0
+    <if test="startTime != null">
+      and o.submit_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and o.submit_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+    group by coalesce(nullif(d.dept_name, ''), '未知部门')
+    order by `value` desc, `key` asc
+  </select>
+
+  <select id="queryDailyTrend" resultType="map">
+    <!-- 日趋势：按 submit_time 的日期维度聚合 -->
+    select
+      date_format(o.submit_time, '%Y-%m-%d') as `key`,
+      count(1) as `value`
+    from biz_reservation_order o
+    where o.deleted = 0
+      and o.submit_time is not null
+    <if test="startTime != null">
+      and o.submit_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and o.submit_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+    group by date_format(o.submit_time, '%Y-%m-%d')
+    order by `key` asc
+  </select>
+
+  <select id="queryMonthlyTrend" resultType="map">
+    <!-- 月趋势：当日趋势数据不足时回退使用 -->
+    select
+      date_format(o.submit_time, '%Y-%m') as `key`,
+      count(1) as `value`
+    from biz_reservation_order o
+    where o.deleted = 0
+      and o.submit_time is not null
+    <if test="startTime != null">
+      and o.submit_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and o.submit_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and o.department_id = #{scopeDepartmentId}
+    </if>
+    group by date_format(o.submit_time, '%Y-%m')
+    order by `key` asc
+  </select>
+
+  <select id="queryPlatformMembers" resultType="map">
+    <!-- 平台成员页数据源：部门 + 仪器数量 -->
+    select
+      d.id as departmentId,
+      coalesce(nullif(d.dept_name, ''), '未命名部门') as departmentName,
+      count(i.id) as instrumentCount,
+      coalesce(d.sort_no, 2147483647) as sortNo
+    from sys_department d
+    left join biz_instrument i on i.department_id = d.id and i.deleted = 0
+    where d.deleted = 0
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and d.id = #{scopeDepartmentId}
+    </if>
+    group by d.id, d.dept_name, d.sort_no
+    order by instrumentCount desc, sortNo asc, d.id asc
+  </select>
+
+</mapper>

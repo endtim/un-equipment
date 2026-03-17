@@ -40,6 +40,12 @@ public class AuthService {
     @Value("${app.auth.default-department-code:TEST_CENTER}")
     private String defaultDepartmentCode;
 
+    /**
+     * 登录流程：
+     * 1) 校验用户存在且启用
+     * 2) 校验密码
+     * 3) 刷新最近登录时间并签发 token
+     */
     public Map<String, Object> login(LoginRequest request) {
         SysUser user = userRepository.findByUsername(request.getUsername());
         if (user == null || !"ENABLED".equalsIgnoreCase(user.getStatus())) {
@@ -57,6 +63,13 @@ public class AuthService {
         return result;
     }
 
+    /**
+     * 注册流程（事务）：
+     * 1) 校验用户名唯一
+     * 2) 创建用户并绑定默认角色 INTERNAL_USER
+     * 3) 初始化资金账户
+     * 4) 返回登录态 token
+     */
     @Transactional
     public Map<String, Object> register(RegisterRequest request) {
         if (userRepository.findByUsername(request.getUsername()) != null) {
@@ -110,6 +123,23 @@ public class AuthService {
         result.put("token", tokenService.generate(user));
         result.put("user", UserView.from(user));
         return result;
+    }
+
+    /**
+     * 获取当前登录用户信息。
+     * 说明：
+     * 1) 通过认证过滤器注入的 currentUser 获取用户主键
+     * 2) 再次查询数据库，确保返回最新的角色/部门等扩展字段
+     */
+    public UserView info(SysUser currentUser) {
+        if (currentUser == null || currentUser.getId() == null) {
+            throw new BizException(ErrorCodes.UNAUTHORIZED, "未登录或登录已失效");
+        }
+        SysUser dbUser = userRepository.findById(currentUser.getId());
+        if (dbUser == null || !"ENABLED".equalsIgnoreCase(dbUser.getStatus())) {
+            throw new BizException(ErrorCodes.UNAUTHORIZED, "用户不存在或已停用");
+        }
+        return UserView.from(dbUser);
     }
 
     @lombok.Value

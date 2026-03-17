@@ -17,13 +17,22 @@
     <header class="portal-header">
       <div class="portal-container header-inner">
         <div class="brand-block" @click="$router.push('/home')">
-          <div class="seal-mark">校</div>
-          <div>
-            <div class="brand-school">学校大型仪器设备开放共享</div>
-            <div class="brand-title">高校大型仪器共享平台</div>
+          <div class="brand-logo-frame">
+            <img
+              v-if="!logoLoadFailed"
+              :src="schoolLogoSrc"
+              alt="学校校徽"
+              class="brand-logo"
+              @error="logoLoadFailed = true"
+            />
+            <div v-else class="brand-logo-fallback">校</div>
+          </div>
+          <div class="brand-university">
+            <div class="uni-cn">南昌大学</div>
+            <div class="uni-en">NANCHANG UNIVERSITY</div>
           </div>
         </div>
-        <div class="header-slogan">服务教学科研 | 促进开放共享 | 支持规范预约</div>
+        <div class="brand-title">大型仪器预约共享管理平台</div>
       </div>
     </header>
 
@@ -75,7 +84,15 @@
 
 <script>
 export default {
+  data() {
+    return {
+      logoLoadFailed: false
+    }
+  },
   computed: {
+    schoolLogoSrc() {
+      return `${process.env.BASE_URL || '/'}school-logo.png`
+    },
     user() {
       return this.$store.state.user
     },
@@ -184,54 +201,100 @@ export default {
 }
 
 .portal-header {
-  background: linear-gradient(90deg, #0b4ea2 0%, #0c56b2 60%, #1263c8 100%);
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, #06479f 0%, #0b57b7 55%, #0f6ac8 100%);
   color: #fff;
 }
 
+.portal-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.14), transparent 38%),
+    radial-gradient(circle at 88% 40%, rgba(75, 177, 255, 0.2), transparent 36%);
+  pointer-events: none;
+}
+
 .header-inner {
-  height: 116px;
+  position: relative;
+  z-index: 1;
+  min-height: 112px;
+  padding: 14px 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 20px;
 }
 
 .brand-block {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
   cursor: pointer;
 }
 
-.seal-mark {
-  width: 68px;
-  height: 68px;
+.brand-logo-frame {
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #f4d88a, #d5aa40 72%, #bb8e28);
-  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.brand-logo-fallback {
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 28px;
   font-weight: 700;
-  box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.92);
+  background: radial-gradient(circle at 35% 35%, #f4d88a, #d5aa40 72%, #bb8e28);
+  filter: drop-shadow(0 3px 8px rgba(2, 26, 70, 0.35));
 }
 
-.brand-school {
+.brand-university {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.uni-cn {
+  font-size: 38px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 4px;
+}
+
+.uni-en {
   font-size: 18px;
+  line-height: 1;
   letter-spacing: 1px;
-  opacity: 0.92;
+  opacity: 0.95;
+  margin-top: 6px;
 }
 
 .brand-title {
-  font-size: 34px;
+  font-size: 42px;
   font-weight: 700;
-  margin-top: 6px;
-  letter-spacing: 2px;
-}
-
-.header-slogan {
-  font-size: 16px;
-  opacity: 0.9;
+  letter-spacing: 1px;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-shadow: 0 2px 6px rgba(2, 26, 70, 0.3);
 }
 
 .portal-nav {
@@ -323,10 +386,29 @@ export default {
 @media (max-width: 1200px) {
   .header-inner {
     height: auto;
-    padding: 20px 0;
+    padding: 16px 0;
     gap: 12px;
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .brand-logo-frame {
+    width: 60px;
+    height: 60px;
+  }
+
+  .uni-cn {
+    font-size: 30px;
+    letter-spacing: 2px;
+  }
+
+  .uni-en {
+    font-size: 14px;
+    letter-spacing: 1px;
+  }
+
+  .brand-title {
+    font-size: 24px;
   }
 
   .nav-inner {

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.instrument.repository.MaintenanceRecordRepository">
+
+  <select id="findByInstrumentId" resultType="com.unequipment.platform.modules.instrument.entity.MaintenanceRecord">
+    <!-- 维护记录：按创建时间倒序 -->
+    select * from biz_maintenance_record where instrument_id = #{instrumentId} order by create_time desc
+  </select>
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_maintenance_record(
+      instrument_id, maint_type, title, content, start_time, end_time, operator_user_id, status, create_time, update_time
+    ) values (
+      #{instrumentId}, #{maintType}, #{title}, #{content}, #{startTime}, #{endTime}, #{operatorUserId}, #{status}, #{createTime}, #{updateTime}
+    )
+  </insert>
+
+</mapper>

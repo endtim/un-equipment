@@ -17,9 +17,16 @@ public class RechargeOrder {
     private String remark;
     private Long auditUserId;
     private LocalDateTime auditTime;
+    private String reviewStatus;
+    private Long firstAuditUserId;
+    private LocalDateTime firstAuditTime;
+    private Long secondAuditUserId;
+    private LocalDateTime secondAuditTime;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 
     private String userName;
     private String auditUserName;
+    private String firstAuditUserName;
+    private String secondAuditUserName;
 }

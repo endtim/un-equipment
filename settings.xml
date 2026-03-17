@@ -1,12 +1,53 @@
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+
   <mirrors>
+    <!--
+      统一镜像所有远程仓库，避免 POM 中配置的不可达私服导致依赖解析失败。
+      如后续恢复私服，请将 mirrorOf 调整为 central 或按需增加 profile。
+    -->
     <mirror>
-      <id>central-direct</id>
-      <name>Maven Central</name>
+      <id>central-all</id>
+      <name>Maven Central (Mirror All)</name>
       <url>https://repo.maven.apache.org/maven2</url>
-      <mirrorOf>central</mirrorOf>
+      <mirrorOf>*</mirrorOf>
     </mirror>
   </mirrors>
+
+  <profiles>
+    <profile>
+      <id>default-repos</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <repositories>
+        <repository>
+          <id>central</id>
+          <name>Maven Central</name>
+          <url>https://repo.maven.apache.org/maven2</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </repository>
+      </repositories>
+      <pluginRepositories>
+        <pluginRepository>
+          <id>central</id>
+          <name>Maven Central</name>
+          <url>https://repo.maven.apache.org/maven2</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </pluginRepository>
+      </pluginRepositories>
+    </profile>
+  </profiles>
+
 </settings>
