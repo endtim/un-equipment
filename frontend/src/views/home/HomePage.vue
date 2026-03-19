@@ -16,17 +16,29 @@
         <div class="panel-title">平台用户入口</div>
         <template v-if="user">
           <div class="user-name">{{ user.realName }}</div>
-          <div class="user-line"><span>账号</span><span>{{ user.username }}</span></div>
-          <div class="user-line"><span>角色</span><span>{{ roleLabel }}</span></div>
-          <div class="user-line"><span>部门</span><span>{{ user.departmentName || '-' }}</span></div>
+          <div class="user-line">
+            <span>账号</span><span>{{ user.username }}</span>
+          </div>
+          <div class="user-line">
+            <span>角色</span><span>{{ roleLabel }}</span>
+          </div>
+          <div class="user-line">
+            <span>部门</span><span>{{ user.departmentName || '-' }}</span>
+          </div>
           <div class="login-actions">
-            <el-button type="primary" class="full" @click="$router.push('/center')">进入用户中心</el-button>
-            <el-button v-if="isAdmin" class="full" @click="$router.push('/admin')">进入管理平台</el-button>
+            <el-button type="primary" class="full" @click="$router.push('/center')"
+              >进入用户中心</el-button
+            >
+            <el-button v-if="isAdmin" class="full" @click="$router.push('/admin')"
+              >进入管理平台</el-button
+            >
           </div>
         </template>
         <template v-else>
           <div class="login-text">请登录后进行预约、送样、充值和订单追踪。</div>
-          <el-button type="primary" class="full" @click="$router.push('/login')">登录平台</el-button>
+          <el-button type="primary" class="full" @click="$router.push('/login')"
+            >登录平台</el-button
+          >
         </template>
       </div>
     </section>
@@ -56,10 +68,18 @@
         <div class="panel-head">
           <h3>仪器实时情况</h3>
         </div>
-        <div class="stats-row"><span>在册仪器</span><strong>{{ overview.instrumentCount || 0 }}</strong></div>
-        <div class="stats-row"><span>累计预约</span><strong>{{ overview.reservationCount || 0 }}</strong></div>
-        <div class="stats-row"><span>完成服务</span><strong>{{ overview.completionCount || 0 }}</strong></div>
-        <div class="stats-row"><span>服务收入</span><strong>{{ formatAmount(overview.incomeAmount) }}</strong></div>
+        <div class="stats-row">
+          <span>在册仪器</span><strong>{{ overview.instrumentCount || 0 }}</strong>
+        </div>
+        <div class="stats-row">
+          <span>累计预约</span><strong>{{ overview.reservationCount || 0 }}</strong>
+        </div>
+        <div class="stats-row">
+          <span>完成服务</span><strong>{{ overview.completionCount || 0 }}</strong>
+        </div>
+        <div class="stats-row">
+          <span>服务收入</span><strong>{{ formatAmount(overview.incomeAmount) }}</strong>
+        </div>
       </div>
     </section>
 
@@ -113,7 +133,7 @@
     </section>
 
     <section>
-      <div class="panel-head" style="margin-bottom: 12px;">
+      <div class="panel-head" style="margin-bottom: 12px">
         <h3>热门仪器</h3>
         <span @click="$router.push('/instruments')">更多</span>
       </div>
@@ -189,7 +209,9 @@ export default {
     },
     instrumentRanking() {
       if (Array.isArray(this.overview.topInstruments) && this.overview.topInstruments.length) {
-        return this.overview.topInstruments.slice(0, 5).map(item => ({ name: item.key, value: item.value }))
+        return this.overview.topInstruments
+          .slice(0, 5)
+          .map((item) => ({ name: item.key, value: item.value }))
       }
       return []
     },
@@ -213,7 +235,11 @@ export default {
     this.overview = overview || {}
     this.notices = Array.isArray(noticePage?.list) ? noticePage.list : []
     this.helpDocs = Array.isArray(helpDocPage?.list) ? helpDocPage.list : []
-    this.instruments = Array.isArray(instruments?.list) ? instruments.list : (Array.isArray(instruments) ? instruments : [])
+    this.instruments = Array.isArray(instruments?.list)
+      ? instruments.list
+      : Array.isArray(instruments)
+        ? instruments
+        : []
   },
   methods: {
     openInstrument(item) {

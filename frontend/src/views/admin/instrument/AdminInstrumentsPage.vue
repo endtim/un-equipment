@@ -1,6 +1,13 @@
 <template>
   <div class="admin-page">
     <div class="content-card admin-table-card">
+      <div class="admin-summary-grid" style="margin-bottom: 14px">
+        <div v-for="card in summaryCards" :key="card.label" class="admin-summary-card">
+          <div class="admin-summary-label">{{ card.label }}</div>
+          <div class="admin-summary-value">{{ card.value }}</div>
+        </div>
+      </div>
+
       <div class="admin-toolbar">
         <el-input
           v-model="query.keyword"
@@ -9,7 +16,12 @@
           style="width: 260px"
         />
         <el-select v-model="query.categoryId" clearable placeholder="分类" style="width: 180px">
-          <el-option v-for="item in categories" :key="item.id" :label="item.categoryName" :value="item.id" />
+          <el-option
+            v-for="item in categories"
+            :key="item.id"
+            :label="item.categoryName"
+            :value="item.id"
+          />
         </el-select>
         <el-select v-model="query.status" clearable placeholder="状态" style="width: 140px">
           <el-option label="正常" value="NORMAL" />
@@ -27,14 +39,20 @@
         <el-table-column prop="categoryName" label="分类" width="140" />
         <el-table-column prop="location" label="放置地点" min-width="160" />
         <el-table-column label="校内价格" width="110">
-          <template #default="{ row }">{{ formatPrice(row.priceInternal ?? row.machinePricePerHour) }}</template>
+          <template #default="{ row }">{{
+            formatPrice(row.priceInternal ?? row.machinePricePerHour)
+          }}</template>
         </el-table-column>
         <el-table-column label="校外价格" width="110">
-          <template #default="{ row }">{{ formatPrice(row.priceExternal ?? row.samplePricePerItem) }}</template>
+          <template #default="{ row }">{{
+            formatPrice(row.priceExternal ?? row.samplePricePerItem)
+          }}</template>
         </el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <el-tag :type="instrumentStatusTagType(row.status)">{{ instrumentStatusLabel(row.status) }}</el-tag>
+            <el-tag :type="instrumentStatusTagType(row.status)">{{
+              instrumentStatusLabel(row.status)
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
@@ -76,7 +94,12 @@
           </el-form-item>
           <el-form-item label="仪器分类" prop="categoryId">
             <el-select v-model="form.categoryId" class="full-width">
-              <el-option v-for="item in categories" :key="item.id" :label="item.categoryName" :value="item.id" />
+              <el-option
+                v-for="item in categories"
+                :key="item.id"
+                :label="item.categoryName"
+                :value="item.id"
+              />
             </el-select>
           </el-form-item>
         </div>
@@ -131,10 +154,20 @@
 
         <div class="grid-3">
           <el-form-item label="校内价格(元)" prop="priceInternal">
-            <el-input-number v-model="form.priceInternal" :min="0" :precision="2" class="full-width" />
+            <el-input-number
+              v-model="form.priceInternal"
+              :min="0"
+              :precision="2"
+              class="full-width"
+            />
           </el-form-item>
           <el-form-item label="校外价格(元)" prop="priceExternal">
-            <el-input-number v-model="form.priceExternal" :min="0" :precision="2" class="full-width" />
+            <el-input-number
+              v-model="form.priceExternal"
+              :min="0"
+              :precision="2"
+              class="full-width"
+            />
           </el-form-item>
           <el-form-item label="是否需要审核" prop="needAudit">
             <el-select v-model="form.needAudit" class="full-width">
@@ -146,10 +179,20 @@
 
         <div class="grid-3">
           <el-form-item label="最短预约时长(分钟)" prop="minReserveMinutes">
-            <el-input-number v-model="form.minReserveMinutes" :min="1" :step="1" class="full-width" />
+            <el-input-number
+              v-model="form.minReserveMinutes"
+              :min="1"
+              :step="1"
+              class="full-width"
+            />
           </el-form-item>
           <el-form-item label="最长预约时长(分钟)" prop="maxReserveMinutes">
-            <el-input-number v-model="form.maxReserveMinutes" :min="1" :step="1" class="full-width" />
+            <el-input-number
+              v-model="form.maxReserveMinutes"
+              :min="1"
+              :step="1"
+              class="full-width"
+            />
           </el-form-item>
           <el-form-item label="时间步长(分钟)" prop="stepMinutes">
             <el-input-number v-model="form.stepMinutes" :min="1" :step="1" class="full-width" />
@@ -213,6 +256,21 @@ function defaultForm() {
 }
 
 export default {
+  computed: {
+    summaryCards() {
+      const normal = this.instruments.filter((item) => item.status === 'NORMAL').length
+      const maintain = this.instruments.filter((item) => item.status === 'MAINTENANCE').length
+      const unavailable = this.instruments.filter((item) =>
+        ['DISABLED', 'FAULT'].includes(item.status)
+      ).length
+      return [
+        { label: '仪器总数', value: this.total || 0 },
+        { label: '当前页正常', value: normal },
+        { label: '当前页维护中', value: maintain },
+        { label: '当前页不可用', value: unavailable }
+      ]
+    }
+  },
   data() {
     return {
       categories: [],
@@ -234,7 +292,9 @@ export default {
           { min: 2, max: 200, message: '仪器名称长度为2-200字符', trigger: 'blur' }
         ],
         categoryId: [{ required: true, message: '请选择仪器分类', trigger: 'change' }],
-        serviceContactPhone: [{ pattern: /^[0-9+\-() ]{0,20}$/, message: '联系电话格式不正确', trigger: 'blur' }],
+        serviceContactPhone: [
+          { pattern: /^[0-9+\-() ]{0,20}$/, message: '联系电话格式不正确', trigger: 'blur' }
+        ],
         priceInternal: [{ required: true, message: '请输入校内价格', trigger: 'change' }],
         priceExternal: [{ required: true, message: '请输入校外价格', trigger: 'change' }],
         minReserveMinutes: [{ required: true, message: '请输入最短预约时长', trigger: 'change' }],

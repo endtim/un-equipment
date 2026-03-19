@@ -63,7 +63,12 @@ public class OperationLogService {
 
         ACTION_LABELS.put("SUBMIT_RECHARGE", "提交充值申请");
         ACTION_LABELS.put("AUDIT_RECHARGE", "审核充值申请");
+        ACTION_LABELS.put("AUDIT_RECHARGE_FIRST_PASS", "充值初审通过");
         ACTION_LABELS.put("REFUND_ORDER", "订单退款");
+        ACTION_LABELS.put("REQUEST_REFUND", "发起退款申请");
+        ACTION_LABELS.put("HANDLE_RECONCILIATION_ANOMALY", "处理对账异常");
+        ACTION_LABELS.put("REFUND_COMPENSATE_REPAIR", "退款补偿修复");
+        ACTION_LABELS.put("REFUND_COMPENSATE_ROLLBACK", "退款补偿回滚");
 
         ACTION_LABELS.put("CREATE_CATEGORY", "创建仪器分类");
         ACTION_LABELS.put("UPDATE_CATEGORY", "更新仪器分类");
@@ -84,6 +89,8 @@ public class OperationLogService {
         ACTION_LABELS.put("CREATE_HELP_DOC", "创建帮助文档");
         ACTION_LABELS.put("UPDATE_HELP_DOC", "更新帮助文档");
         ACTION_LABELS.put("DELETE_HELP_DOC", "删除帮助文档");
+        ACTION_LABELS.put("AUDIT_EXTERNAL_USER", "审核校外用户");
+        ACTION_LABELS.put("UPDATE_USER_STATUS", "更新用户状态");
     }
 
     /**
@@ -187,9 +194,9 @@ public class OperationLogService {
         vo.setUserId(item.getUserId());
         vo.setOperatorName(item.getOperatorName());
         vo.setModuleName(item.getModuleName());
-        vo.setModuleLabel(MODULE_LABELS.getOrDefault(item.getModuleName(), item.getModuleName()));
+        vo.setModuleLabel(MODULE_LABELS.getOrDefault(item.getModuleName(), "未知模块"));
         vo.setActionName(item.getActionName());
-        vo.setActionLabel(ACTION_LABELS.getOrDefault(item.getActionName(), item.getActionName()));
+        vo.setActionLabel(ACTION_LABELS.getOrDefault(item.getActionName(), "未知动作"));
         vo.setRequestMethod(item.getRequestMethod());
         vo.setRequestUri(item.getRequestUri());
         vo.setRequestIp(item.getRequestIp());

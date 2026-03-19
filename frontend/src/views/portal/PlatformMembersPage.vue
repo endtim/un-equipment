@@ -2,11 +2,7 @@
   <div class="portal-subpage members-page">
     <section class="content-card members-card">
       <div v-if="rows.length" class="members-grid">
-        <article
-          v-for="item in rows"
-          :key="item.departmentId"
-          class="member-item"
-        >
+        <article v-for="item in rows" :key="item.departmentId" class="member-item">
           <div class="member-title-line">
             <span class="member-icon" />
             <h3 class="member-title">{{ item.departmentName }}</h3>

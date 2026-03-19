@@ -1,13 +1,13 @@
 <template>
   <div class="admin-page">
-    <div class="grid-3" style="margin-bottom: 12px;">
+    <div class="grid-3" style="margin-bottom: 12px">
       <div class="content-card stat-card" v-for="card in dashboardCards" :key="card.label">
         <div class="stat-label">{{ card.label }}</div>
         <div class="stat-value">{{ card.value }}</div>
       </div>
     </div>
 
-    <div class="content-card admin-table-card" style="margin-bottom: 14px;">
+    <div class="content-card admin-table-card" style="margin-bottom: 14px">
       <h3 class="admin-card-title">结算管理</h3>
 
       <div class="toolbar">
@@ -18,7 +18,13 @@
           style="width: 260px"
           @keyup.enter="onQueryChange"
         />
-        <el-select v-model="query.status" clearable placeholder="结算状态" style="width: 160px" @change="onQueryChange">
+        <el-select
+          v-model="query.status"
+          clearable
+          placeholder="结算状态"
+          style="width: 160px"
+          @change="onQueryChange"
+        >
           <el-option label="待结算" value="PENDING" />
           <el-option label="已结算" value="CONFIRMED" />
           <el-option label="退款待审批" value="REFUND_PENDING" />
@@ -26,10 +32,27 @@
           <el-option label="已退款" value="REFUNDED" />
           <el-option label="已作废" value="VOID" />
         </el-select>
-        <el-select v-model="query.departmentId" clearable placeholder="申请部门" style="width: 180px" @change="onQueryChange">
-          <el-option v-for="item in departments" :key="item.id" :label="item.deptName" :value="item.id" />
+        <el-select
+          v-model="query.departmentId"
+          clearable
+          placeholder="申请部门"
+          style="width: 180px"
+          @change="onQueryChange"
+        >
+          <el-option
+            v-for="item in departments"
+            :key="item.id"
+            :label="item.deptName"
+            :value="item.id"
+          />
         </el-select>
-        <el-input-number v-model="query.orderId" :min="1" :controls="false" placeholder="订单ID" style="width: 120px" />
+        <el-input-number
+          v-model="query.orderId"
+          :min="1"
+          :controls="false"
+          placeholder="订单ID"
+          style="width: 120px"
+        />
         <el-date-picker
           v-model="query.createRange"
           type="datetimerange"
@@ -49,10 +72,24 @@
           @change="onSettledRangeChange"
         />
         <el-button-group>
-          <el-button :type="quickRange === '7d' ? 'primary' : 'default'" @click="setQuickRange('7d')">近7天</el-button>
-          <el-button :type="quickRange === '30d' ? 'primary' : 'default'" @click="setQuickRange('30d')">近30天</el-button>
-          <el-button :type="quickRange === 'month' ? 'primary' : 'default'" @click="setQuickRange('month')">本月</el-button>
-          <el-button :type="quickRange === '' ? 'primary' : 'default'" @click="setQuickRange('')">清空快捷</el-button>
+          <el-button
+            :type="quickRange === '7d' ? 'primary' : 'default'"
+            @click="setQuickRange('7d')"
+            >近7天</el-button
+          >
+          <el-button
+            :type="quickRange === '30d' ? 'primary' : 'default'"
+            @click="setQuickRange('30d')"
+            >近30天</el-button
+          >
+          <el-button
+            :type="quickRange === 'month' ? 'primary' : 'default'"
+            @click="setQuickRange('month')"
+            >本月</el-button
+          >
+          <el-button :type="quickRange === '' ? 'primary' : 'default'" @click="setQuickRange('')"
+            >清空快捷</el-button
+          >
         </el-button-group>
         <el-button type="primary" @click="onQueryChange">查询</el-button>
         <el-button @click="resetQuery">重置</el-button>
@@ -83,9 +120,27 @@
           <template #default="{ row }">
             <div class="action-wrap">
               <el-button link type="primary" @click="showDetail(row)">详情</el-button>
-              <el-button v-if="row.settleStatus === 'PENDING'" link type="success" @click="doSettle(row)">结算完成</el-button>
-              <el-button v-if="row.settleStatus === 'CONFIRMED'" link type="warning" @click="requestRefund(row)">申请退款</el-button>
-              <el-button v-if="row.settleStatus === 'REFUND_PENDING'" link type="danger" @click="approveRefund(row)">审批退款</el-button>
+              <el-button
+                v-if="row.settleStatus === 'PENDING'"
+                link
+                type="success"
+                @click="doSettle(row)"
+                >结算完成</el-button
+              >
+              <el-button
+                v-if="row.settleStatus === 'CONFIRMED'"
+                link
+                type="warning"
+                @click="requestRefund(row)"
+                >申请退款</el-button
+              >
+              <el-button
+                v-if="row.settleStatus === 'REFUND_PENDING'"
+                link
+                type="danger"
+                @click="approveRefund(row)"
+                >审批退款</el-button
+              >
             </div>
           </template>
         </el-table-column>
@@ -106,7 +161,13 @@
     <div class="content-card admin-table-card">
       <h3 class="admin-card-title">异常账清单</h3>
       <div class="toolbar">
-        <el-select v-model="anomalyQuery.type" clearable placeholder="异常类型" style="width: 180px" @change="loadAnomalies">
+        <el-select
+          v-model="anomalyQuery.type"
+          clearable
+          placeholder="异常类型"
+          style="width: 180px"
+          @change="loadAnomalies"
+        >
           <el-option label="已完成未结算" value="COMPLETED_UNSETTLED" />
           <el-option label="待结算滞留" value="WAITING_SETTLEMENT" />
           <el-option label="已结算未支付" value="CONFIRMED_UNPAID" />
@@ -120,7 +181,9 @@
         <el-table-column prop="userName" label="用户" width="120" />
         <el-table-column label="处理状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="anomalyHandleTag(row.handleStatus)">{{ anomalyHandleLabel(row.handleStatus) }}</el-tag>
+            <el-tag :type="anomalyHandleTag(row.handleStatus)">{{
+              anomalyHandleLabel(row.handleStatus)
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="handlerUserName" label="处理人" width="100" />
@@ -134,8 +197,12 @@
         <el-table-column label="处理" width="170">
           <template #default="{ row }">
             <div class="action-wrap">
-              <el-button link type="warning" @click="handleAnomaly(row, 'PROCESSING')">处理中</el-button>
-              <el-button link type="success" @click="handleAnomaly(row, 'RESOLVED')">已处理</el-button>
+              <el-button link type="warning" @click="handleAnomaly(row, 'PROCESSING')"
+                >处理中</el-button
+              >
+              <el-button link type="success" @click="handleAnomaly(row, 'RESOLVED')"
+                >已处理</el-button
+              >
             </div>
           </template>
         </el-table-column>
@@ -185,7 +252,11 @@ import {
   requestRefundAdminSettlement,
   settleAdminSettlement
 } from '../../../api/settlement'
-import { getReconciliationAnomalies, getReconciliationOverview, handleReconciliationAnomaly } from '../../../api/account'
+import {
+  getReconciliationAnomalies,
+  getReconciliationOverview,
+  handleReconciliationAnomaly
+} from '../../../api/account'
 import { formatDateTime } from '../../../utils/datetime'
 import {
   billTypeLabel as billTypeLabelDict,
@@ -254,8 +325,8 @@ export default {
           label: '异常账数量',
           value: String(
             (this.overview.completedButUnsettled || 0) +
-            (this.overview.waitingSettlementOrders || 0) +
-            (this.overview.confirmedButUnpaidOrders || 0)
+              (this.overview.waitingSettlementOrders || 0) +
+              (this.overview.confirmedButUnpaidOrders || 0)
           )
         },
         { label: '待结算订单', value: String(this.overview.waitingSettlementOrders || 0) },
@@ -278,7 +349,7 @@ export default {
   methods: {
     formatDateTime,
     statusLabel(value) {
-      return STATUS_LABEL[value] || value || '-'
+      return STATUS_LABEL[value] || '未知状态'
     },
     statusTag(value) {
       return STATUS_TAG[value] || 'info'
@@ -489,10 +560,14 @@ export default {
     },
     async handleAnomaly(row, handleStatus) {
       await this.executeSafely(async () => {
-        const { value } = await ElMessageBox.prompt('请输入处理备注（可选）', '更新异常账处理状态', {
-          confirmButtonText: '确认',
-          cancelButtonText: '取消'
-        })
+        const { value } = await ElMessageBox.prompt(
+          '请输入处理备注（可选）',
+          '更新异常账处理状态',
+          {
+            confirmButtonText: '确认',
+            cancelButtonText: '取消'
+          }
+        )
         await handleReconciliationAnomaly({
           anomalyType: row.anomalyType,
           orderId: row.orderId,

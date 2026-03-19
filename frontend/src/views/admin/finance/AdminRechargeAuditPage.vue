@@ -3,6 +3,13 @@
     <div class="content-card admin-table-card">
       <h3 class="admin-card-title">充值审核</h3>
 
+      <div class="admin-summary-grid" style="margin-bottom: 14px">
+        <div v-for="card in summaryCards" :key="card.label" class="admin-summary-card">
+          <div class="admin-summary-label">{{ card.label }}</div>
+          <div class="admin-summary-value">{{ card.value }}</div>
+        </div>
+      </div>
+
       <div class="toolbar">
         <el-input
           v-model="query.keyword"
@@ -11,14 +18,34 @@
           style="width: 240px"
           @keyup.enter="onQueryChange"
         />
-        <el-select v-model="query.status" clearable placeholder="全部状态" style="width: 150px" @change="onQueryChange">
+        <el-select
+          v-model="query.status"
+          clearable
+          placeholder="全部状态"
+          style="width: 150px"
+          @change="onQueryChange"
+        >
           <el-option label="待审核" value="PENDING" />
           <el-option label="待复核" value="REVIEW_PENDING" />
           <el-option label="已通过" value="PASS" />
           <el-option label="已驳回" value="REJECT" />
         </el-select>
-        <el-input-number v-model="query.minAmount" :min="0" :precision="2" :controls="false" placeholder="最小金额" style="width: 120px" />
-        <el-input-number v-model="query.maxAmount" :min="0" :precision="2" :controls="false" placeholder="最大金额" style="width: 120px" />
+        <el-input-number
+          v-model="query.minAmount"
+          :min="0"
+          :precision="2"
+          :controls="false"
+          placeholder="最小金额"
+          style="width: 120px"
+        />
+        <el-input-number
+          v-model="query.maxAmount"
+          :min="0"
+          :precision="2"
+          :controls="false"
+          placeholder="最大金额"
+          style="width: 120px"
+        />
         <el-date-picker
           v-model="query.timeRange"
           type="datetimerange"
@@ -61,7 +88,9 @@
         </el-table-column>
         <el-table-column label="备注">
           <template #default="{ row }">
-            <span :class="{ 'reject-remark': row.status === 'REJECT' }">{{ row.remark || '-' }}</span>
+            <span :class="{ 'reject-remark': row.status === 'REJECT' }">{{
+              row.remark || '-'
+            }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="180">
@@ -100,6 +129,19 @@ import { formatDateTime as formatDateTimeUtil } from '../../../utils/datetime'
 import { rechargeStatusLabel, rechargeStatusTagType } from '../../../utils/dicts'
 
 export default {
+  computed: {
+    summaryCards() {
+      const pending = this.recharges.filter((item) => item.status === 'PENDING').length
+      const reviewing = this.recharges.filter((item) => item.status === 'REVIEW_PENDING').length
+      const passed = this.recharges.filter((item) => item.status === 'PASS').length
+      return [
+        { label: '充值单总数', value: this.total || 0 },
+        { label: '当前页待审核', value: pending },
+        { label: '当前页待复核', value: reviewing },
+        { label: '当前页已通过', value: passed }
+      ]
+    }
+  },
   data() {
     return {
       recharges: [],
@@ -172,7 +214,7 @@ export default {
         const url = window.URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
-        link.download = 'recharges.csv'
+        link.download = '充值记录.csv'
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)

@@ -5,6 +5,9 @@
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
+    "format": "prettier --write \"src/**/*.{js,vue}\" \"tests/**/*.{js,ts}\" \"scripts/**/*.js\" \"*.{js,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{js,vue}\" \"tests/**/*.{js,ts}\" \"scripts/**/*.js\" \"*.{js,json,md}\"",
+    "check:copy-cn": "node scripts/check-business-copy-cn.js",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed"
   },
@@ -21,6 +24,7 @@
     "@playwright/test": "^1.54.2",
     "@vue/cli-plugin-babel": "^5.0.8",
     "@vue/cli-service": "^5.0.8",
-    "@vue/compiler-sfc": "^3.5.13"
+    "@vue/compiler-sfc": "^3.5.13",
+    "prettier": "^3.6.2"
   }
 }

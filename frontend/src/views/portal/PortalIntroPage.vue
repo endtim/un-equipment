@@ -46,10 +46,33 @@
 </template>
 
 <style scoped>
-.portal-subpage { display: flex; flex-direction: column; gap: 18px; }
-.sub-section { padding: 24px; }
-.paragraph { margin: 0 0 14px; line-height: 1.9; color: #44566f; }
-.info-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-.plain-list { margin: 0; padding-left: 18px; line-height: 2; color: #44566f; }
-@media (max-width: 900px) { .info-grid { grid-template-columns: 1fr; } }
+.portal-subpage {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.sub-section {
+  padding: 24px;
+}
+.paragraph {
+  margin: 0 0 14px;
+  line-height: 1.9;
+  color: #44566f;
+}
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.plain-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 2;
+  color: #44566f;
+}
+@media (max-width: 900px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

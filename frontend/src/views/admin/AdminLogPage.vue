@@ -16,10 +16,14 @@
 
       <el-table :data="logs" border>
         <el-table-column prop="moduleName" label="模块" width="120">
-          <template #default="{ row }">{{ row.moduleLabel || moduleLabel(row.moduleName) }}</template>
+          <template #default="{ row }">{{
+            row.moduleLabel || moduleLabel(row.moduleName)
+          }}</template>
         </el-table-column>
         <el-table-column label="动作" width="180">
-          <template #default="{ row }">{{ row.actionLabel || row.actionName }}</template>
+          <template #default="{ row }">{{
+            row.actionLabel || actionLabel(row.actionName)
+          }}</template>
         </el-table-column>
         <el-table-column prop="operatorName" label="操作人" width="120" />
         <el-table-column prop="requestMethod" label="方法" width="90" />
@@ -34,7 +38,12 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" label="操作时间" width="180" :formatter="formatDateTimeCell" />
+        <el-table-column
+          prop="createTime"
+          label="操作时间"
+          width="180"
+          :formatter="formatDateTimeCell"
+        />
       </el-table>
 
       <div class="admin-pagination">
@@ -124,7 +133,19 @@ export default {
         INSTRUMENT: '仪器管理',
         CONTENT: '内容管理'
       }
-      return mapping[value] || value || '-'
+      return mapping[value] || '未知模块'
+    },
+    actionLabel(value) {
+      const mapping = {
+        AUDIT_EXTERNAL_USER: '审核校外用户',
+        UPDATE_USER_STATUS: '更新用户状态',
+        AUDIT_RECHARGE_FIRST_PASS: '充值初审通过',
+        REQUEST_REFUND: '发起退款申请',
+        HANDLE_RECONCILIATION_ANOMALY: '处理对账异常',
+        REFUND_COMPENSATE_REPAIR: '退款补偿修复',
+        REFUND_COMPENSATE_ROLLBACK: '退款补偿回滚'
+      }
+      return mapping[value] || '未知动作'
     }
   }
 }

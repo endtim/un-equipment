@@ -115,13 +115,13 @@ public class InstrumentAdminController {
     @DeleteMapping("/{id}")
     public ApiResponse<?> delete(@PathVariable Long id, @CurrentUser SysUser operator) {
         instrumentService.deleteInstrument(id, operator);
-        return ApiResponse.success("ok");
+        return ApiResponse.success("成功");
     }
 
     @DeleteMapping("/categories/{id}")
     public ApiResponse<?> deleteCategory(@PathVariable Long id, @CurrentUser SysUser operator) {
         instrumentService.deleteCategory(id, operator);
-        return ApiResponse.success("ok");
+        return ApiResponse.success("成功");
     }
 
     /**
@@ -146,7 +146,7 @@ public class InstrumentAdminController {
     @DeleteMapping("/open-rules/{id}")
     public ApiResponse<?> deleteRule(@PathVariable Long id, @CurrentUser SysUser operator) {
         instrumentService.deleteOpenRule(id, operator);
-        return ApiResponse.success("ok");
+        return ApiResponse.success("成功");
     }
 
     @PostMapping("/attachments")
@@ -165,6 +165,6 @@ public class InstrumentAdminController {
     @DeleteMapping("/attachments/{id}")
     public ApiResponse<?> deleteAttachment(@PathVariable Long id, @CurrentUser SysUser operator) {
         instrumentService.deleteAttachment(id, operator);
-        return ApiResponse.success("ok");
+        return ApiResponse.success("成功");
     }
 }

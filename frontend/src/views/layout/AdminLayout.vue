@@ -50,7 +50,11 @@ const ADMIN_GROUPS = [
     label: '工作台',
     items: [
       { label: '后台首页', path: '/admin', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] },
-      { label: '统计报表', path: '/admin/stats', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] },
+      {
+        label: '统计报表',
+        path: '/admin/stats',
+        roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER']
+      },
       { label: '日志审计', path: '/admin/logs', roles: ['ADMIN'] }
     ]
   },
@@ -68,16 +72,32 @@ const ADMIN_GROUPS = [
     label: '仪器管理',
     items: [
       { label: '仪器分类', path: '/admin/categories', roles: ['ADMIN'] },
-      { label: '仪器管理', path: '/admin/instruments', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] },
-      { label: '开放规则', path: '/admin/open-rules', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] }
+      {
+        label: '仪器管理',
+        path: '/admin/instruments',
+        roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER']
+      },
+      {
+        label: '开放规则',
+        path: '/admin/open-rules',
+        roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER']
+      }
     ]
   },
   {
     key: 'business',
     label: '业务处理',
     items: [
-      { label: '上机订单', path: '/admin/orders/machine', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] },
-      { label: '送样订单', path: '/admin/orders/sample', roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER'] },
+      {
+        label: '上机订单',
+        path: '/admin/orders/machine',
+        roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER']
+      },
+      {
+        label: '送样订单',
+        path: '/admin/orders/sample',
+        roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER']
+      },
       { label: '充值审核', path: '/admin/recharges', roles: ['ADMIN', 'DEPT_MANAGER'] },
       { label: '结算管理', path: '/admin/settlements', roles: ['ADMIN', 'DEPT_MANAGER'] }
     ]
@@ -101,12 +121,10 @@ export default {
       return this.user?.roleCode || ''
     },
     groups() {
-      return ADMIN_GROUPS
-        .map(group => ({
-          ...group,
-          items: group.items.filter(item => item.roles.includes(this.roleCode))
-        }))
-        .filter(group => group.items.length > 0)
+      return ADMIN_GROUPS.map((group) => ({
+        ...group,
+        items: group.items.filter((item) => item.roles.includes(this.roleCode))
+      })).filter((group) => group.items.length > 0)
     },
     pageMeta() {
       return this.$route.meta || {}
@@ -126,8 +144,8 @@ export default {
     currentNav() {
       const currentPath = this.$route.path
       let bestMatch = null
-      this.groups.forEach(group => {
-        group.items.forEach(item => {
+      this.groups.forEach((group) => {
+        group.items.forEach((item) => {
           if (currentPath === item.path || currentPath.startsWith(`${item.path}/`)) {
             if (!bestMatch || item.path.length > bestMatch.item.path.length) {
               bestMatch = { group, item }

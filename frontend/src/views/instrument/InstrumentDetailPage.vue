@@ -3,13 +3,15 @@
     <div class="content-card detail-hero">
       <div class="hero-main">
         <div class="hero-code">{{ detail.code || '暂无编号' }}</div>
-        <div class="section-title" style="margin-bottom: 10px;">{{ detail.name }}</div>
+        <div class="section-title" style="margin-bottom: 10px">{{ detail.name }}</div>
         <div class="hero-desc">{{ detail.description || '暂无仪器简介。' }}</div>
         <div class="hero-tags">
           <el-tag :type="statusTagType(detail.status)" size="small">{{ statusLabel }}</el-tag>
           <el-tag size="small">{{ openModeLabel(detail.openMode) }}</el-tag>
           <el-tag v-if="Number(detail.needAudit) === 1" size="small" type="warning">需审核</el-tag>
-          <el-tag v-if="Number(detail.requireTraining) === 1" size="small" type="info">需培训</el-tag>
+          <el-tag v-if="Number(detail.requireTraining) === 1" size="small" type="info"
+            >需培训</el-tag
+          >
         </div>
         <div class="metrics-row">
           <div class="metric-item">
@@ -45,7 +47,11 @@
         </div>
         <div class="hero-actions">
           <el-button @click="goBack">返回列表</el-button>
-          <el-button type="primary" :disabled="!canReserve" @click="activateReserve(preferredReserveMode)">
+          <el-button
+            type="primary"
+            :disabled="!canReserve"
+            @click="activateReserve(preferredReserveMode)"
+          >
             {{ reserveButtonText }}
           </el-button>
         </div>
@@ -59,21 +65,44 @@
           <el-descriptions :column="2" border>
             <el-descriptions-item label="仪器名称">{{ detail.name }}</el-descriptions-item>
             <el-descriptions-item label="仪器编号">{{ detail.code || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="仪器分类">{{ detail.categoryName || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="所属单位">{{ detail.departmentName || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="负责人">{{ detail.ownerUserName || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="放置地点">{{ detail.location || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="品牌型号">{{ detail.brand || '-' }} {{ detail.model || '' }}</el-descriptions-item>
+            <el-descriptions-item label="仪器分类">{{
+              detail.categoryName || '-'
+            }}</el-descriptions-item>
+            <el-descriptions-item label="所属单位">{{
+              detail.departmentName || '-'
+            }}</el-descriptions-item>
+            <el-descriptions-item label="负责人">{{
+              detail.ownerUserName || '-'
+            }}</el-descriptions-item>
+            <el-descriptions-item label="放置地点">{{
+              detail.location || '-'
+            }}</el-descriptions-item>
+            <el-descriptions-item label="品牌型号"
+              >{{ detail.brand || '-' }} {{ detail.model || '' }}</el-descriptions-item
+            >
             <el-descriptions-item label="预约单位">{{ bookingUnitText }}</el-descriptions-item>
-            <el-descriptions-item label="资产编号">{{ detail.assetNo || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="生产厂家">{{ detail.manufacturer || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="资产编号">{{
+              detail.assetNo || '-'
+            }}</el-descriptions-item>
+            <el-descriptions-item label="生产厂家">{{
+              detail.manufacturer || '-'
+            }}</el-descriptions-item>
             <el-descriptions-item label="供应商">{{ detail.supplier || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="制造国家">{{ detail.originCountry || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="购置日期">{{ detail.purchaseDate || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="生产日期">{{ detail.productionDate || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="设备来源">{{ detail.equipmentSource || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="制造国家">{{
+              detail.originCountry || '-'
+            }}</el-descriptions-item>
+            <el-descriptions-item label="购置日期">{{
+              detail.purchaseDate || '-'
+            }}</el-descriptions-item>
+            <el-descriptions-item label="生产日期">{{
+              detail.productionDate || '-'
+            }}</el-descriptions-item>
+            <el-descriptions-item label="设备来源">{{
+              detail.equipmentSource || '-'
+            }}</el-descriptions-item>
             <el-descriptions-item label="使用联系人">
-              {{ detail.serviceContactName || '-' }} {{ detail.serviceContactPhone ? `(${detail.serviceContactPhone})` : '' }}
+              {{ detail.serviceContactName || '-' }}
+              {{ detail.serviceContactPhone ? `(${detail.serviceContactPhone})` : '' }}
             </el-descriptions-item>
           </el-descriptions>
         </div>
@@ -101,7 +130,8 @@
           </div>
           <div class="open-rule-list">
             <div v-for="item in detail.openRules || []" :key="item.id" class="open-rule-row">
-              {{ weekLabels(item) }}：{{ String(item.startTime).slice(0, 5) }} - {{ String(item.endTime).slice(0, 5) }}
+              {{ weekLabels(item) }}：{{ String(item.startTime).slice(0, 5) }} -
+              {{ String(item.endTime).slice(0, 5) }}
             </div>
           </div>
         </div>
@@ -128,7 +158,9 @@
 
         <div class="content-card block-card">
           <div class="block-title">用户须知</div>
-          <div class="rich-text">{{ detail.userNotice || detail.noticeText || '暂无用户须知。' }}</div>
+          <div class="rich-text">
+            {{ detail.userNotice || detail.noticeText || '暂无用户须知。' }}
+          </div>
         </div>
 
         <div class="content-card block-card">
@@ -179,14 +211,18 @@
                 value-format="YYYY-MM-DD"
                 format="YYYY-MM-DD"
                 placeholder="选择日期"
-                style="width: 170px;"
+                style="width: 170px"
                 @change="loadReservedSlots"
               />
             </div>
             <div v-loading="reservedSlotsLoading" class="reserved-slot-body">
               <div v-if="reservedSlots.length === 0" class="empty-text">当天暂无已预约记录</div>
               <div v-else class="reserved-slot-list">
-                <div v-for="item in reservedSlots" :key="`${item.orderId}-${item.text}`" class="reserved-slot-item">
+                <div
+                  v-for="item in reservedSlots"
+                  :key="`${item.orderId}-${item.text}`"
+                  class="reserved-slot-item"
+                >
                   <span>{{ item.text }}</span>
                   <el-tag size="small" type="warning">{{ item.statusLabel || '已占用' }}</el-tag>
                 </div>
@@ -196,12 +232,26 @@
 
           <el-form v-if="activeReserve === 'machine'" :model="machineForm" label-position="top">
             <el-form-item label="预约开始时间">
-              <el-date-picker v-model="machineForm.reservedStart" type="datetime" style="width: 100%;" />
+              <el-date-picker
+                v-model="machineForm.reservedStart"
+                type="datetime"
+                style="width: 100%"
+              />
             </el-form-item>
             <el-form-item label="预约结束时间">
-              <el-date-picker v-model="machineForm.reservedEnd" type="datetime" style="width: 100%;" />
+              <el-date-picker
+                v-model="machineForm.reservedEnd"
+                type="datetime"
+                style="width: 100%"
+              />
             </el-form-item>
-            <el-button type="primary" style="width: 100%;" :disabled="!canReserve" @click="submitMachine">提交上机预约</el-button>
+            <el-button
+              type="primary"
+              style="width: 100%"
+              :disabled="!canReserve"
+              @click="submitMachine"
+              >提交上机预约</el-button
+            >
           </el-form>
 
           <el-form v-if="activeReserve === 'sample'" :model="sampleForm" label-position="top">
@@ -209,9 +259,15 @@
               <el-input v-model="sampleForm.sampleName" />
             </el-form-item>
             <el-form-item label="样品数量">
-              <el-input-number v-model="sampleForm.sampleCount" :min="1" style="width: 100%;" />
+              <el-input-number v-model="sampleForm.sampleCount" :min="1" style="width: 100%" />
             </el-form-item>
-            <el-button type="primary" style="width: 100%;" :disabled="!canReserve" @click="submitSample">提交送样预约</el-button>
+            <el-button
+              type="primary"
+              style="width: 100%"
+              :disabled="!canReserve"
+              @click="submitSample"
+              >提交送样预约</el-button
+            >
           </el-form>
         </div>
 
@@ -306,7 +362,9 @@ export default {
       if (this.canReserve) {
         return ''
       }
-      return this.detail?.runtimeStatus?.reason || '当前仪器处于停用、维护或未开放状态，暂不可预约。'
+      return (
+        this.detail?.runtimeStatus?.reason || '当前仪器处于停用、维护或未开放状态，暂不可预约。'
+      )
     },
     bookingUnitText() {
       return bookingUnitLabel(this.detail?.bookingUnit)
@@ -343,8 +401,8 @@ export default {
       try {
         const list = await getInstrumentReservedSlots(this.id, this.slotDate)
         this.reservedSlots = (list || [])
-          .map(item => this.normalizeReservedSlot(item))
-          .filter(item => item.startAt && item.endAt)
+          .map((item) => this.normalizeReservedSlot(item))
+          .filter((item) => item.startAt && item.endAt)
       } catch (error) {
         this.reservedSlots = []
       } finally {
@@ -368,22 +426,14 @@ export default {
     normalizeSlotStatusLabel(status, rawLabel) {
       if (status) {
         const labelByStatus = orderStatusLabel(status)
-        if (labelByStatus && labelByStatus !== status) {
+        if (labelByStatus && labelByStatus !== '-' && labelByStatus !== status) {
           return labelByStatus
         }
       }
-      const mapping = {
-        'Pending Audit': '待审核',
-        'Waiting Use': '待使用',
-        'Waiting Receive': '待接样',
-        'In Use': '使用中',
-        'Waiting Settlement': '待结算',
-        Reserved: '已占用'
+      if (rawLabel && /[\u4e00-\u9fa5]/.test(rawLabel)) {
+        return rawLabel
       }
-      if (rawLabel && mapping[rawLabel]) {
-        return mapping[rawLabel]
-      }
-      return rawLabel || '已占用'
+      return '已占用'
     },
     resolveDateTime(dateTimeValue, timeValue) {
       if (dateTimeValue) {
@@ -405,7 +455,7 @@ export default {
       if (!startAt.isValid() || !endAt.isValid()) {
         return false
       }
-      return this.reservedSlots.some(slot => {
+      return this.reservedSlots.some((slot) => {
         const slotStart = dayjs(slot.startAt)
         const slotEnd = dayjs(slot.endAt)
         return startAt.isBefore(slotEnd) && endAt.isAfter(slotStart)
@@ -437,7 +487,9 @@ export default {
         this.slotDate = formDate
         await this.loadReservedSlots()
       }
-      if (this.hasReservedSlotConflict(this.machineForm.reservedStart, this.machineForm.reservedEnd)) {
+      if (
+        this.hasReservedSlotConflict(this.machineForm.reservedStart, this.machineForm.reservedEnd)
+      ) {
         this.$message.error('所选时间段与已有预约冲突，请重新选择')
         return
       }
@@ -486,14 +538,14 @@ export default {
       }
       return text
         .split(',')
-        .map(item => Number(item))
-        .filter(item => item >= 1 && item <= 7)
-        .map(item => `周${this.weekLabel(item)}`)
+        .map((item) => Number(item))
+        .filter((item) => item >= 1 && item <= 7)
+        .map((item) => `周${this.weekLabel(item)}`)
         .join('、')
     },
     weekLabel(value) {
       const mapping = ['一', '二', '三', '四', '五', '六', '日']
-      return mapping[(Number(value) || 1) - 1] || value
+      return mapping[(Number(value) || 1) - 1] || '未知'
     }
   }
 }

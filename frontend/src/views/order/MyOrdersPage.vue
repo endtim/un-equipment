@@ -1,13 +1,20 @@
 ﻿<template>
   <div>
-    <div class="grid-3" style="margin-bottom: 14px;">
-      <div v-for="card in summaryCards" :key="card.label" class="content-card" style="padding: 16px 18px;">
-        <div style="color: var(--muted); font-size: 13px;">{{ card.label }}</div>
-        <div style="margin-top: 6px; font-size: 26px; font-weight: 700; color: var(--primary);">{{ card.value }}</div>
+    <div class="grid-3" style="margin-bottom: 14px">
+      <div
+        v-for="card in summaryCards"
+        :key="card.label"
+        class="content-card"
+        style="padding: 16px 18px"
+      >
+        <div style="color: var(--muted); font-size: 13px">{{ card.label }}</div>
+        <div style="margin-top: 6px; font-size: 26px; font-weight: 700; color: var(--primary)">
+          {{ card.value }}
+        </div>
       </div>
     </div>
 
-    <div class="content-card" style="padding: 24px;">
+    <div class="content-card" style="padding: 24px">
       <div class="section-title">{{ pageTitle }}</div>
       <div class="mode-tip">{{ pageTip }}</div>
 
@@ -18,9 +25,16 @@
         </el-table-column>
         <el-table-column prop="instrumentName" label="仪器名称" min-width="160" />
         <el-table-column v-if="isMachinePage" label="预约时段" min-width="320">
-          <template #default="{ row }">{{ formatRange(row.reservedStart, row.reservedEnd) }}</template>
+          <template #default="{ row }">{{
+            formatRange(row.reservedStart, row.reservedEnd)
+          }}</template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="提交时间" width="180" :formatter="formatDateTimeCell" />
+        <el-table-column
+          prop="createdAt"
+          label="提交时间"
+          width="180"
+          :formatter="formatDateTimeCell"
+        />
         <el-table-column label="状态" width="170">
           <template #default="{ row }">{{ orderStatusLabel(row.status) }}</template>
         </el-table-column>
@@ -28,7 +42,9 @@
         <el-table-column label="操作" width="200">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-            <el-button v-if="canCancel(row)" link type="danger" @click="cancel(row)">取消</el-button>
+            <el-button v-if="canCancel(row)" link type="danger" @click="cancel(row)"
+              >取消</el-button
+            >
           </template>
         </el-table-column>
         <template #empty>
@@ -52,15 +68,19 @@
       <template v-if="detail">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="订单编号">{{ detail.orderNo }}</el-descriptions-item>
-          <el-descriptions-item label="订单类型">{{ orderTypeLabel(detail.orderType) }}</el-descriptions-item>
-          <el-descriptions-item label="状态">{{ orderStatusLabel(detail.status) }}</el-descriptions-item>
+          <el-descriptions-item label="订单类型">{{
+            orderTypeLabel(detail.orderType)
+          }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{
+            orderStatusLabel(detail.status)
+          }}</el-descriptions-item>
           <el-descriptions-item label="仪器名称">{{ detail.instrumentName }}</el-descriptions-item>
           <el-descriptions-item label="金额">{{ detail.amount }}</el-descriptions-item>
           <el-descriptions-item label="备注">{{ detail.remark }}</el-descriptions-item>
         </el-descriptions>
 
-        <div style="margin-top: 20px;">
-          <div class="section-title" style="font-size: 18px;">审核记录</div>
+        <div style="margin-top: 20px">
+          <div class="section-title" style="font-size: 18px">审核记录</div>
           <el-timeline>
             <el-timeline-item
               v-for="item in detail.auditRecords || []"
@@ -72,15 +92,15 @@
           </el-timeline>
         </div>
 
-        <div v-if="detail.usageRecord" style="margin-top: 20px;">
-          <div class="section-title" style="font-size: 18px;">使用记录</div>
+        <div v-if="detail.usageRecord" style="margin-top: 20px">
+          <div class="section-title" style="font-size: 18px">使用记录</div>
           <div>签到时间：{{ formatDateTime(detail.usageRecord.checkinTime) }}</div>
           <div>开始时间：{{ formatDateTime(detail.usageRecord.startTime) }}</div>
           <div>结束时间：{{ formatDateTime(detail.usageRecord.endTime) }}</div>
         </div>
 
-        <div v-if="detail.sampleDetail" style="margin-top: 20px;">
-          <div class="section-title" style="font-size: 18px;">送样信息</div>
+        <div v-if="detail.sampleDetail" style="margin-top: 20px">
+          <div class="section-title" style="font-size: 18px">送样信息</div>
           <div>样品名称：{{ detail.sampleDetail.sampleName }}</div>
           <div>样品数量：{{ detail.sampleDetail.sampleCount }}</div>
           <div>测试状态：{{ sampleTestingStatusLabel(detail.sampleDetail.testingStatus) }}</div>
@@ -150,8 +170,10 @@ export default {
     },
     summaryCards() {
       const total = this.total
-      const waiting = this.orders.filter(item => ['PENDING_AUDIT', 'WAITING_USE', 'WAITING_RECEIVE', 'TESTING'].includes(item.status)).length
-      const completed = this.orders.filter(item => item.status === 'COMPLETED').length
+      const waiting = this.orders.filter((item) =>
+        ['PENDING_AUDIT', 'WAITING_USE', 'WAITING_RECEIVE', 'TESTING'].includes(item.status)
+      ).length
+      const completed = this.orders.filter((item) => item.status === 'COMPLETED').length
       const totalAmount = this.orders.reduce((sum, item) => sum + Number(item.amount || 0), 0)
       return [
         { label: '订单总数', value: String(total) },

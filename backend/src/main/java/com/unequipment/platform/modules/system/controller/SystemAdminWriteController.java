@@ -1,10 +1,13 @@
 package com.unequipment.platform.modules.system.controller;
 
 import com.unequipment.platform.common.api.ApiResponse;
+import com.unequipment.platform.modules.system.dto.UserAuditRequest;
+import com.unequipment.platform.modules.system.dto.UserStatusUpdateRequest;
 import com.unequipment.platform.modules.system.entity.SysDepartment;
 import com.unequipment.platform.modules.system.entity.SysRole;
 import com.unequipment.platform.modules.system.entity.SysUser;
 import com.unequipment.platform.modules.system.service.SystemAdminService;
+import javax.validation.Valid;
 import com.unequipment.platform.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -60,7 +63,7 @@ public class SystemAdminWriteController {
     @DeleteMapping("/departments/{id}")
     public ApiResponse<?> deleteDepartment(@PathVariable Long id, @CurrentUser SysUser user) {
         systemAdminService.deleteDepartment(id, user);
-        return ApiResponse.success("ok");
+        return ApiResponse.success("成功");
     }
 
     /**
@@ -69,7 +72,7 @@ public class SystemAdminWriteController {
     @DeleteMapping("/roles/{id}")
     public ApiResponse<?> deleteRole(@PathVariable Long id, @CurrentUser SysUser user) {
         systemAdminService.deleteRole(id, user);
-        return ApiResponse.success("ok");
+        return ApiResponse.success("成功");
     }
 
     /**
@@ -89,11 +92,31 @@ public class SystemAdminWriteController {
     }
 
     /**
+     * 审核校外注册用户（待审核 -> 通过/驳回）。
+     */
+    @PostMapping("/users/{id}/audit")
+    public ApiResponse<SysUser> auditUser(@PathVariable Long id,
+                                          @Valid @RequestBody UserAuditRequest request,
+                                          @CurrentUser SysUser user) {
+        return ApiResponse.success(systemAdminService.auditExternalUser(id, request, user));
+    }
+
+    /**
+     * 账号状态调整（启用/禁用等）。
+     */
+    @PostMapping("/users/{id}/status")
+    public ApiResponse<SysUser> updateUserStatus(@PathVariable Long id,
+                                                 @Valid @RequestBody UserStatusUpdateRequest request,
+                                                 @CurrentUser SysUser user) {
+        return ApiResponse.success(systemAdminService.updateUserStatus(id, request, user));
+    }
+
+    /**
      * 删除用户（软删除）。
      */
     @DeleteMapping("/users/{id}")
     public ApiResponse<?> deleteUser(@PathVariable Long id, @CurrentUser SysUser user) {
         systemAdminService.deleteUser(id, user);
-        return ApiResponse.success("ok");
+        return ApiResponse.success("成功");
     }
 }

@@ -97,6 +97,32 @@ a {
   padding: 24px 0 8px;
 }
 
+.admin-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-summary-card {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+}
+
+.admin-summary-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.admin-summary-value {
+  margin-top: 6px;
+  color: var(--primary);
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 700;
+}
+
 @media (max-width: 900px) {
   .grid-3 {
     grid-template-columns: 1fr;
@@ -105,5 +131,9 @@ a {
   .admin-toolbar .el-input,
   .admin-toolbar .el-select {
     width: 100%;
+  }
+
+  .admin-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

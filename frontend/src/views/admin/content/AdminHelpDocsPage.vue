@@ -3,7 +3,12 @@
     <div class="content-card admin-table-card">
       <div class="admin-toolbar">
         <el-input v-model="query.keyword" placeholder="搜索帮助文档标题" clearable />
-        <el-select v-model="query.publishStatus" clearable placeholder="发布状态" style="width: 140px">
+        <el-select
+          v-model="query.publishStatus"
+          clearable
+          placeholder="发布状态"
+          style="width: 140px"
+        >
           <el-option label="已发布" value="PUBLISHED" />
           <el-option label="草稿" value="DRAFT" />
         </el-select>
@@ -15,7 +20,9 @@
         <el-table-column prop="title" label="标题" min-width="220" />
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="publishTagType(row.publishStatus)">{{ publishStatusLabel(row.publishStatus) }}</el-tag>
+            <el-tag :type="publishTagType(row.publishStatus)">{{
+              publishStatusLabel(row.publishStatus)
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="140">
@@ -51,7 +58,13 @@
           <el-input v-model="form.title" maxlength="100" show-word-limit />
         </el-form-item>
         <el-form-item label="摘要" prop="summary">
-          <el-input v-model="form.summary" type="textarea" :rows="3" maxlength="255" show-word-limit />
+          <el-input
+            v-model="form.summary"
+            type="textarea"
+            :rows="3"
+            maxlength="255"
+            show-word-limit
+          />
         </el-form-item>
         <el-form-item label="正文内容" prop="content">
           <el-input v-model="form.content" type="textarea" :rows="8" />
@@ -73,7 +86,12 @@
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { createHelpDoc, deleteHelpDoc, getAdminHelpDocPage, updateHelpDoc } from '../../../api/admin'
+import {
+  createHelpDoc,
+  deleteHelpDoc,
+  getAdminHelpDocPage,
+  updateHelpDoc
+} from '../../../api/admin'
 
 function defaultForm() {
   return {
@@ -200,7 +218,7 @@ export default {
     },
     publishStatusLabel(value) {
       const mapping = { PUBLISHED: '已发布', DRAFT: '草稿' }
-      return mapping[value] || value || '-'
+      return mapping[value] || '未知状态'
     },
     publishTagType(value) {
       const mapping = { PUBLISHED: 'success', DRAFT: 'info' }

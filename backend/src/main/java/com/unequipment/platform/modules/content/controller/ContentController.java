@@ -80,7 +80,7 @@ public class ContentController {
     @PostMapping("/messages/{id}/read")
     public ApiResponse<?> read(@PathVariable Long id, @CurrentUser SysUser user) {
         messageService.markRead(user, id);
-        return ApiResponse.success("ok");
+        return ApiResponse.success("成功");
     }
 
     /**
@@ -89,6 +89,6 @@ public class ContentController {
     @PostMapping("/messages/read-all")
     public ApiResponse<?> readAll(@CurrentUser SysUser user) {
         messageService.markAllRead(user);
-        return ApiResponse.success("ok");
+        return ApiResponse.success("成功");
     }
 }

@@ -44,9 +44,9 @@ function normalizeBizMessage(message, fallback = '服务异常，请稍后重试
   if (typeof message === 'string' && message.trim()) {
     const text = message.trim()
     if (
-      text.toLowerCase() !== 'internal server error'
-      && text.toLowerCase() !== 'forbidden'
-      && text.toLowerCase() !== 'unauthorized'
+      text.toLowerCase() !== 'internal server error' &&
+      text.toLowerCase() !== 'forbidden' &&
+      text.toLowerCase() !== 'unauthorized'
     ) {
       return text
     }
@@ -64,7 +64,7 @@ const service = axios.create({
   timeout: 10000
 })
 
-service.interceptors.request.use(config => {
+service.interceptors.request.use((config) => {
   const token = store.state.token
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
@@ -86,15 +86,15 @@ service.interceptors.request.use(config => {
 })
 
 service.interceptors.response.use(
-  response => {
+  (response) => {
     const requestKey = response.config && response.config.__requestKey
     if (requestKey) {
       pendingWriteMap.delete(requestKey)
     }
     const payload = response.data
     if (
-      (response.config && response.config.rawResponse)
-      || (response.config && response.config.responseType === 'blob')
+      (response.config && response.config.rawResponse) ||
+      (response.config && response.config.responseType === 'blob')
     ) {
       return payload
     }
@@ -104,16 +104,18 @@ service.interceptors.response.use(
       if (shouldToast(response.config)) {
         ElMessage.error(msg)
       }
-      return Promise.reject(new RequestError(msg, {
-        kind: 'biz',
-        code,
-        httpStatus: response.status,
-        raw: payload
-      }))
+      return Promise.reject(
+        new RequestError(msg, {
+          kind: 'biz',
+          code,
+          httpStatus: response.status,
+          raw: payload
+        })
+      )
     }
     return payload.data
   },
-  error => {
+  (error) => {
     const requestKey = error.config && error.config.__requestKey
     if (requestKey) {
       pendingWriteMap.delete(requestKey)
@@ -127,12 +129,14 @@ service.interceptors.response.use(
       store.commit('clearAuth')
       const redirect = router.currentRoute.value && router.currentRoute.value.fullPath
       router.push({ path: '/login', query: redirect ? { redirect } : {} })
-      return Promise.reject(new RequestError('登录状态已失效，请重新登录', {
-        kind: 'auth',
-        code: 401,
-        httpStatus: 401,
-        raw: payload || error
-      }))
+      return Promise.reject(
+        new RequestError('登录状态已失效，请重新登录', {
+          kind: 'auth',
+          code: 401,
+          httpStatus: 401,
+          raw: payload || error
+        })
+      )
     }
 
     if (status === 403 || bizCode === 40300) {
@@ -140,12 +144,14 @@ service.interceptors.response.use(
       if (shouldToast(error.config)) {
         ElMessage.error(message)
       }
-      return Promise.reject(new RequestError(message, {
-        kind: 'biz',
-        code: 40300,
-        httpStatus: status || 403,
-        raw: payload || error
-      }))
+      return Promise.reject(
+        new RequestError(message, {
+          kind: 'biz',
+          code: 40300,
+          httpStatus: status || 403,
+          raw: payload || error
+        })
+      )
     }
 
     if (payload && typeof payload.code !== 'undefined') {
@@ -153,24 +159,28 @@ service.interceptors.response.use(
       if (shouldToast(error.config)) {
         ElMessage.error(message)
       }
-      return Promise.reject(new RequestError(message, {
-        kind: 'biz',
-        code: payload.code,
-        httpStatus: status,
-        raw: payload
-      }))
+      return Promise.reject(
+        new RequestError(message, {
+          kind: 'biz',
+          code: payload.code,
+          httpStatus: status,
+          raw: payload
+        })
+      )
     }
 
     const message = normalizeBizMessage(error.message, '网络异常，请检查连接后重试')
     if (shouldToast(error.config)) {
       ElMessage.error(message)
     }
-    return Promise.reject(new RequestError(message, {
-      kind: 'network',
-      code: null,
-      httpStatus: status || null,
-      raw: error
-    }))
+    return Promise.reject(
+      new RequestError(message, {
+        kind: 'network',
+        code: null,
+        httpStatus: status || null,
+        raw: error
+      })
+    )
   }
 )
 

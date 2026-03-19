@@ -131,7 +131,7 @@ function fromMap(mapping, value, fallback = '-') {
   if (value === null || value === undefined || value === '') {
     return fallback
   }
-  return mapping[value] || value
+  return Object.prototype.hasOwnProperty.call(mapping, value) ? mapping[value] : fallback
 }
 
 export function orderTypeLabel(value) {

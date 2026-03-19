@@ -620,10 +620,55 @@ public class OrderService {
         auditRecord.setAuditorId(auditorId);
         auditRecord.setAuditorRole(operator == null ? "SYSTEM" : operator.getPrimaryRoleCode());
         auditRecord.setAuditResult(result);
-        auditRecord.setAuditOpinion(action + (opinion == null ? "" : ": " + opinion));
+        String actionLabel = auditActionLabel(action);
+        String opinionText = opinion == null ? "" : opinion.trim();
+        auditRecord.setAuditOpinion(opinionText.isEmpty() ? actionLabel : (actionLabel + "：" + opinionText));
         auditRecord.setAuditTime(LocalDateTime.now());
         auditRecord.setCreateTime(LocalDateTime.now());
         auditRecordRepository.insert(auditRecord);
+    }
+
+    private String auditActionLabel(String action) {
+        if ("AUTO_APPROVE".equals(action)) {
+            return "自动通过";
+        }
+        if ("SUBMIT".equals(action)) {
+            return "提交申请";
+        }
+        if ("APPROVE".equals(action)) {
+            return "审核通过";
+        }
+        if ("REJECT".equals(action)) {
+            return "审核驳回";
+        }
+        if ("CHECK_IN".equals(action)) {
+            return "上机签到";
+        }
+        if ("RECEIVE_SAMPLE".equals(action)) {
+            return "接收样品";
+        }
+        if ("UPLOAD_RESULT".equals(action)) {
+            return "上传结果";
+        }
+        if ("FINISH_USE".equals(action)) {
+            return "结束上机";
+        }
+        if ("SETTLE".equals(action)) {
+            return "完成结算";
+        }
+        if ("CANCEL".equals(action)) {
+            return "取消订单";
+        }
+        if ("CLOSE".equals(action)) {
+            return "关闭订单";
+        }
+        if ("ADJUST_AMOUNT".equals(action)) {
+            return "调整金额";
+        }
+        if ("TIMEOUT_CLOSE".equals(action)) {
+            return "超时关闭";
+        }
+        return "操作记录";
     }
 
     private BigDecimal nullSafe(BigDecimal value) {

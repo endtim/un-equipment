@@ -6,6 +6,13 @@
         <el-tag>{{ orderType === 'MACHINE' ? '上机流程' : '送样流程' }}</el-tag>
       </div>
 
+      <div class="admin-summary-grid" style="margin-bottom: 14px">
+        <div v-for="card in summaryCards" :key="card.label" class="admin-summary-card">
+          <div class="admin-summary-label">{{ card.label }}</div>
+          <div class="admin-summary-value">{{ card.value }}</div>
+        </div>
+      </div>
+
       <div class="toolbar">
         <el-input
           v-model="query.keyword"
@@ -14,8 +21,19 @@
           style="width: 240px"
           @keyup.enter="onQueryChange"
         />
-        <el-select v-model="query.status" clearable placeholder="全部状态" style="width: 180px" @change="onQueryChange">
-          <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+        <el-select
+          v-model="query.status"
+          clearable
+          placeholder="全部状态"
+          style="width: 180px"
+          @change="onQueryChange"
+        >
+          <el-option
+            v-for="item in statusOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
         </el-select>
         <el-date-picker
           v-model="query.submitRange"
@@ -26,8 +44,19 @@
           style="width: 360px"
           @change="onQueryChange"
         />
-        <el-select v-model="query.departmentId" clearable placeholder="申请部门" style="width: 170px" @change="onQueryChange">
-          <el-option v-for="item in departments" :key="item.id" :label="item.deptName" :value="item.id" />
+        <el-select
+          v-model="query.departmentId"
+          clearable
+          placeholder="申请部门"
+          style="width: 170px"
+          @change="onQueryChange"
+        >
+          <el-option
+            v-for="item in departments"
+            :key="item.id"
+            :label="item.deptName"
+            :value="item.id"
+          />
         </el-select>
         <el-input
           v-model="query.auditorKeyword"
@@ -82,15 +111,61 @@
         <el-table-column label="操作" min-width="460">
           <template #default="{ row }">
             <div class="action-wrap">
-              <el-button v-if="row.status === 'PENDING_AUDIT'" link type="primary" @click="audit(row, 'APPROVE')">审核通过</el-button>
-              <el-button v-if="row.status === 'PENDING_AUDIT'" link type="danger" @click="audit(row, 'REJECT')">驳回</el-button>
-              <el-button v-if="row.orderType === 'MACHINE' && row.status === 'WAITING_USE'" link @click="checkIn(row)">签到</el-button>
-              <el-button v-if="row.orderType === 'MACHINE' && row.status === 'IN_USE'" link @click="finish(row)">结束使用</el-button>
-              <el-button v-if="row.orderType === 'SAMPLE' && row.status === 'WAITING_RECEIVE'" link @click="receive(row)">接样</el-button>
-              <el-button v-if="row.orderType === 'SAMPLE' && row.status === 'TESTING'" link @click="uploadResult(row)">上传结果</el-button>
-              <el-button v-if="row.orderType === 'SAMPLE' && row.status === 'WAITING_SETTLEMENT'" link type="primary" @click="adjustAmount(row)">调整金额</el-button>
-              <el-button v-if="row.status === 'WAITING_SETTLEMENT'" link type="success" @click="goSettlement(row)">去结算</el-button>
-              <el-button v-if="canClose(row)" link type="warning" @click="closeOrder(row)">关闭订单</el-button>
+              <el-button
+                v-if="row.status === 'PENDING_AUDIT'"
+                link
+                type="primary"
+                @click="audit(row, 'APPROVE')"
+                >审核通过</el-button
+              >
+              <el-button
+                v-if="row.status === 'PENDING_AUDIT'"
+                link
+                type="danger"
+                @click="audit(row, 'REJECT')"
+                >驳回</el-button
+              >
+              <el-button
+                v-if="row.orderType === 'MACHINE' && row.status === 'WAITING_USE'"
+                link
+                @click="checkIn(row)"
+                >签到</el-button
+              >
+              <el-button
+                v-if="row.orderType === 'MACHINE' && row.status === 'IN_USE'"
+                link
+                @click="finish(row)"
+                >结束使用</el-button
+              >
+              <el-button
+                v-if="row.orderType === 'SAMPLE' && row.status === 'WAITING_RECEIVE'"
+                link
+                @click="receive(row)"
+                >接样</el-button
+              >
+              <el-button
+                v-if="row.orderType === 'SAMPLE' && row.status === 'TESTING'"
+                link
+                @click="uploadResult(row)"
+                >上传结果</el-button
+              >
+              <el-button
+                v-if="row.orderType === 'SAMPLE' && row.status === 'WAITING_SETTLEMENT'"
+                link
+                type="primary"
+                @click="adjustAmount(row)"
+                >调整金额</el-button
+              >
+              <el-button
+                v-if="row.status === 'WAITING_SETTLEMENT'"
+                link
+                type="success"
+                @click="goSettlement(row)"
+                >去结算</el-button
+              >
+              <el-button v-if="canClose(row)" link type="warning" @click="closeOrder(row)"
+                >关闭订单</el-button
+              >
             </div>
           </template>
         </el-table-column>
@@ -114,7 +189,10 @@
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { orderStatusLabel as orderStatusLabelDict, orderStatusTagType as orderStatusTagTypeDict } from '../../../utils/dicts'
+import {
+  orderStatusLabel as orderStatusLabelDict,
+  orderStatusTagType as orderStatusTagTypeDict
+} from '../../../utils/dicts'
 import { getAdminDepartments } from '../../../api/admin'
 import { formatDateTime as formatDateTimeUtil } from '../../../utils/datetime'
 import {
@@ -128,7 +206,14 @@ import {
   uploadAdminOrderResult
 } from '../../../api/order'
 
-const CLOSABLE_STATUS = ['PENDING_AUDIT', 'WAITING_USE', 'IN_USE', 'WAITING_RECEIVE', 'TESTING', 'WAITING_SETTLEMENT']
+const CLOSABLE_STATUS = [
+  'PENDING_AUDIT',
+  'WAITING_USE',
+  'IN_USE',
+  'WAITING_RECEIVE',
+  'TESTING',
+  'WAITING_SETTLEMENT'
+]
 
 export default {
   props: {
@@ -170,6 +255,19 @@ export default {
         { value: 'COMPLETED', label: '已完成' },
         { value: 'CANCELED', label: '已取消' },
         { value: 'REJECTED', label: '已驳回' }
+      ]
+    },
+    summaryCards() {
+      const pending = this.orders.filter((item) => item.status === 'PENDING_AUDIT').length
+      const waitingSettlement = this.orders.filter(
+        (item) => item.status === 'WAITING_SETTLEMENT'
+      ).length
+      const completed = this.orders.filter((item) => item.status === 'COMPLETED').length
+      return [
+        { label: '订单总数', value: this.total || 0 },
+        { label: '当前页待审核', value: pending },
+        { label: '当前页待结算', value: waitingSettlement },
+        { label: '当前页已完成', value: completed }
       ]
     }
   },
@@ -312,17 +410,21 @@ export default {
     },
     async askComment(title, required = false) {
       try {
-        const { value } = await ElMessageBox.prompt(required ? '请填写原因' : '可选填写备注', title, {
-          confirmButtonText: '确认',
-          cancelButtonText: '取消',
-          inputValue: '',
-          inputValidator: (val) => {
-            if (required && !String(val || '').trim()) {
-              return '原因不能为空'
+        const { value } = await ElMessageBox.prompt(
+          required ? '请填写原因' : '可选填写备注',
+          title,
+          {
+            confirmButtonText: '确认',
+            cancelButtonText: '取消',
+            inputValue: '',
+            inputValidator: (val) => {
+              if (required && !String(val || '').trim()) {
+                return '原因不能为空'
+              }
+              return true
             }
-            return true
           }
-        })
+        )
         return (value || '').trim()
       } catch (error) {
         return ''

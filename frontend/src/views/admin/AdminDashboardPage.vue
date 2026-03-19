@@ -10,7 +10,9 @@
     <div class="content-card admin-card">
       <h3 class="admin-card-title">快捷入口</h3>
       <div class="quick-actions">
-        <el-button type="primary" @click="$router.push('/admin/orders/machine')">上机订单</el-button>
+        <el-button type="primary" @click="$router.push('/admin/orders/machine')"
+          >上机订单</el-button
+        >
         <el-button @click="$router.push('/admin/orders/sample')">送样订单</el-button>
         <el-button @click="$router.push('/admin/recharges')">充值审核</el-button>
         <el-button @click="$router.push('/admin/users')">用户管理</el-button>
@@ -24,7 +26,11 @@
     <div class="grid-3">
       <div class="content-card admin-card">
         <h3 class="admin-card-title">部门分布</h3>
-        <div v-for="(value, key) in overview.departmentDistribution || {}" :key="key" class="list-row">
+        <div
+          v-for="(value, key) in overview.departmentDistribution || {}"
+          :key="key"
+          class="list-row"
+        >
           {{ key }}：{{ value }}
         </div>
       </div>

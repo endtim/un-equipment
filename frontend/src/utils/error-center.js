@@ -32,11 +32,12 @@ function stringifyError(error) {
 }
 
 function isHandledRequestError(error) {
-  return !!error && (
-    error.name === 'RequestError'
-    || error.kind === 'biz'
-    || error.kind === 'network'
-    || error.kind === 'auth'
+  return (
+    !!error &&
+    (error.name === 'RequestError' ||
+      error.kind === 'biz' ||
+      error.kind === 'network' ||
+      error.kind === 'auth')
   )
 }
 
@@ -46,8 +47,10 @@ function shouldIgnoreGlobalNoise(error) {
     return false
   }
   const normalized = String(message).toLowerCase()
-  return normalized.includes('resizeobserver loop completed with undelivered notifications')
-    || normalized.includes('resizeobserver loop limit exceeded')
+  return (
+    normalized.includes('resizeobserver loop completed with undelivered notifications') ||
+    normalized.includes('resizeobserver loop limit exceeded')
+  )
 }
 
 export function reportGlobalError(error, context = {}) {
@@ -85,19 +88,19 @@ export function installGlobalErrorHandlers({ app, router }) {
   }
 
   if (router && typeof router.onError === 'function') {
-    router.onError(error => {
+    router.onError((error) => {
       reportGlobalError(error, { source: '路由' })
     })
   }
 
-  window.addEventListener('error', event => {
+  window.addEventListener('error', (event) => {
     if (shouldIgnoreGlobalNoise(event.error || event.message)) {
       return
     }
     reportGlobalError(event.error || event.message, { source: '窗口错误' })
   })
 
-  window.addEventListener('unhandledrejection', event => {
+  window.addEventListener('unhandledrejection', (event) => {
     if (isHandledRequestError(event.reason)) {
       event.preventDefault()
       return

@@ -17,7 +17,12 @@
           />
         </el-select>
         <el-select v-model="query.weekDay" clearable placeholder="星期" style="width: 140px">
-          <el-option v-for="item in weekOptions" :key="item.value" :label="item.label" :value="item.value" />
+          <el-option
+            v-for="item in weekOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
         </el-select>
         <el-select v-model="query.status" clearable placeholder="状态" style="width: 140px">
           <el-option label="启用" value="ENABLED" />
@@ -96,7 +101,12 @@
               collapse-tags-tooltip
               placeholder="请选择星期"
             >
-              <el-option v-for="item in weekOptions" :key="item.value" :label="item.label" :value="item.value" />
+              <el-option
+                v-for="item in weekOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="状态" prop="status">
@@ -133,7 +143,12 @@
 
         <div class="grid-3">
           <el-form-item label="最长预约时长(分钟)" prop="maxReserveMinutes">
-            <el-input-number v-model="form.maxReserveMinutes" :min="1" :step="1" class="full-width" />
+            <el-input-number
+              v-model="form.maxReserveMinutes"
+              :min="1"
+              :step="1"
+              class="full-width"
+            />
           </el-form-item>
           <el-form-item label="生效开始日期" prop="effectiveStartDate">
             <el-date-picker
@@ -213,7 +228,15 @@ export default {
       ],
       formRules: {
         instrumentId: [{ required: true, message: '请选择仪器', trigger: 'change' }],
-        weekDays: [{ type: 'array', required: true, min: 1, message: '请至少选择一个星期', trigger: 'change' }],
+        weekDays: [
+          {
+            type: 'array',
+            required: true,
+            min: 1,
+            message: '请至少选择一个星期',
+            trigger: 'change'
+          }
+        ],
         startTime: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
         endTime: [{ required: true, message: '请选择结束时间', trigger: 'change' }],
         maxReserveMinutes: [{ required: true, message: '请输入最长预约时长', trigger: 'change' }],
@@ -271,7 +294,7 @@ export default {
       await this.loadRules()
     },
     weekLabel(weekDay) {
-      const hit = this.weekOptions.find(item => item.value === weekDay)
+      const hit = this.weekOptions.find((item) => item.value === weekDay)
       return hit ? hit.label : '-'
     },
     weekLabels(row) {
@@ -279,14 +302,14 @@ export default {
       if (!text) return '-'
       return text
         .split(',')
-        .map(item => Number(item))
-        .filter(item => item >= 1 && item <= 7)
-        .map(item => this.weekLabel(item))
+        .map((item) => Number(item))
+        .filter((item) => item >= 1 && item <= 7)
+        .map((item) => this.weekLabel(item))
         .join('、')
     },
     instrumentName(instrumentId) {
-      const hit = this.instruments.find(item => item.id === instrumentId)
-      return hit ? (hit.instrumentName || hit.name || `#${instrumentId}`) : `#${instrumentId}`
+      const hit = this.instruments.find((item) => item.id === instrumentId)
+      return hit ? hit.instrumentName || hit.name || `#${instrumentId}` : `#${instrumentId}`
     },
     openCreate() {
       this.form = defaultForm()
@@ -303,8 +326,8 @@ export default {
         instrumentId: row.instrumentId,
         weekDays: (row.weekDays || String(row.weekDay || ''))
           .split(',')
-          .map(item => Number(item))
-          .filter(item => item >= 1 && item <= 7),
+          .map((item) => Number(item))
+          .filter((item) => item >= 1 && item <= 7),
         startTime: String(row.startTime || '').slice(0, 5),
         endTime: String(row.endTime || '').slice(0, 5),
         maxReserveMinutes: Number(row.maxReserveMinutes || 480),
@@ -335,7 +358,11 @@ export default {
       }
 
       const weekDays = Array.from(
-        new Set((this.form.weekDays || []).map(item => Number(item)).filter(item => item >= 1 && item <= 7))
+        new Set(
+          (this.form.weekDays || [])
+            .map((item) => Number(item))
+            .filter((item) => item >= 1 && item <= 7)
+        )
       )
       if (!weekDays.length) {
         ElMessage.error('请至少选择一个星期')

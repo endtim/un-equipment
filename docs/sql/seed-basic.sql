@@ -355,7 +355,7 @@ VALUES
 (@ord_s1, 2, @u_owner, 'INSTRUMENT_OWNER', 'PASS', '审核通过', NOW(), NOW()),
 (@ord_m3, 1, @u_teacher, 'INTERNAL_USER', 'PENDING', 'SUBMIT: Machine order submitted', NOW() - INTERVAL 4 DAY, NOW() - INTERVAL 4 DAY),
 (@ord_m3, 2, @u_owner, 'INSTRUMENT_OWNER', 'PASS', '审核通过', NOW() - INTERVAL 3 DAY, NOW() - INTERVAL 3 DAY),
-(@ord_m3, 3, @u_owner, 'INSTRUMENT_OWNER', 'PASS', 'SETTLE: Order settled', NOW() - INTERVAL 3 DAY, NOW() - INTERVAL 3 DAY);
+(@ord_m3, 3, @u_owner, 'INSTRUMENT_OWNER', 'PASS', '完成结算：订单已结算', NOW() - INTERVAL 3 DAY, NOW() - INTERVAL 3 DAY);
 
 INSERT INTO biz_settlement_record
 (settlement_no, order_id, user_id, instrument_id, bill_type, price_desc, estimated_amount, discount_amount, final_amount, settle_status, settled_time, operator_user_id, create_time)
@@ -375,7 +375,7 @@ create_time = VALUES(create_time);
 INSERT INTO biz_transaction_record
 (txn_no, user_id, order_id, recharge_id, txn_type, inout_type, amount, balance_before, balance_after, remark, create_time)
 VALUES
-('TXN-SEED-CONSUME-003', @u_teacher, @ord_m3, NULL, 'CONSUME', 'OUT', -240.00, 2740.00, 2500.00, 'SEED-Order settlement', NOW() - INTERVAL 3 DAY)
+('TXN-SEED-CONSUME-003', @u_teacher, @ord_m3, NULL, 'CONSUME', 'OUT', -240.00, 2740.00, 2500.00, 'SEED-订单结算扣费', NOW() - INTERVAL 3 DAY)
 ON DUPLICATE KEY UPDATE
 user_id = VALUES(user_id),
 order_id = VALUES(order_id),

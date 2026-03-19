@@ -2,12 +2,7 @@
   <div class="portal-subpage content-list-page">
     <section class="content-card content-list-card">
       <div v-if="docs.length" class="content-list-body">
-        <article
-          v-for="item in docs"
-          :key="item.id"
-          class="content-item"
-          @click="openDetail(item)"
-        >
+        <article v-for="item in docs" :key="item.id" class="content-item" @click="openDetail(item)">
           <h3 class="content-item-title">{{ item.title }}</h3>
           <p class="content-item-summary">{{ buildSummary(item) }}</p>
           <div class="content-item-time">

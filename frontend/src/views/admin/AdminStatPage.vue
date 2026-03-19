@@ -94,11 +94,11 @@ export default {
     },
     departmentRows() {
       const source = this.overview.departmentDistribution || {}
-      return Object.keys(source).map(key => ({ key, value: source[key] }))
+      return Object.keys(source).map((key) => ({ key, value: source[key] }))
     },
     trendRows() {
       const source = this.overview.orderTrend || {}
-      return Object.keys(source).map(key => ({ key, value: source[key] }))
+      return Object.keys(source).map((key) => ({ key, value: source[key] }))
     }
   },
   async created() {

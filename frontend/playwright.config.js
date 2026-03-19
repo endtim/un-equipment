@@ -1,5 +1,5 @@
 // @ts-check
-const { defineConfig } = require('@playwright/test');
+const { defineConfig } = require('@playwright/test')
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
@@ -7,10 +7,7 @@ module.exports = defineConfig({
   fullyParallel: false,
   retries: 0,
   workers: 1,
-  reporter: [
-    ['list'],
-    ['html', { outputFolder: 'playwright-report', open: 'never' }]
-  ],
+  reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   use: {
     baseURL: process.env.E2E_BASE_URL || 'http://localhost:8081',
     headless: true,
@@ -24,5 +21,4 @@ module.exports = defineConfig({
       use: { browserName: 'chromium' }
     }
   ]
-});
-
+})

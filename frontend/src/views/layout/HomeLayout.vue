@@ -120,7 +120,11 @@ export default {
       return this.pageMeta.showBreadcrumb !== false && Array.isArray(this.pageMeta.breadcrumb)
     },
     showPageHeader() {
-      return this.pageMeta.pageType && this.pageMeta.pageType !== 'landing' && this.pageMeta.pageType !== 'entry'
+      return (
+        this.pageMeta.pageType &&
+        this.pageMeta.pageType !== 'landing' &&
+        this.pageMeta.pageType !== 'entry'
+      )
     },
     breadcrumbItems() {
       const raw = this.pageMeta.breadcrumb || []
@@ -168,7 +172,14 @@ export default {
 <style scoped>
 .portal-shell {
   min-height: 100vh;
-  background: linear-gradient(180deg, rgba(11, 78, 162, 0.08), rgba(11, 78, 162, 0.02) 220px, transparent 220px), #f4f7fb;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(11, 78, 162, 0.08),
+      rgba(11, 78, 162, 0.02) 220px,
+      transparent 220px
+    ),
+    #f4f7fb;
 }
 
 .portal-container {
@@ -208,7 +219,7 @@ export default {
 }
 
 .portal-header::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   background:
@@ -303,7 +314,9 @@ export default {
   z-index: 30;
   background: #0a4b99;
   border-top: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 10px rgba(11, 78, 162, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 2px 10px rgba(11, 78, 162, 0.08);
 }
 
 .nav-inner {
@@ -323,7 +336,7 @@ export default {
 }
 
 .nav-item.active::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 22px;
   right: 22px;

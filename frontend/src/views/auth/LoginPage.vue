@@ -33,7 +33,7 @@
       <section class="login-card">
         <div class="card-kicker">用户入口</div>
         <h2 class="card-title">账号登录</h2>
-        <p class="card-subtitle">请输入账号和密码进入系统</p>
+        <p class="card-subtitle">校内用户请使用管理员分发账号登录，校外用户可先注册申请</p>
 
         <el-form
           ref="formRef"
@@ -56,17 +56,18 @@
             />
           </el-form-item>
 
-          <el-button
-            type="primary"
-            class="submit-btn"
-            :loading="submitting"
-            @click="submit"
-          >
+          <el-button type="primary" class="submit-btn" :loading="submitting" @click="submit">
             登录系统
           </el-button>
         </el-form>
 
         <div class="login-footer">提示：请使用已分配账号登录</div>
+        <div class="register-entry">
+          <span>校外用户没有账号？</span>
+          <el-link type="primary" :underline="false" @click="$router.push('/register')"
+            >立即注册</el-link
+          >
+        </div>
       </section>
     </div>
   </div>
@@ -187,9 +188,7 @@ export default {
 .login-brand {
   padding: 56px 56px 44px;
   color: #0f3977;
-  background:
-    linear-gradient(165deg, rgba(11, 78, 162, 0.1), rgba(11, 78, 162, 0.02)),
-    #f4f8ff;
+  background: linear-gradient(165deg, rgba(11, 78, 162, 0.1), rgba(11, 78, 162, 0.02)), #f4f8ff;
   border-right: 1px solid #d7e3f5;
 }
 
@@ -299,6 +298,16 @@ export default {
   color: #8194af;
   font-size: 12px;
   text-align: center;
+}
+
+.register-entry {
+  margin-top: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  color: #6f84a1;
+  font-size: 13px;
 }
 
 @media (max-width: 980px) {

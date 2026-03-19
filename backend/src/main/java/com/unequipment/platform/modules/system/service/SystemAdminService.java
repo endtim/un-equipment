@@ -1,19 +1,27 @@
 package com.unequipment.platform.modules.system.service;
 
+import com.unequipment.platform.common.api.PageResponse;
 import com.unequipment.platform.common.exception.BizException;
 import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.common.util.RoleAuthUtils;
 import com.unequipment.platform.modules.log.service.OperationLogService;
+import com.unequipment.platform.modules.system.dto.UserAuditRequest;
+import com.unequipment.platform.modules.system.dto.UserStatusUpdateRequest;
 import com.unequipment.platform.modules.system.entity.SysDepartment;
 import com.unequipment.platform.modules.system.entity.SysRole;
 import com.unequipment.platform.modules.system.entity.SysUser;
 import com.unequipment.platform.modules.system.entity.SysUserRole;
+import com.unequipment.platform.modules.system.entity.UserAuditLog;
 import com.unequipment.platform.modules.system.repository.SysDepartmentRepository;
 import com.unequipment.platform.modules.system.repository.SysRoleRepository;
 import com.unequipment.platform.modules.system.repository.SysUserRepository;
 import com.unequipment.platform.modules.system.repository.SysUserRoleRepository;
+import com.unequipment.platform.modules.system.repository.UserAuditLogRepository;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -23,11 +31,14 @@ import org.springframework.util.StringUtils;
 @Service
 @RequiredArgsConstructor
 public class SystemAdminService {
+    private static final Set<String> USER_STATUS_SET = new HashSet<>(Arrays.asList("ENABLED", "DISABLED", "PENDING", "REJECTED"));
+    private static final Set<String> USER_STATUS_MANAGE_SET = new HashSet<>(Arrays.asList("ENABLED", "DISABLED"));
 
     private final SysDepartmentRepository departmentRepository;
     private final SysUserRepository userRepository;
     private final SysRoleRepository roleRepository;
     private final SysUserRoleRepository userRoleRepository;
+    private final UserAuditLogRepository userAuditLogRepository;
     private final OperationLogService operationLogService;
     private final PasswordEncoder passwordEncoder;
 
@@ -163,7 +174,7 @@ public class SystemAdminService {
         user.setDepartmentId(request.getDepartmentId());
         user.setUnitName(request.getUnitName());
         user.setTitleName(request.getTitleName());
-        user.setStatus(request.getStatus() == null ? "ENABLED" : request.getStatus());
+        user.setStatus(validateUserStatus(request.getStatus() == null ? "ENABLED" : request.getStatus()));
         user.setRemark(request.getRemark());
         user.setUpdateTime(LocalDateTime.now());
         String roleCode = request.getPrimaryRoleCode() == null ? "INTERNAL_USER" : request.getPrimaryRoleCode().trim();
@@ -171,13 +182,98 @@ public class SystemAdminService {
             user.setCreateTime(LocalDateTime.now());
             user.setDeleted(0);
             userRepository.insert(user);
+            appendUserAuditLog(user.getId(), "CREATE", "PASS", operator, "后台创建用户");
         } else {
             userRepository.update(user);
+            appendUserAuditLog(user.getId(), "UPDATE", "PASS", operator, "后台更新用户信息");
         }
         // 用户-角色采用覆盖式绑定，保证主角色唯一。
         bindUserRole(user.getId(), roleCode);
         operationLogService.save(operator, "SYSTEM", id == null ? "CREATE_USER" : "UPDATE_USER", "user:" + user.getUsername());
         return userRepository.findById(user.getId());
+    }
+
+    /**
+     * 校外注册用户审核：
+     * - 仅支持 EXTERNAL_USER 且当前状态为 PENDING
+     * - APPROVE -> ENABLED
+     * - REJECT -> REJECTED
+     */
+    @Transactional
+    public SysUser auditExternalUser(Long id, UserAuditRequest request, SysUser operator) {
+        if (request == null || !StringUtils.hasText(request.getAction())) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "审核动作不能为空");
+        }
+        SysUser target = userRepository.findById(id);
+        if (target == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "用户不存在");
+        }
+        assertCanManageTargetUser(target, operator);
+        if (!"EXTERNAL_USER".equalsIgnoreCase(target.getPrimaryRoleCode())) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "仅校外用户支持审核流程");
+        }
+        if (!"PENDING".equalsIgnoreCase(target.getStatus())) {
+            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "当前用户状态不是待审核，不能执行审核");
+        }
+        String action = request.getAction().trim().toUpperCase(Locale.ROOT);
+        String targetStatus;
+        if ("APPROVE".equals(action)) {
+            targetStatus = "ENABLED";
+        } else if ("REJECT".equals(action)) {
+            if (!StringUtils.hasText(request.getRemark())) {
+                throw new BizException(ErrorCodes.INVALID_REQUEST, "驳回时请填写驳回原因");
+            }
+            targetStatus = "REJECTED";
+        } else {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "审核动作不合法，仅支持 APPROVE 或 REJECT");
+        }
+        String remark = StringUtils.hasText(request.getRemark()) ? request.getRemark().trim() : target.getRemark();
+        userRepository.updateStatus(target.getId(), targetStatus, remark, LocalDateTime.now());
+        appendUserAuditLog(target.getId(), "REGISTER_AUDIT", targetStatus, operator, remark);
+        operationLogService.save(operator, "SYSTEM", "AUDIT_EXTERNAL_USER", "userId:" + id + ",action:" + action);
+        return userRepository.findById(id);
+    }
+
+    /**
+     * 账号状态调整：用于启用/禁用等常规状态管控。
+     */
+    @Transactional
+    public SysUser updateUserStatus(Long id, UserStatusUpdateRequest request, SysUser operator) {
+        if (request == null || !StringUtils.hasText(request.getStatus())) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "状态不能为空");
+        }
+        SysUser target = userRepository.findById(id);
+        if (target == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "用户不存在");
+        }
+        assertCanManageTargetUser(target, operator);
+        if (operator != null && operator.getId() != null && operator.getId().equals(target.getId())
+            && "DISABLED".equalsIgnoreCase(request.getStatus())) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "不允许禁用当前登录账号");
+        }
+        String status = validateUserManageStatus(request.getStatus());
+        String remark = StringUtils.hasText(request.getRemark()) ? request.getRemark().trim() : target.getRemark();
+        userRepository.updateStatus(target.getId(), status, remark, LocalDateTime.now());
+        appendUserAuditLog(target.getId(), "STATUS_CHANGE", status, operator, remark);
+        operationLogService.save(operator, "SYSTEM", "UPDATE_USER_STATUS", "userId:" + id + ",status:" + status);
+        return userRepository.findById(id);
+    }
+
+    public PageResponse<UserAuditLog> pageUserAuditLogs(Long userId, int pageNum, int pageSize, SysUser operator) {
+        SysUser target = userRepository.findById(userId);
+        if (target == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "用户不存在");
+        }
+        assertCanManageTargetUser(target, operator);
+        int safePageNum = Math.max(1, pageNum);
+        int safePageSize = Math.max(1, Math.min(100, pageSize));
+        int offset = (safePageNum - 1) * safePageSize;
+        return new PageResponse<>(
+            userAuditLogRepository.findPageByUserId(userId, offset, safePageSize),
+            userAuditLogRepository.countByUserId(userId),
+            safePageNum,
+            safePageSize
+        );
     }
 
     /**
@@ -231,13 +327,7 @@ public class SystemAdminService {
         if (target == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "用户不存在");
         }
-        if (!hasRole(operator, "ADMIN")) {
-            if (!hasRole(operator, "DEPT_MANAGER")
-                || target.getDepartmentId() == null
-                || !target.getDepartmentId().equals(operator.getDepartmentId())) {
-                throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限删除该用户");
-            }
-        }
+        assertCanManageTargetUser(target, operator);
         userRoleRepository.deleteByUserId(id);
         userRepository.softDelete(id, LocalDateTime.now());
         operationLogService.save(operator, "SYSTEM", "DELETE_USER", "userId:" + id);
@@ -291,6 +381,23 @@ public class SystemAdminService {
         }
     }
 
+    private void assertCanManageTargetUser(SysUser target, SysUser operator) {
+        if (hasRole(operator, "ADMIN")) {
+            return;
+        }
+        if (!hasRole(operator, "DEPT_MANAGER")) {
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限操作该用户");
+        }
+        if (target.getDepartmentId() == null
+            || operator.getDepartmentId() == null
+            || !target.getDepartmentId().equals(operator.getDepartmentId())) {
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限操作其他部门用户");
+        }
+        if ("ADMIN".equalsIgnoreCase(target.getPrimaryRoleCode())) {
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限操作超级管理员账号");
+        }
+    }
+
     private void assertAdmin(SysUser operator) {
         if (!hasRole(operator, "ADMIN")) {
             throw new BizException(ErrorCodes.PERMISSION_DENIED, "仅管理员可执行该操作");
@@ -332,6 +439,34 @@ public class SystemAdminService {
             throw new BizException(ErrorCodes.INVALID_REQUEST, emptyMessage);
         }
         return code.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String validateUserStatus(String status) {
+        String normalized = normalizeCode(status, "用户状态不能为空");
+        if (!USER_STATUS_SET.contains(normalized)) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "用户状态不合法");
+        }
+        return normalized;
+    }
+
+    private String validateUserManageStatus(String status) {
+        String normalized = normalizeCode(status, "用户状态不能为空");
+        if (!USER_STATUS_MANAGE_SET.contains(normalized)) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "状态更新仅支持启用或禁用");
+        }
+        return normalized;
+    }
+
+    private void appendUserAuditLog(Long userId, String actionType, String actionResult, SysUser operator, String remark) {
+        UserAuditLog log = new UserAuditLog();
+        log.setUserId(userId);
+        log.setActionType(actionType);
+        log.setActionResult(actionResult);
+        log.setOperatorUserId(operator == null ? null : operator.getId());
+        log.setOperatorRole(operator == null ? "SYSTEM" : operator.getPrimaryRoleCode());
+        log.setRemark(remark);
+        log.setCreateTime(LocalDateTime.now());
+        userAuditLogRepository.insert(log);
     }
 
     private boolean hasRole(SysUser user, String roleCode) {

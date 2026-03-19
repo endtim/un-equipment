@@ -72,7 +72,13 @@
           </el-form-item>
         </div>
         <el-form-item label="备注" prop="remark">
-          <el-input v-model="form.remark" type="textarea" :rows="3" maxlength="255" show-word-limit />
+          <el-input
+            v-model="form.remark"
+            type="textarea"
+            :rows="3"
+            maxlength="255"
+            show-word-limit
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -85,7 +91,12 @@
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { createDepartment, deleteDepartment, getAdminDepartmentsPage, updateDepartment } from '../../../api/admin'
+import {
+  createDepartment,
+  deleteDepartment,
+  getAdminDepartmentsPage,
+  updateDepartment
+} from '../../../api/admin'
 
 function defaultForm() {
   return {
@@ -197,4 +208,3 @@ export default {
   justify-content: flex-end;
 }
 </style>
-

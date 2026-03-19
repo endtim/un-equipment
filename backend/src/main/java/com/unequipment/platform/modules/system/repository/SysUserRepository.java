@@ -20,18 +20,21 @@ public interface SysUserRepository {
     List<SysUser> findAll();
 
     List<SysUser> findPage(@Param("keyword") String keyword,
+                           @Param("status") String status,
                            @Param("offset") int offset,
                            @Param("pageSize") int pageSize);
 
     List<SysUser> findPageByDepartment(@Param("departmentId") Long departmentId,
                                        @Param("keyword") String keyword,
+                                       @Param("status") String status,
                                        @Param("offset") int offset,
                                        @Param("pageSize") int pageSize);
 
-    long countPage(@Param("keyword") String keyword);
+    long countPage(@Param("keyword") String keyword, @Param("status") String status);
 
     long countPageByDepartment(@Param("departmentId") Long departmentId,
-                               @Param("keyword") String keyword);
+                               @Param("keyword") String keyword,
+                               @Param("status") String status);
 
     int insert(SysUser user);
 
@@ -48,4 +51,9 @@ public interface SysUserRepository {
     long countByDepartmentId(@Param("departmentId") Long departmentId);
 
     int countByUsernameExcludeId(@Param("username") String username, @Param("excludeId") Long excludeId);
+
+    int updateStatus(@Param("id") Long id,
+                     @Param("status") String status,
+                     @Param("remark") String remark,
+                     @Param("updateTime") LocalDateTime updateTime);
 }

@@ -4,12 +4,15 @@ import com.unequipment.platform.common.api.ApiResponse;
 import com.unequipment.platform.common.api.PageResponse;
 import com.unequipment.platform.common.exception.BizException;
 import com.unequipment.platform.common.exception.ErrorCodes;
+import com.unequipment.platform.common.util.RoleAuthUtils;
 import com.unequipment.platform.modules.system.entity.SysDepartment;
 import com.unequipment.platform.modules.system.entity.SysRole;
 import com.unequipment.platform.modules.system.entity.SysUser;
+import com.unequipment.platform.modules.system.entity.UserAuditLog;
 import com.unequipment.platform.modules.system.repository.SysDepartmentRepository;
 import com.unequipment.platform.modules.system.repository.SysRoleRepository;
 import com.unequipment.platform.modules.system.repository.SysUserRepository;
+import com.unequipment.platform.modules.system.service.SystemAdminService;
 import com.unequipment.platform.security.CurrentUser;
 import java.util.Collections;
 import java.util.List;
@@ -23,10 +26,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/system")
 @RequiredArgsConstructor
 public class SystemAdminController {
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final SysUserRepository userRepository;
     private final SysRoleRepository roleRepository;
     private final SysDepartmentRepository departmentRepository;
+    private final SystemAdminService systemAdminService;
 
     /**
      * 用户分页：
@@ -36,16 +41,17 @@ public class SystemAdminController {
     @GetMapping("/users")
     public ApiResponse<PageResponse<SysUser>> users(
         @RequestParam(required = false) String keyword,
+        @RequestParam(required = false) String status,
         @RequestParam(defaultValue = "1") int pageNum,
         @RequestParam(defaultValue = "10") int pageSize,
         @CurrentUser SysUser currentUser) {
         int validPageNum = Math.max(pageNum, 1);
-        int validPageSize = Math.max(pageSize, 1);
+        int validPageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
         int offset = (validPageNum - 1) * validPageSize;
         if (hasRole(currentUser, "ADMIN")) {
             return ApiResponse.success(new PageResponse<>(
-                userRepository.findPage(keyword, offset, validPageSize),
-                userRepository.countPage(keyword),
+                userRepository.findPage(keyword, status, offset, validPageSize),
+                userRepository.countPage(keyword, status),
                 validPageNum,
                 validPageSize
             ));
@@ -55,13 +61,24 @@ public class SystemAdminController {
                 throw new BizException(ErrorCodes.PERMISSION_DENIED, "部门管理员未绑定部门");
             }
             return ApiResponse.success(new PageResponse<>(
-                userRepository.findPageByDepartment(currentUser.getDepartmentId(), keyword, offset, validPageSize),
-                userRepository.countPageByDepartment(currentUser.getDepartmentId(), keyword),
+                userRepository.findPageByDepartment(currentUser.getDepartmentId(), keyword, status, offset, validPageSize),
+                userRepository.countPageByDepartment(currentUser.getDepartmentId(), keyword, status),
                 validPageNum,
                 validPageSize
             ));
         }
         throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限操作");
+    }
+
+    /**
+     * 用户审核记录分页：用于注册审核和状态管控追踪。
+     */
+    @GetMapping("/users/{id}/audit-logs")
+    public ApiResponse<PageResponse<UserAuditLog>> userAuditLogs(@org.springframework.web.bind.annotation.PathVariable Long id,
+                                                                 @RequestParam(defaultValue = "1") int pageNum,
+                                                                 @RequestParam(defaultValue = "10") int pageSize,
+                                                                 @CurrentUser SysUser currentUser) {
+        return ApiResponse.success(systemAdminService.pageUserAuditLogs(id, pageNum, pageSize, currentUser));
     }
 
     /**
@@ -89,7 +106,7 @@ public class SystemAdminController {
                                                        @RequestParam(defaultValue = "1") int pageNum,
                                                        @RequestParam(defaultValue = "10") int pageSize) {
         int validPageNum = Math.max(pageNum, 1);
-        int validPageSize = Math.max(pageSize, 1);
+        int validPageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
         int offset = (validPageNum - 1) * validPageSize;
         if (hasRole(currentUser, "ADMIN")) {
             return ApiResponse.success(new PageResponse<>(
@@ -141,7 +158,7 @@ public class SystemAdminController {
                                                                    @RequestParam(defaultValue = "1") int pageNum,
                                                                    @RequestParam(defaultValue = "10") int pageSize) {
         int validPageNum = Math.max(pageNum, 1);
-        int validPageSize = Math.max(pageSize, 1);
+        int validPageSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
         int offset = (validPageNum - 1) * validPageSize;
         if (hasRole(currentUser, "ADMIN")) {
             return ApiResponse.success(new PageResponse<>(
@@ -166,6 +183,6 @@ public class SystemAdminController {
     }
 
     private boolean hasRole(SysUser user, String roleCode) {
-        return user != null && roleCode.equalsIgnoreCase(user.getPrimaryRoleCode());
+        return RoleAuthUtils.hasRole(user, roleCode);
     }
 }

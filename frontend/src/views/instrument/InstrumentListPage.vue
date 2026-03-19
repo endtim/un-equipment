@@ -4,7 +4,9 @@
       <div>
         <div class="service-kicker">预约服务</div>
         <div class="section-title service-title">仪器资源检索</div>
-        <div class="service-desc">支持按关键字、分类与状态筛选仪器，点击卡片可查看详情或直接进入预约流程。</div>
+        <div class="service-desc">
+          支持按关键字、分类与状态筛选仪器，点击卡片可查看详情或直接进入预约流程。
+        </div>
       </div>
       <div class="service-summary">
         <div class="summary-number">{{ total }}</div>
@@ -15,15 +17,35 @@
     <div class="content-card filter-card">
       <el-form :inline="true" :model="query" class="filter-form">
         <el-form-item label="关键词">
-          <el-input v-model="query.keyword" placeholder="仪器名称/编号" clearable class="filter-input-keyword" />
+          <el-input
+            v-model="query.keyword"
+            placeholder="仪器名称/编号"
+            clearable
+            class="filter-input-keyword"
+          />
         </el-form-item>
         <el-form-item label="仪器分类">
-          <el-select v-model="query.categoryId" clearable placeholder="全部分类" class="filter-select-category">
-            <el-option v-for="item in categories" :key="item.id" :label="item.categoryName" :value="item.id" />
+          <el-select
+            v-model="query.categoryId"
+            clearable
+            placeholder="全部分类"
+            class="filter-select-category"
+          >
+            <el-option
+              v-for="item in categories"
+              :key="item.id"
+              :label="item.categoryName"
+              :value="item.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="开放状态">
-          <el-select v-model="query.status" clearable placeholder="全部状态" class="filter-select-status">
+          <el-select
+            v-model="query.status"
+            clearable
+            placeholder="全部状态"
+            class="filter-select-status"
+          >
             <el-option label="正常开放" value="NORMAL" />
             <el-option label="暂停开放" value="DISABLED" />
           </el-select>
@@ -47,12 +69,24 @@
           <div class="instrument-meta">负责人：{{ item.ownerUserName || '平台管理员' }}</div>
           <div class="instrument-meta">放置地点：{{ item.location || '暂未填写' }}</div>
           <div class="instrument-status-row">
-            <el-tag :type="statusTagType(item.status)">{{ statusLabel(item.status, item.openStatus) }}</el-tag>
+            <el-tag :type="statusTagType(item.status)">{{
+              statusLabel(item.status, item.openStatus)
+            }}</el-tag>
             <span class="mode-text">{{ openModeLabel(item.openMode) }}</span>
           </div>
           <div class="price-row">
-            <div>校内价格：<strong>{{ formatAmount(item.priceInternal ?? item.machinePricePerHour) }}</strong> 元/单位</div>
-            <div>校外价格：<strong>{{ formatAmount(item.priceExternal ?? item.samplePricePerItem) }}</strong> 元/单位</div>
+            <div>
+              校内价格：<strong>{{
+                formatAmount(item.priceInternal ?? item.machinePricePerHour)
+              }}</strong>
+              元/单位
+            </div>
+            <div>
+              校外价格：<strong>{{
+                formatAmount(item.priceExternal ?? item.samplePricePerItem)
+              }}</strong>
+              元/单位
+            </div>
           </div>
           <div class="card-actions">
             <el-button @click="openDetail(item)">查看详情</el-button>
@@ -132,10 +166,7 @@ export default {
       })
     },
     async load() {
-      const [categories, page] = await Promise.all([
-        getCategories(),
-        getInstruments(this.query)
-      ])
+      const [categories, page] = await Promise.all([getCategories(), getInstruments(this.query)])
       this.categories = categories || []
       this.list = page.list || []
       this.total = page.total || 0

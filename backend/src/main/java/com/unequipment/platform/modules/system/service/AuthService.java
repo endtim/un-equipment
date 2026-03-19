@@ -48,8 +48,14 @@ public class AuthService {
      */
     public Map<String, Object> login(LoginRequest request) {
         SysUser user = userRepository.findByUsername(request.getUsername());
-        if (user == null || !"ENABLED".equalsIgnoreCase(user.getStatus())) {
+        if (user == null) {
             throw new BizException(ErrorCodes.AUTH_INVALID_CREDENTIALS, "用户名或密码错误");
+        }
+        if ("PENDING".equalsIgnoreCase(user.getStatus())) {
+            throw new BizException(ErrorCodes.UNAUTHORIZED, "账号待审核，请联系管理员完成审核");
+        }
+        if (!"ENABLED".equalsIgnoreCase(user.getStatus())) {
+            throw new BizException(ErrorCodes.UNAUTHORIZED, "账号已停用，请联系管理员");
         }
         String storedPassword = user.getPassword();
         boolean validPassword = storedPassword != null && passwordEncoder.matches(request.getPassword(), storedPassword);
@@ -66,9 +72,9 @@ public class AuthService {
     /**
      * 注册流程（事务）：
      * 1) 校验用户名唯一
-     * 2) 创建用户并绑定默认角色 INTERNAL_USER
+     * 2) 仅创建校外用户并绑定 EXTERNAL_USER 角色
      * 3) 初始化资金账户
-     * 4) 返回登录态 token
+     * 4) 返回申请状态（需管理员审核后登录）
      */
     @Transactional
     public Map<String, Object> register(RegisterRequest request) {
@@ -86,26 +92,31 @@ public class AuthService {
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRealName(request.getRealName());
-        user.setUserType("INTERNAL");
+        user.setUserType("EXTERNAL");
+        user.setPhone(request.getPhone());
+        user.setUnitName(request.getUnitName());
+        user.setEmail(request.getEmail());
         user.setAuthType("LOCAL");
         user.setDepartmentId(department.getId());
-        user.setStatus("ENABLED");
+        // 校内账号由管理员批量分发；自助注册仅用于校外用户，需审核后激活。
+        user.setStatus("PENDING");
+        user.setRemark("校外用户注册申请待审核");
         user.setCreateTime(LocalDateTime.now());
         user.setUpdateTime(LocalDateTime.now());
         user.setDeleted(0);
         userRepository.insert(user);
 
-        SysRole internalRole = roleRepository.findByRoleCode("INTERNAL_USER");
-        if (internalRole == null) {
-            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "缺少默认角色数据(INTERNAL_USER)");
+        SysRole externalRole = roleRepository.findByRoleCode("EXTERNAL_USER");
+        if (externalRole == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "缺少默认角色数据(EXTERNAL_USER)");
         }
 
         SysUserRole userRole = new SysUserRole();
         userRole.setUserId(user.getId());
-        userRole.setRoleId(internalRole.getId());
+        userRole.setRoleId(externalRole.getId());
         userRole.setCreateTime(LocalDateTime.now());
         userRoleRepository.insert(userRole);
-        user.setPrimaryRoleCode("INTERNAL_USER");
+        user.setPrimaryRoleCode("EXTERNAL_USER");
         user.setDepartmentName(department.getDeptName());
 
         Account account = new Account();
@@ -120,7 +131,8 @@ public class AuthService {
         accountRepository.insert(account);
 
         Map<String, Object> result = new HashMap<>();
-        result.put("token", tokenService.generate(user));
+        result.put("auditStatus", "PENDING");
+        result.put("message", "注册申请已提交，请等待管理员审核通过后登录");
         result.put("user", UserView.from(user));
         return result;
     }

@@ -15,6 +15,14 @@ export function getAdminUsersPage(params) {
   })
 }
 
+export function getUserAuditLogs(id, params) {
+  return request({
+    url: `/api/admin/system/users/${id}/audit-logs`,
+    method: 'get',
+    params
+  })
+}
+
 export function getAdminRoles() {
   return request({
     url: '/api/admin/system/roles',
@@ -103,6 +111,22 @@ export function updateUser(id, data) {
   return request({
     url: `/api/admin/system/users/${id}`,
     method: 'put',
+    data
+  })
+}
+
+export function auditUser(id, data) {
+  return request({
+    url: `/api/admin/system/users/${id}/audit`,
+    method: 'post',
+    data
+  })
+}
+
+export function updateUserStatus(id, data) {
+  return request({
+    url: `/api/admin/system/users/${id}/status`,
+    method: 'post',
     data
   })
 }

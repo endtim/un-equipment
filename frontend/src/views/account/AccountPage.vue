@@ -11,7 +11,7 @@
       <div class="section-title account-title">充值申请</div>
       <el-form :model="recharge" label-width="90px" class="recharge-form">
         <el-form-item label="充值金额">
-          <el-input-number v-model="recharge.amount" :min="1" :step="100" style="width: 240px;" />
+          <el-input-number v-model="recharge.amount" :min="1" :step="100" style="width: 240px" />
         </el-form-item>
         <el-form-item label="备注说明">
           <el-input
@@ -27,17 +27,18 @@
       </el-form>
     </div>
 
-    <div
-      v-if="isAccountPage"
-      class="content-card account-tip-card"
-    >
+    <div v-if="isAccountPage" class="content-card account-tip-card">
       <div class="account-tip-text">当前页展示资金明细与充值记录，充值操作请进入“充值申请”。</div>
-      <el-button type="primary" plain @click="$router.push('/center/recharge')">去充值申请</el-button>
+      <el-button type="primary" plain @click="$router.push('/center/recharge')"
+        >去充值申请</el-button
+      >
     </div>
 
     <div class="account-record-grid">
       <div class="content-card account-record-card account-record-card--main">
-        <div class="section-title account-title">{{ isRechargePage ? '最近交易流水' : '交易流水' }}</div>
+        <div class="section-title account-title">
+          {{ isRechargePage ? '最近交易流水' : '交易流水' }}
+        </div>
         <el-table :data="transactions" border>
           <el-table-column prop="txnType" label="交易类型" width="120">
             <template #default="{ row }">{{ txnTypeLabel(row.txnType) }}</template>
@@ -49,7 +50,12 @@
             <template #default="{ row }">{{ formatAmount(row.amount) }}</template>
           </el-table-column>
           <el-table-column prop="remark" label="备注" />
-          <el-table-column prop="createTime" label="发生时间" width="180" :formatter="formatDateTimeCell" />
+          <el-table-column
+            prop="createTime"
+            label="发生时间"
+            width="180"
+            :formatter="formatDateTimeCell"
+          />
         </el-table>
         <el-pagination
           v-model:current-page="txnQuery.pageNum"
@@ -64,7 +70,9 @@
       </div>
 
       <div class="content-card account-record-card account-record-card--side">
-        <div class="section-title account-title">{{ isRechargePage ? '充值进度' : '充值记录' }}</div>
+        <div class="section-title account-title">
+          {{ isRechargePage ? '充值进度' : '充值记录' }}
+        </div>
         <el-table :data="recharges" border size="small">
           <el-table-column prop="rechargeNo" label="充值单号" />
           <el-table-column label="金额" width="90">
@@ -72,7 +80,9 @@
           </el-table-column>
           <el-table-column prop="status" label="状态" width="120">
             <template #default="{ row }">
-              <el-tag :type="rechargeTagType(row.status)" size="small">{{ rechargeStatusLabel(row.status) }}</el-tag>
+              <el-tag :type="rechargeTagType(row.status)" size="small">{{
+                rechargeStatusLabel(row.status)
+              }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="remark" label="备注" />
