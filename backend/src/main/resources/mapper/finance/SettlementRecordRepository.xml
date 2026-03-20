@@ -86,51 +86,53 @@
     where id = #{id}
   </update>
 
-  <select id="countByScopeAndCreateTime" resultType="long">
-    <!-- 结算单数量统计：支持时间范围与部门管理员范围 -->
+  <select id="countSettledByScopeAndSettledTime" resultType="long">
+    <!-- 已完成结算数量统计：按 settled_time + 结算状态口径 -->
     select count(1)
     from biz_settlement_record s
     left join sys_user u on u.id = s.user_id
-    where 1 = 1
+    where s.settled_time is not null
+      and s.settle_status in ('CONFIRMED', 'REFUNDED')
     <if test="startTime != null">
-      and s.create_time &gt;= #{startTime}
+      and s.settled_time &gt;= #{startTime}
     </if>
     <if test="endTime != null">
-      and s.create_time &lt;= #{endTime}
+      and s.settled_time &lt;= #{endTime}
     </if>
     <if test="roleCode == 'DEPT_MANAGER'">
       and u.department_id = #{scopeDepartmentId}
     </if>
   </select>
 
-  <select id="sumFinalAmountByStatusAndScope" resultType="java.math.BigDecimal">
-    <!-- 结算金额汇总：按 settle_status 口径聚合 -->
+  <select id="sumFinalAmountByStatusAndScopeAndSettledTime" resultType="java.math.BigDecimal">
+    <!-- 结算金额汇总：按 settle_status + settled_time 口径聚合 -->
     select coalesce(sum(s.final_amount), 0)
     from biz_settlement_record s
     left join sys_user u on u.id = s.user_id
     where s.settle_status = #{settleStatus}
+      and s.settled_time is not null
     <if test="startTime != null">
-      and s.create_time &gt;= #{startTime}
+      and s.settled_time &gt;= #{startTime}
     </if>
     <if test="endTime != null">
-      and s.create_time &lt;= #{endTime}
+      and s.settled_time &lt;= #{endTime}
     </if>
     <if test="roleCode == 'DEPT_MANAGER'">
       and u.department_id = #{scopeDepartmentId}
     </if>
   </select>
 
-  <select id="avgSettleHoursByScope" resultType="java.math.BigDecimal">
+  <select id="avgSettleHoursByScopeAndSettledTime" resultType="java.math.BigDecimal">
     select coalesce(avg(timestampdiff(minute, s.create_time, s.settled_time) / 60.0), 0)
     from biz_settlement_record s
     left join sys_user u on u.id = s.user_id
     where s.settled_time is not null
       and s.settle_status in ('CONFIRMED', 'REFUNDED')
     <if test="startTime != null">
-      and s.create_time &gt;= #{startTime}
+      and s.settled_time &gt;= #{startTime}
     </if>
     <if test="endTime != null">
-      and s.create_time &lt;= #{endTime}
+      and s.settled_time &lt;= #{endTime}
     </if>
     <if test="roleCode == 'DEPT_MANAGER'">
       and u.department_id = #{scopeDepartmentId}

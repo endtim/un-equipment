@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.finance.repository.FinanceExpenseRepository">
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_finance_expense(
+      expense_no, instrument_id, department_id, expense_type, amount,
+      title, remark, expense_time, operator_user_id, create_time, update_time
+    ) values (
+      #{expenseNo}, #{instrumentId}, #{departmentId}, #{expenseType}, #{amount},
+      #{title}, #{remark}, #{expenseTime}, #{operatorUserId}, #{createTime}, #{updateTime}
+    )
+  </insert>
+
+  <select id="findPageByScope" resultType="com.unequipment.platform.modules.finance.entity.FinanceExpense">
+    select e.*, i.instrument_name, d.dept_name as department_name, u.real_name as operator_user_name
+    from biz_finance_expense e
+    left join biz_instrument i on i.id = e.instrument_id
+    left join sys_department d on d.id = e.department_id
+    left join sys_user u on u.id = e.operator_user_id
+    where 1 = 1
+    <if test="keyword != null and keyword != ''">
+      and (e.expense_no like concat('%', #{keyword}, '%')
+      or e.title like concat('%', #{keyword}, '%')
+      or e.remark like concat('%', #{keyword}, '%')
+      or i.instrument_name like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="expenseType != null and expenseType != ''">
+      and e.expense_type = #{expenseType}
+    </if>
+    <if test="instrumentId != null">
+      and e.instrument_id = #{instrumentId}
+    </if>
+    <if test="departmentId != null">
+      and e.department_id = #{departmentId}
+    </if>
+    <if test="startTime != null">
+      and e.expense_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and e.expense_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and e.department_id = #{scopeDepartmentId}
+    </if>
+    order by e.expense_time desc, e.id desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPageByScope" resultType="long">
+    select count(1)
+    from biz_finance_expense e
+    left join biz_instrument i on i.id = e.instrument_id
+    where 1 = 1
+    <if test="keyword != null and keyword != ''">
+      and (e.expense_no like concat('%', #{keyword}, '%')
+      or e.title like concat('%', #{keyword}, '%')
+      or e.remark like concat('%', #{keyword}, '%')
+      or i.instrument_name like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="expenseType != null and expenseType != ''">
+      and e.expense_type = #{expenseType}
+    </if>
+    <if test="instrumentId != null">
+      and e.instrument_id = #{instrumentId}
+    </if>
+    <if test="departmentId != null">
+      and e.department_id = #{departmentId}
+    </if>
+    <if test="startTime != null">
+      and e.expense_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and e.expense_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and e.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="sumAmountByScope" resultType="java.math.BigDecimal">
+    select coalesce(sum(e.amount), 0)
+    from biz_finance_expense e
+    where 1 = 1
+    <if test="startTime != null">
+      and e.expense_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and e.expense_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and e.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="sumAmountByBudgetScope" resultType="java.math.BigDecimal">
+    select coalesce(sum(e.amount), 0)
+    from biz_finance_expense e
+    where year(e.expense_time) = #{budgetYear}
+    <if test="departmentId != null">
+      and e.department_id = #{departmentId}
+    </if>
+    <if test="instrumentId != null">
+      and e.instrument_id = #{instrumentId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and e.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+</mapper>

@@ -13,12 +13,20 @@
   box-sizing: border-box;
 }
 
+html {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
-  font-family: "Microsoft YaHei", sans-serif;
+  font-family: 'Microsoft YaHei', sans-serif;
   color: var(--text);
-  background:
-    linear-gradient(180deg, #eef3fb 0%, #f7f9fc 260px, #f4f7fb 100%);
+  background: linear-gradient(180deg, #eef3fb 0%, #f7f9fc 260px, #f4f7fb 100%);
+}
+
+#app {
+  min-height: 100vh;
 }
 
 a {
@@ -73,6 +81,30 @@ a {
   width: 220px;
 }
 
+.admin-filter--xs {
+  width: 120px;
+}
+
+.admin-filter--sm {
+  width: 150px;
+}
+
+.admin-filter--md {
+  width: 180px;
+}
+
+.admin-filter--lg {
+  width: 240px;
+}
+
+.admin-filter--xl {
+  width: 280px;
+}
+
+.admin-filter--time {
+  width: 340px;
+}
+
 .admin-card {
   padding: 20px;
 }
@@ -91,6 +123,69 @@ a {
 
 .admin-table-card {
   padding: 18px 20px;
+}
+
+.admin-table-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.admin-table-card-head .admin-card-title {
+  margin: 0;
+}
+
+.admin-table-card .admin-toolbar {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid #dfe7f3;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f5f8fd 100%);
+}
+
+.admin-table-card .el-table {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.admin-table-card .el-table th.el-table__cell {
+  background: #f6f9ff;
+  color: #36507a;
+  font-weight: 700;
+}
+
+.admin-table-card .el-table .el-table__row:nth-child(2n) > td.el-table__cell {
+  background: #fcfdff;
+}
+
+.admin-table-card .el-table .el-table__row:hover > td.el-table__cell {
+  background: #eef5ff !important;
+}
+
+.admin-table-card .admin-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid #e7edf7;
+}
+
+.admin-table-card .pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid #e7edf7;
+}
+
+.admin-table-card .el-scrollbar__bar.is-horizontal {
+  height: 8px;
 }
 
 .admin-empty {
@@ -131,6 +226,23 @@ a {
   .admin-toolbar .el-input,
   .admin-toolbar .el-select {
     width: 100%;
+  }
+
+  .admin-filter--xs,
+  .admin-filter--sm,
+  .admin-filter--md,
+  .admin-filter--lg,
+  .admin-filter--xl,
+  .admin-filter--time {
+    width: 100%;
+  }
+
+  .admin-table-card .admin-toolbar {
+    padding: 10px;
+  }
+
+  .admin-table-card .admin-pagination {
+    justify-content: flex-end;
   }
 
   .admin-summary-grid {

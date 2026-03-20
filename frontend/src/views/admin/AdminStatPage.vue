@@ -1,8 +1,8 @@
 <template>
   <div class="admin-page">
-    <div class="content-card admin-card">
-      <h3 class="admin-card-title">统计筛选</h3>
-      <div class="toolbar">
+    <admin-table-card title="统计筛选">
+      <template #toolbar>
+      <div class="admin-toolbar">
         <el-date-picker
           v-model="query.timeRange"
           type="datetimerange"
@@ -15,14 +15,10 @@
         <el-button type="primary" @click="onQueryChange">查询</el-button>
         <el-button @click="resetQuery">重置</el-button>
       </div>
-    </div>
+      </template>
+    </admin-table-card>
 
-    <div class="grid-3">
-      <div v-for="card in cards" :key="card.label" class="content-card admin-card">
-        <div class="metric-label">{{ card.label }}</div>
-        <div class="metric-value">{{ card.value }}</div>
-      </div>
-    </div>
+    <admin-summary-cards :items="cards" />
 
     <div class="grid-3">
       <div class="content-card admin-card">
@@ -76,9 +72,15 @@
 </template>
 
 <script>
+import AdminSummaryCards from '../../components/admin/AdminSummaryCards.vue'
+import AdminTableCard from '../../components/admin/AdminTableCard.vue'
 import { getAdminOverview } from '../../api/stat'
 
 export default {
+  components: {
+    AdminSummaryCards,
+    AdminTableCard
+  },
   data() {
     return {
       overview: {},
@@ -138,24 +140,6 @@ export default {
 </script>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.metric-label {
-  color: var(--muted);
-}
-
-.metric-value {
-  font-size: 28px;
-  font-weight: 700;
-  margin-top: 8px;
-  color: var(--primary);
-}
-
 .list-row {
   padding: 8px 0;
   display: flex;

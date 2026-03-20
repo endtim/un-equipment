@@ -6,7 +6,7 @@ import router from '../router'
 const PENDING_WINDOW_MS = 800
 const pendingWriteMap = new Map()
 
-// 业务错误码统一中文映射：前端以 code 为准，避免耦合后端 msg 文案。
+// 业务错误码中文兜底：仅在后端未返回可读业务消息时使用。
 const codeAliasMap = {
   40000: '操作失败，请稍后重试',
   40001: '请求参数不合法，请检查后重试',
@@ -15,7 +15,7 @@ const codeAliasMap = {
   40400: '请求资源不存在或已删除',
   41001: '用户名或密码错误',
   41002: '用户名已存在',
-  42001: '预约时间范围不合法，请检查后重试',
+  42001: '预约校验未通过，请根据提示调整后重试',
   42002: '预约时间与已有订单冲突，请调整后重试',
   42003: '订单操作不合法，请刷新后重试',
   42004: '当前订单状态不允许执行该操作',
@@ -38,18 +38,19 @@ class RequestError extends Error {
 }
 
 function normalizeBizMessage(message, fallback = '服务异常，请稍后重试', code) {
-  if (code && codeAliasMap[code]) {
-    return codeAliasMap[code]
-  }
   if (typeof message === 'string' && message.trim()) {
     const text = message.trim()
     if (
       text.toLowerCase() !== 'internal server error' &&
       text.toLowerCase() !== 'forbidden' &&
-      text.toLowerCase() !== 'unauthorized'
+      text.toLowerCase() !== 'unauthorized' &&
+      text.toLowerCase() !== 'null'
     ) {
       return text
     }
+  }
+  if (code && codeAliasMap[code]) {
+    return codeAliasMap[code]
   }
   return fallback
 }

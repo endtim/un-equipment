@@ -1,28 +1,23 @@
 <template>
   <div class="admin-page">
-    <div class="content-card admin-table-card">
-      <h3 class="admin-card-title">充值审核</h3>
-
-      <div class="admin-summary-grid" style="margin-bottom: 14px">
-        <div v-for="card in summaryCards" :key="card.label" class="admin-summary-card">
-          <div class="admin-summary-label">{{ card.label }}</div>
-          <div class="admin-summary-value">{{ card.value }}</div>
-        </div>
-      </div>
-
-      <div class="toolbar">
+    <admin-table-card title="充值审核">
+      <template #summary>
+        <admin-summary-cards :items="summaryCards" style="margin-bottom: 14px" />
+      </template>
+      <template #toolbar>
+        <div class="admin-toolbar">
         <el-input
           v-model="query.keyword"
           clearable
           placeholder="充值单号/申请人/备注"
-          style="width: 240px"
+          class="admin-filter--lg"
           @keyup.enter="onQueryChange"
         />
         <el-select
           v-model="query.status"
           clearable
           placeholder="全部状态"
-          style="width: 150px"
+          class="admin-filter--sm"
           @change="onQueryChange"
         >
           <el-option label="待审核" value="PENDING" />
@@ -36,7 +31,7 @@
           :precision="2"
           :controls="false"
           placeholder="最小金额"
-          style="width: 120px"
+          class="admin-filter--xs"
         />
         <el-input-number
           v-model="query.maxAmount"
@@ -44,7 +39,7 @@
           :precision="2"
           :controls="false"
           placeholder="最大金额"
-          style="width: 120px"
+          class="admin-filter--xs"
         />
         <el-date-picker
           v-model="query.timeRange"
@@ -52,13 +47,14 @@
           start-placeholder="申请开始时间"
           end-placeholder="申请结束时间"
           value-format="YYYY-MM-DDTHH:mm:ss"
-          style="width: 340px"
+          class="admin-filter--time"
           @change="onQueryChange"
         />
         <el-button type="primary" @click="onQueryChange">查询</el-button>
         <el-button type="success" plain @click="exportCsv">导出CSV</el-button>
         <el-button @click="resetQuery">重置</el-button>
-      </div>
+        </div>
+      </template>
 
       <el-table :data="recharges" border>
         <el-table-column prop="rechargeNo" label="充值单号" width="200" />
@@ -83,7 +79,7 @@
         </el-table-column>
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
+            <status-tag :label="statusLabel(row.status)" :type="statusTagType(row.status)" />
           </template>
         </el-table-column>
         <el-table-column label="备注">
@@ -111,24 +107,32 @@
       <el-pagination
         v-model:current-page="query.pageNum"
         v-model:page-size="query.pageSize"
-        class="pagination"
+        class="admin-pagination"
         layout="total, sizes, prev, pager, next, jumper"
         :page-sizes="[10, 20, 50]"
         :total="total"
         @current-change="load"
         @size-change="onSizeChange"
       />
-    </div>
+    </admin-table-card>
   </div>
 </template>
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
+import AdminSummaryCards from '../../../components/admin/AdminSummaryCards.vue'
+import AdminTableCard from '../../../components/admin/AdminTableCard.vue'
+import StatusTag from '../../../components/admin/StatusTag.vue'
 import { auditRecharge, exportRechargeOrders, getRechargeOrdersPage } from '../../../api/account'
 import { formatDateTime as formatDateTimeUtil } from '../../../utils/datetime'
 import { rechargeStatusLabel, rechargeStatusTagType } from '../../../utils/dicts'
 
 export default {
+  components: {
+    AdminSummaryCards,
+    AdminTableCard,
+    StatusTag
+  },
   computed: {
     summaryCards() {
       const pending = this.recharges.filter((item) => item.status === 'PENDING').length
@@ -265,13 +269,6 @@ export default {
 </script>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
 .action-wrap {
   display: flex;
   gap: 8px;
@@ -284,10 +281,5 @@ export default {
 .reject-remark {
   color: #d94f35;
   font-weight: 500;
-}
-
-.pagination {
-  margin-top: 14px;
-  justify-content: flex-end;
 }
 </style>

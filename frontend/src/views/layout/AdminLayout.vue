@@ -6,18 +6,38 @@
           <div class="admin-brand__kicker">后台工作区</div>
           <div class="admin-brand__title">管理平台</div>
         </div>
-        <div v-for="group in groups" :key="group.key" class="admin-nav-group">
-          <div class="admin-group-title">{{ group.label }}</div>
-          <div
-            v-for="item in group.items"
-            :key="item.path"
-            class="admin-nav-item"
-            :class="{ active: isActive(item) }"
-            @click="$router.push(item.path)"
+        <el-collapse v-model="activeGroupKey" accordion class="admin-accordion">
+          <el-collapse-item
+            v-for="group in groups"
+            :key="group.key"
+            :name="group.key"
+            class="admin-nav-group"
           >
-            {{ item.label }}
-          </div>
-        </div>
+            <template #title>
+              <span class="admin-group-title">{{ group.label }}</span>
+            </template>
+            <div v-for="item in group.items" :key="item.path">
+              <div
+                class="admin-nav-item"
+                :class="{ active: isActive(item) }"
+                @click="onNavClick(item)"
+              >
+                {{ item.label }}
+              </div>
+              <div v-if="item.children && item.children.length" class="admin-sub-nav">
+                <div
+                  v-for="child in item.children"
+                  :key="child.path"
+                  class="admin-sub-nav-item"
+                  :class="{ active: isActive(child) }"
+                  @click="$router.push(child.path)"
+                >
+                  {{ child.label }}
+                </div>
+              </div>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
         <div class="admin-actions">
           <el-button v-if="user" class="logout-btn" @click="logout">退出登录</el-button>
         </div>
@@ -85,8 +105,8 @@ const ADMIN_GROUPS = [
     ]
   },
   {
-    key: 'business',
-    label: '业务处理',
+    key: 'orders',
+    label: '订单与审核',
     items: [
       {
         label: '上机订单',
@@ -99,7 +119,37 @@ const ADMIN_GROUPS = [
         roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER']
       },
       { label: '充值审核', path: '/admin/recharges', roles: ['ADMIN', 'DEPT_MANAGER'] },
-      { label: '结算管理', path: '/admin/settlements', roles: ['ADMIN', 'DEPT_MANAGER'] }
+      {
+        label: '结算管理',
+        path: '/admin/settlements',
+        roles: ['ADMIN', 'DEPT_MANAGER'],
+        children: [
+          {
+            label: '结算总览',
+            path: '/admin/settlements/overview',
+            roles: ['ADMIN', 'DEPT_MANAGER']
+          },
+          {
+            label: '异常账处理',
+            path: '/admin/settlements/anomalies',
+            roles: ['ADMIN', 'DEPT_MANAGER']
+          }
+        ]
+      }
+    ]
+  },
+  {
+    key: 'finance',
+    label: '经费管理',
+    items: [
+      { label: '经费明细报表', path: '/admin/finance/report', roles: ['ADMIN', 'DEPT_MANAGER'] },
+      { label: '维护支出登记', path: '/admin/finance/expenses', roles: ['ADMIN', 'DEPT_MANAGER'] },
+      {
+        label: '预算预警',
+        path: '/admin/finance/budget-warnings',
+        roles: ['ADMIN', 'DEPT_MANAGER']
+      },
+      { label: '预算台账', path: '/admin/finance/budget-ledger', roles: ['ADMIN', 'DEPT_MANAGER'] }
     ]
   },
   {
@@ -113,6 +163,11 @@ const ADMIN_GROUPS = [
 ]
 
 export default {
+  data() {
+    return {
+      activeGroupKey: ''
+    }
+  },
   computed: {
     user() {
       return this.$store.state.user
@@ -123,7 +178,21 @@ export default {
     groups() {
       return ADMIN_GROUPS.map((group) => ({
         ...group,
-        items: group.items.filter((item) => item.roles.includes(this.roleCode))
+        items: group.items
+          .map((item) => {
+            const visibleChildren = (item.children || []).filter((child) =>
+              child.roles.includes(this.roleCode)
+            )
+            return {
+              ...item,
+              children: visibleChildren
+            }
+          })
+          .filter(
+            (item) =>
+              item.roles.includes(this.roleCode) ||
+              (Array.isArray(item.children) && item.children.length > 0)
+          )
       })).filter((group) => group.items.length > 0)
     },
     pageMeta() {
@@ -148,22 +217,33 @@ export default {
         group.items.forEach((item) => {
           if (currentPath === item.path || currentPath.startsWith(`${item.path}/`)) {
             if (!bestMatch || item.path.length > bestMatch.item.path.length) {
-              bestMatch = { group, item }
+              bestMatch = { group, parent: item, item }
             }
           }
+          ;(item.children || []).forEach((child) => {
+            if (currentPath === child.path || currentPath.startsWith(`${child.path}/`)) {
+              if (!bestMatch || child.path.length > bestMatch.item.path.length) {
+                bestMatch = { group, parent: item, item: child }
+              }
+            }
+          })
         })
       })
       return bestMatch
     },
     breadcrumbItems() {
       if (this.currentNav) {
-        const { group, item } = this.currentNav
+        const { group, parent, item } = this.currentNav
         const groupEntry = group.items[0]
-        return [
+        const list = [
           { label: '管理平台', to: this.$route.path === '/admin' ? null : '/admin' },
-          { label: group.label, to: groupEntry.path === item.path ? null : groupEntry.path },
-          { label: item.label, to: null }
+          { label: group.label, to: groupEntry.path === item.path ? null : groupEntry.path }
         ]
+        if (parent && parent.path !== item.path) {
+          list.push({ label: parent.label, to: parent.path })
+        }
+        list.push({ label: item.label, to: null })
+        return list
       }
 
       const raw = this.pageMeta.breadcrumb || []
@@ -171,6 +251,17 @@ export default {
         label,
         to: index === raw.length - 1 ? null : index === 0 ? '/admin' : null
       }))
+    }
+  },
+  watch: {
+    groups: {
+      immediate: true,
+      handler() {
+        this.syncActiveGroup()
+      }
+    },
+    '$route.path'() {
+      this.syncActiveGroup()
     }
   },
   methods: {
@@ -184,6 +275,28 @@ export default {
         return current === '/admin'
       }
       return current === item.path || current.startsWith(`${item.path}/`)
+    },
+    onNavClick(item) {
+      if (item.children && item.children.length > 0) {
+        const target = item.children[0]?.path || item.path
+        this.$router.push(target)
+        return
+      }
+      this.$router.push(item.path)
+    },
+    syncActiveGroup() {
+      if (!this.groups.length) {
+        this.activeGroupKey = ''
+        return
+      }
+      if (this.currentNav?.group?.key) {
+        this.activeGroupKey = this.currentNav.group.key
+        return
+      }
+      const exists = this.groups.some((group) => group.key === this.activeGroupKey)
+      if (!exists) {
+        this.activeGroupKey = this.groups[0].key
+      }
     }
   }
 }
@@ -229,6 +342,7 @@ export default {
 .admin-page-header {
   margin-bottom: 14px;
   padding: 14px 18px;
+  min-height: 104px;
 }
 
 .admin-page-title {
@@ -244,33 +358,113 @@ export default {
   line-height: 1.8;
 }
 
-.admin-nav-group + .admin-nav-group {
-  margin-top: 8px;
-}
-
 .admin-group-title {
-  font-size: 11px;
-  color: var(--muted);
-  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #355577;
+  letter-spacing: 0.2px;
   line-height: 1.3;
 }
 
 .admin-nav-item {
-  padding: 7px 11px;
-  border: 1px solid var(--line);
+  padding: 8px 12px;
+  border: 1px solid #d7e2ef;
   border-radius: 6px;
   cursor: pointer;
-  color: #36506f;
-  background: #f8fbff;
+  color: #3b5674;
+  background: #f9fbff;
   margin-bottom: 6px;
   font-size: 12px;
   line-height: 1.3;
+  transition: all 0.18s ease;
+}
+
+.admin-nav-item:hover {
+  background: #f1f6ff;
+  border-color: #bfd3ea;
+  transform: translateX(1px);
+}
+
+.admin-sub-nav {
+  margin: -2px 0 10px 0;
+  padding: 2px 0 0 10px;
+  border-left: 2px solid #d8e5f5;
+}
+
+.admin-sub-nav-item {
+  padding: 6px 10px;
+  border: 1px solid #dfe8f4;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #4d6480;
+  background: #fcfdff;
+  margin-bottom: 6px;
+  font-size: 12px;
+  line-height: 1.3;
+  transition: all 0.18s ease;
+}
+
+.admin-sub-nav-item:hover {
+  background: #f2f7ff;
+  border-color: #c4d8f0;
+  transform: translateX(1px);
+}
+
+.admin-sub-nav-item.active {
+  color: #0f3e74;
+  border-color: #9ebde0;
+  background: linear-gradient(180deg, #f4f8ff 0%, #eaf2ff 100%);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(15, 62, 116, 0.05);
+}
+
+.admin-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-accordion :deep(.el-collapse-item__header) {
+  border: 1px solid #d9e4f1;
+  border-radius: 8px;
+  padding: 0 10px;
+  height: 40px;
+  line-height: 40px;
+  font-size: 13px;
+  background: #f8fbff;
+  transition: all 0.18s ease;
+}
+
+.admin-accordion :deep(.el-collapse-item__header:hover) {
+  background: #f2f7ff;
+  border-color: #c2d6ec;
+}
+
+.admin-accordion :deep(.el-collapse-item__header.is-active) {
+  background: linear-gradient(180deg, #f4f8ff 0%, #edf4ff 100%);
+  border-color: #a9c3e2;
+  box-shadow: 0 2px 8px rgba(20, 72, 138, 0.08);
+}
+
+.admin-accordion :deep(.el-collapse-item__arrow) {
+  color: #6d88a7;
+  font-weight: 700;
+}
+
+.admin-accordion :deep(.el-collapse-item__wrap) {
+  border: none;
+  background: transparent;
+}
+
+.admin-accordion :deep(.el-collapse-item__content) {
+  padding: 8px 2px 4px;
 }
 
 .admin-nav-item.active {
   color: #fff;
-  background: var(--primary);
-  border-color: var(--primary);
+  background: linear-gradient(180deg, #1f5fb0 0%, #154f98 100%);
+  border-color: #154f98;
+  box-shadow: 0 3px 8px rgba(16, 73, 142, 0.2);
 }
 
 .admin-actions {

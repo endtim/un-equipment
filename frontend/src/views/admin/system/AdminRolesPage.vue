@@ -1,10 +1,11 @@
 <template>
   <div class="admin-page">
-    <div class="content-card admin-table-card">
-      <div class="admin-toolbar">
-        <div class="admin-card-title admin-card-title--tight">角色列表</div>
-        <el-button type="primary" @click="openCreateRole">新增角色</el-button>
-      </div>
+    <admin-table-card title="角色管理">
+      <template #toolbar>
+        <div class="admin-toolbar">
+          <el-button type="primary" @click="openCreateRole">新增角色</el-button>
+        </div>
+      </template>
 
       <el-table :data="roles" border>
         <el-table-column prop="roleName" label="角色名称" min-width="200" />
@@ -20,7 +21,7 @@
       <el-pagination
         v-model:current-page="query.pageNum"
         v-model:page-size="query.pageSize"
-        class="pagination"
+        class="admin-pagination"
         layout="total, sizes, prev, pager, next, jumper"
         :page-sizes="[10, 20, 50]"
         :total="total"
@@ -28,7 +29,7 @@
         @size-change="onSizeChange"
       />
       <el-empty v-if="roles.length === 0" description="暂无角色数据" class="admin-empty" />
-    </div>
+    </admin-table-card>
 
     <el-dialog
       v-model="roleDialogVisible"
@@ -54,6 +55,7 @@
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
+import AdminTableCard from '../../../components/admin/AdminTableCard.vue'
 import { createRole, deleteRole, getAdminRolesPage, updateRole } from '../../../api/admin'
 
 function defaultRoleForm() {
@@ -61,6 +63,9 @@ function defaultRoleForm() {
 }
 
 export default {
+  components: {
+    AdminTableCard
+  },
   data() {
     return {
       roles: [],
@@ -135,15 +140,7 @@ export default {
   gap: 10px;
   margin-bottom: 14px;
   align-items: center;
-  justify-content: space-between;
-}
-
-.admin-card-title--tight {
-  margin: 0;
-}
-
-.pagination {
-  margin-top: 14px;
   justify-content: flex-end;
 }
+
 </style>

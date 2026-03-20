@@ -1,28 +1,36 @@
 <template>
   <div class="admin-page">
-    <div class="grid-3" style="margin-bottom: 12px">
+    <div v-if="isSettlementMode" class="grid-3 stat-grid" style="margin-bottom: 12px">
       <div class="content-card stat-card" v-for="card in dashboardCards" :key="card.label">
         <div class="stat-label">{{ card.label }}</div>
         <div class="stat-value">{{ card.value }}</div>
       </div>
     </div>
+    <div v-if="isSettlementMode" class="content-card stat-strip" style="margin-bottom: 12px">
+      <div class="stat-strip-title">更多指标</div>
+      <div class="stat-strip-body">
+        <div v-for="item in secondaryMetrics" :key="item.label" class="stat-strip-item">
+          <span class="k">{{ item.label }}</span>
+          <span class="v">{{ item.value }}</span>
+        </div>
+      </div>
+    </div>
 
-    <div class="content-card admin-table-card" style="margin-bottom: 14px">
-      <h3 class="admin-card-title">结算管理</h3>
-
-      <div class="toolbar">
+    <admin-table-card v-if="isSettlementMode" title="结算管理" style="margin-bottom: 14px">
+      <template #toolbar>
+      <div class="admin-toolbar">
         <el-input
           v-model="query.keyword"
           placeholder="结算单号/订单号/申请人/仪器"
           clearable
-          style="width: 260px"
+          class="admin-filter--xl"
           @keyup.enter="onQueryChange"
         />
         <el-select
           v-model="query.status"
           clearable
           placeholder="结算状态"
-          style="width: 160px"
+          class="admin-filter--md"
           @change="onQueryChange"
         >
           <el-option label="待结算" value="PENDING" />
@@ -36,7 +44,7 @@
           v-model="query.departmentId"
           clearable
           placeholder="申请部门"
-          style="width: 180px"
+          class="admin-filter--md"
           @change="onQueryChange"
         >
           <el-option
@@ -51,15 +59,22 @@
           :min="1"
           :controls="false"
           placeholder="订单ID"
-          style="width: 120px"
+          class="admin-filter--xs"
         />
+        <el-button @click="advancedFilterVisible = !advancedFilterVisible">
+          {{ advancedFilterVisible ? '收起高级筛选' : '展开高级筛选' }}
+        </el-button>
+        <el-button type="primary" @click="onQueryChange">查询</el-button>
+        <el-button @click="resetQuery">重置</el-button>
+      </div>
+      <div v-if="advancedFilterVisible" class="admin-toolbar toolbar-advanced">
         <el-date-picker
           v-model="query.createRange"
           type="datetimerange"
           start-placeholder="创建开始"
           end-placeholder="创建结束"
           value-format="YYYY-MM-DDTHH:mm:ss"
-          style="width: 340px"
+          class="admin-filter--time"
           @change="onCreateRangeChange"
         />
         <el-date-picker
@@ -68,7 +83,7 @@
           start-placeholder="结算开始"
           end-placeholder="结算结束"
           value-format="YYYY-MM-DDTHH:mm:ss"
-          style="width: 340px"
+          class="admin-filter--time"
           @change="onSettledRangeChange"
         />
         <el-button-group>
@@ -91,9 +106,8 @@
             >清空快捷</el-button
           >
         </el-button-group>
-        <el-button type="primary" @click="onQueryChange">查询</el-button>
-        <el-button @click="resetQuery">重置</el-button>
       </div>
+      </template>
 
       <el-table :data="list" border>
         <el-table-column prop="settlementNo" label="结算单号" width="170" />
@@ -106,7 +120,7 @@
         </el-table-column>
         <el-table-column label="状态" width="130">
           <template #default="{ row }">
-            <el-tag :type="statusTag(row.settleStatus)">{{ statusLabel(row.settleStatus) }}</el-tag>
+            <status-tag :label="statusLabel(row.settleStatus)" :type="statusTag(row.settleStatus)" />
           </template>
         </el-table-column>
         <el-table-column label="创建时间" width="170">
@@ -149,31 +163,43 @@
       <el-pagination
         v-model:current-page="query.pageNum"
         v-model:page-size="query.pageSize"
-        class="pagination"
+        class="admin-pagination"
         layout="total, sizes, prev, pager, next, jumper"
         :page-sizes="[10, 20, 50]"
         :total="total"
         @current-change="load"
         @size-change="onSizeChange"
       />
-    </div>
+    </admin-table-card>
 
-    <div class="content-card admin-table-card">
-      <h3 class="admin-card-title">异常账清单</h3>
-      <div class="toolbar">
+    <admin-table-card v-if="isAnomalyMode" title="异常账清单">
+      <template #toolbar>
+      <div class="admin-toolbar">
         <el-select
           v-model="anomalyQuery.type"
           clearable
           placeholder="异常类型"
-          style="width: 180px"
-          @change="loadAnomalies"
+          class="admin-filter--md"
+          @change="onAnomalyFilterChange"
         >
           <el-option label="已完成未结算" value="COMPLETED_UNSETTLED" />
           <el-option label="待结算滞留" value="WAITING_SETTLEMENT" />
           <el-option label="已结算未支付" value="CONFIRMED_UNPAID" />
           <el-option label="已退款未冲正" value="REFUNDED_UNMATCHED" />
         </el-select>
+        <el-date-picker
+          v-model="anomalyQuery.timeRange"
+          type="datetimerange"
+          start-placeholder="开始时间"
+          end-placeholder="结束时间"
+          value-format="YYYY-MM-DDTHH:mm:ss"
+          class="admin-filter--time"
+          @change="onAnomalyTimeRangeChange"
+        />
+        <el-button type="primary" @click="onAnomalyFilterChange">查询</el-button>
+        <el-button @click="resetAnomalyQuery">重置</el-button>
       </div>
+      </template>
       <el-table :data="anomalyList" border>
         <el-table-column prop="anomalyLabel" label="异常类型" width="140" />
         <el-table-column prop="orderNo" label="订单号" width="180" />
@@ -181,9 +207,10 @@
         <el-table-column prop="userName" label="用户" width="120" />
         <el-table-column label="处理状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="anomalyHandleTag(row.handleStatus)">{{
-              anomalyHandleLabel(row.handleStatus)
-            }}</el-tag>
+            <status-tag
+              :label="anomalyHandleLabel(row.handleStatus)"
+              :type="anomalyHandleTag(row.handleStatus)"
+            />
           </template>
         </el-table-column>
         <el-table-column prop="handlerUserName" label="处理人" width="100" />
@@ -210,14 +237,14 @@
       <el-pagination
         v-model:current-page="anomalyQuery.pageNum"
         v-model:page-size="anomalyQuery.pageSize"
-        class="pagination"
+        class="admin-pagination"
         layout="total, sizes, prev, pager, next, jumper"
         :page-sizes="[10, 20, 50]"
         :total="anomalyTotal"
         @current-change="loadAnomalies"
         @size-change="onAnomalySizeChange"
       />
-    </div>
+    </admin-table-card>
 
     <el-drawer v-model="detailVisible" title="结算详情" size="520px" :with-header="true">
       <div v-if="detail" class="detail-grid">
@@ -244,6 +271,8 @@
 <script>
 import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import AdminTableCard from '../../../components/admin/AdminTableCard.vue'
+import StatusTag from '../../../components/admin/StatusTag.vue'
 import { getAdminDepartments } from '../../../api/admin'
 import {
   getAdminSettlementDetail,
@@ -283,6 +312,16 @@ const STATUS_TAG = {
 }
 
 export default {
+  components: {
+    AdminTableCard,
+    StatusTag
+  },
+  props: {
+    mode: {
+      type: String,
+      default: 'settlement'
+    }
+  },
   data() {
     return {
       list: [],
@@ -306,43 +345,61 @@ export default {
       },
       anomalyQuery: {
         type: '',
+        timeRange: [],
         pageNum: 1,
         pageSize: 10
-      }
+      },
+      advancedFilterVisible: false
     }
   },
   computed: {
+    isSettlementMode() {
+      return this.mode !== 'anomaly'
+    },
+    isAnomalyMode() {
+      return this.mode === 'anomaly'
+    },
     dashboardCards() {
       return [
         { label: '充值金额', value: this.num(this.overview.rechargeAmount) },
-        { label: '充值通过率', value: `${this.num(this.overview.rechargePassRate)}%` },
         { label: '已结算金额', value: this.num(this.overview.settledAmount) },
         { label: '已退款金额', value: this.num(this.overview.refundedAmount) },
-        { label: '退款率', value: `${this.num(this.overview.refundRate)}%` },
-        { label: '平均结算时长(小时)', value: this.num(this.overview.avgSettleHours) },
-        { label: '待结算平均滞留(小时)', value: this.num(this.overview.avgWaitingSettlementHours) },
+        { label: '待结算订单', value: String(this.overview.waitingSettlementOrders || 0) },
         {
           label: '异常账数量',
-          value: String(
-            (this.overview.completedButUnsettled || 0) +
-              (this.overview.waitingSettlementOrders || 0) +
-              (this.overview.confirmedButUnpaidOrders || 0)
-          )
+          value: String(this.anomalyCount)
         },
-        { label: '待结算订单', value: String(this.overview.waitingSettlementOrders || 0) },
         { label: '已结算未支付', value: String(this.overview.confirmedButUnpaidOrders || 0) }
+      ]
+    },
+    anomalyCount() {
+      return (
+        (this.overview.completedButUnsettled || 0) +
+        (this.overview.waitingSettlementOrders || 0) +
+        (this.overview.confirmedButUnpaidOrders || 0)
+      )
+    },
+    secondaryMetrics() {
+      return [
+        { label: '充值通过率', value: `${this.num(this.overview.rechargePassRate)}%` },
+        { label: '退款率', value: `${this.num(this.overview.refundRate)}%` },
+        { label: '平均结算时长(小时)', value: this.num(this.overview.avgSettleHours) },
+        { label: '待结算平均滞留(小时)', value: this.num(this.overview.avgWaitingSettlementHours) }
       ]
     }
   },
   async created() {
-    const routeOrderId = Number(this.$route.query.orderId || '')
-    if (Number.isFinite(routeOrderId) && routeOrderId > 0) {
-      this.query.orderId = routeOrderId
-    }
     await this.executeSafely(async () => {
-      this.departments = await getAdminDepartments()
-      await this.load()
-      await this.loadOverview()
+      if (this.isSettlementMode) {
+        const routeOrderId = Number(this.$route.query.orderId || '')
+        if (Number.isFinite(routeOrderId) && routeOrderId > 0) {
+          this.query.orderId = routeOrderId
+        }
+        this.departments = await getAdminDepartments()
+        await this.load()
+        await this.loadOverview()
+        return
+      }
       await this.loadAnomalies()
     })
   },
@@ -433,29 +490,53 @@ export default {
       })
     },
     async onQueryChange() {
+      if (!this.isSettlementMode) {
+        return
+      }
       this.query.pageNum = 1
-      this.anomalyQuery.pageNum = 1
       await this.load()
       await this.loadOverview()
-      await this.loadAnomalies()
     },
     async onCreateRangeChange() {
+      if (!this.isSettlementMode) {
+        return
+      }
       this.quickRange = ''
       await this.onQueryChange()
     },
     async onSettledRangeChange() {
+      if (!this.isSettlementMode) {
+        return
+      }
       this.quickRange = ''
       await this.onQueryChange()
     },
     async onSizeChange() {
+      if (!this.isSettlementMode) {
+        return
+      }
       this.query.pageNum = 1
       await this.load()
+    },
+    async onAnomalyFilterChange() {
+      this.anomalyQuery.pageNum = 1
+      await this.loadAnomalies()
+    },
+    async onAnomalyTimeRangeChange() {
+      await this.onAnomalyFilterChange()
     },
     async onAnomalySizeChange() {
       this.anomalyQuery.pageNum = 1
       await this.loadAnomalies()
     },
     buildReconciliationParams() {
+      if (this.isAnomalyMode) {
+        const [startTime, endTime] = this.anomalyQuery.timeRange || []
+        return {
+          startTime: startTime || undefined,
+          endTime: endTime || undefined
+        }
+      }
       const [createStart, createEnd] = this.query.createRange || []
       const [settledStart, settledEnd] = this.query.settledRange || []
       const startTime = createStart || settledStart
@@ -466,6 +547,9 @@ export default {
       }
     },
     async setQuickRange(type) {
+      if (!this.isSettlementMode) {
+        return
+      }
       this.quickRange = type
       if (!type) {
         this.query.createRange = []
@@ -489,6 +573,9 @@ export default {
       await this.onQueryChange()
     },
     async resetQuery() {
+      if (!this.isSettlementMode) {
+        return
+      }
       this.query.keyword = ''
       this.query.status = ''
       this.query.departmentId = null
@@ -496,10 +583,14 @@ export default {
       this.query.createRange = []
       this.query.settledRange = []
       this.query.pageNum = 1
-      this.anomalyQuery.pageNum = 1
       this.quickRange = ''
       await this.load()
       await this.loadOverview()
+    },
+    async resetAnomalyQuery() {
+      this.anomalyQuery.type = ''
+      this.anomalyQuery.timeRange = []
+      this.anomalyQuery.pageNum = 1
       await this.loadAnomalies()
     },
     async showDetail(row) {
@@ -519,7 +610,6 @@ export default {
         ElMessage.success('结算已完成')
         await this.load()
         await this.loadOverview()
-        await this.loadAnomalies()
       })
     },
     async requestRefund(row) {
@@ -555,7 +645,6 @@ export default {
         ElMessage.success('退款已完成')
         await this.load()
         await this.loadOverview()
-        await this.loadAnomalies()
       })
     },
     async handleAnomaly(row, handleStatus) {
@@ -584,22 +673,17 @@ export default {
 </script>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 12px;
+.toolbar-advanced {
+  padding: 10px 12px;
+  border: 1px dashed #d6e2f2;
+  border-radius: 8px;
+  background: #f9fbff;
 }
 
 .action-wrap {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.pagination {
-  margin-top: 14px;
-  justify-content: flex-end;
 }
 
 .detail-grid {
@@ -616,6 +700,45 @@ export default {
 
 .stat-card {
   padding: 16px 18px;
+}
+
+.stat-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.stat-strip {
+  padding: 12px 16px;
+}
+
+.stat-strip-title {
+  font-size: 13px;
+  color: #6d819a;
+  margin-bottom: 8px;
+}
+
+.stat-strip-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.stat-strip-item {
+  border: 1px solid #dbe6f2;
+  border-radius: 18px;
+  padding: 6px 12px;
+  background: #f9fbff;
+  font-size: 13px;
+  color: #35506f;
+}
+
+.stat-strip-item .k {
+  margin-right: 6px;
+  color: #6f8299;
+}
+
+.stat-strip-item .v {
+  color: #174c92;
+  font-weight: 700;
 }
 
 .stat-label {

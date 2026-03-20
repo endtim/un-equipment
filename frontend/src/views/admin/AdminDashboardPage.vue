@@ -1,11 +1,6 @@
 <template>
   <div class="admin-page">
-    <div class="grid-3">
-      <div v-for="card in cards" :key="card.label" class="content-card admin-card">
-        <div class="metric-label">{{ card.label }}</div>
-        <div class="metric-value">{{ card.value }}</div>
-      </div>
-    </div>
+    <admin-summary-cards :items="cards" />
 
     <div class="content-card admin-card">
       <h3 class="admin-card-title">快捷入口</h3>
@@ -50,9 +45,13 @@
 </template>
 
 <script>
+import AdminSummaryCards from '../../components/admin/AdminSummaryCards.vue'
 import { getAdminOverview } from '../../api/stat'
 
 export default {
+  components: {
+    AdminSummaryCards
+  },
   data() {
     return {
       overview: {},
@@ -76,16 +75,6 @@ export default {
 </script>
 
 <style scoped>
-.metric-label {
-  color: var(--muted);
-}
-
-.metric-value {
-  font-size: 32px;
-  font-weight: 800;
-  margin-top: 8px;
-}
-
 .quick-actions {
   display: flex;
   gap: 10px;

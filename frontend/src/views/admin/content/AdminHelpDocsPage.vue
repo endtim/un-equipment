@@ -1,6 +1,7 @@
 ﻿<template>
   <div class="admin-page">
-    <div class="content-card admin-table-card">
+    <admin-table-card title="帮助文档">
+      <template #toolbar>
       <div class="admin-toolbar">
         <el-input v-model="query.keyword" placeholder="搜索帮助文档标题" clearable />
         <el-select
@@ -15,14 +16,16 @@
         <el-button type="primary" @click="search">查询</el-button>
         <el-button type="primary" plain @click="openCreate">发布文档</el-button>
       </div>
+      </template>
 
       <el-table :data="helpDocs" border>
         <el-table-column prop="title" label="标题" min-width="220" />
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="publishTagType(row.publishStatus)">{{
-              publishStatusLabel(row.publishStatus)
-            }}</el-tag>
+            <status-tag
+              :label="publishStatusLabel(row.publishStatus)"
+              :type="publishTagType(row.publishStatus)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="140">
@@ -45,7 +48,7 @@
           @current-change="changePage"
         />
       </div>
-    </div>
+    </admin-table-card>
 
     <el-dialog
       v-model="dialogVisible"
@@ -86,6 +89,8 @@
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
+import AdminTableCard from '../../../components/admin/AdminTableCard.vue'
+import StatusTag from '../../../components/admin/StatusTag.vue'
 import {
   createHelpDoc,
   deleteHelpDoc,
@@ -104,6 +109,10 @@ function defaultForm() {
 }
 
 export default {
+  components: {
+    AdminTableCard,
+    StatusTag
+  },
   data() {
     return {
       helpDocs: [],

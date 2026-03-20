@@ -54,19 +54,19 @@ public interface SettlementRecordRepository {
                          @Param("operatorUserId") Long operatorUserId,
                          @Param("settledTime") LocalDateTime settledTime);
 
-    long countByScopeAndCreateTime(@Param("startTime") LocalDateTime startTime,
-                                   @Param("endTime") LocalDateTime endTime,
-                                   @Param("roleCode") String roleCode,
-                                   @Param("scopeDepartmentId") Long scopeDepartmentId);
+    long countSettledByScopeAndSettledTime(@Param("startTime") LocalDateTime startTime,
+                                           @Param("endTime") LocalDateTime endTime,
+                                           @Param("roleCode") String roleCode,
+                                           @Param("scopeDepartmentId") Long scopeDepartmentId);
 
-    BigDecimal sumFinalAmountByStatusAndScope(@Param("settleStatus") String settleStatus,
-                                              @Param("startTime") LocalDateTime startTime,
-                                              @Param("endTime") LocalDateTime endTime,
-                                              @Param("roleCode") String roleCode,
-                                              @Param("scopeDepartmentId") Long scopeDepartmentId);
+    BigDecimal sumFinalAmountByStatusAndScopeAndSettledTime(@Param("settleStatus") String settleStatus,
+                                                             @Param("startTime") LocalDateTime startTime,
+                                                             @Param("endTime") LocalDateTime endTime,
+                                                             @Param("roleCode") String roleCode,
+                                                             @Param("scopeDepartmentId") Long scopeDepartmentId);
 
-    BigDecimal avgSettleHoursByScope(@Param("startTime") LocalDateTime startTime,
-                                     @Param("endTime") LocalDateTime endTime,
-                                     @Param("roleCode") String roleCode,
-                                     @Param("scopeDepartmentId") Long scopeDepartmentId);
+    BigDecimal avgSettleHoursByScopeAndSettledTime(@Param("startTime") LocalDateTime startTime,
+                                                   @Param("endTime") LocalDateTime endTime,
+                                                   @Param("roleCode") String roleCode,
+                                                   @Param("scopeDepartmentId") Long scopeDepartmentId);
 }

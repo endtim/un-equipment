@@ -147,7 +147,7 @@ public class SettlementAdminService {
             }
         }
         // 资金侧退款成功后再更新订单状态，保持账务与订单一致。
-        financeService.refundForOrder(order, reason, user);
+        financeService.refundForSettlement(order, settlementId, reason, user);
         order.setPayStatus("REFUNDED");
         order.setSettlementStatus("REFUNDED");
         order.setUpdateTime(LocalDateTime.now());
@@ -177,6 +177,9 @@ public class SettlementAdminService {
             throw new BizException(ErrorCodes.ORDER_NOT_FOUND, "订单不存在");
         }
         assertManageable(user, order);
+        if (!"PAID".equalsIgnoreCase(order.getPayStatus())) {
+            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "仅已支付订单可发起退款");
+        }
         // 申请退款仅做“状态推进 + 审计记录”，不直接动账。
         int changed = settlementRecordRepository.updateStatusByIdWhenCurrent(
             settlementId, "CONFIRMED", "REFUND_PENDING", user == null ? null : user.getId(), LocalDateTime.now()

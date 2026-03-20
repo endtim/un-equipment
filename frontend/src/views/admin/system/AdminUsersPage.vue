@@ -1,13 +1,10 @@
 <template>
   <div class="admin-page">
-    <div class="content-card admin-table-card">
-      <div class="admin-summary-grid" style="margin-bottom: 14px">
-        <div v-for="card in summaryCards" :key="card.label" class="admin-summary-card">
-          <div class="admin-summary-label">{{ card.label }}</div>
-          <div class="admin-summary-value">{{ card.value }}</div>
-        </div>
-      </div>
-
+    <admin-table-card title="用户管理">
+      <template #summary>
+        <admin-summary-cards :items="summaryCards" style="margin-bottom: 14px" />
+      </template>
+      <template #toolbar>
       <div class="admin-toolbar">
         <el-input v-model="query.keyword" placeholder="搜索用户名或姓名" clearable />
         <el-select v-model="query.status" placeholder="全部状态" clearable style="width: 160px">
@@ -19,6 +16,7 @@
         <el-button type="primary" @click="searchUsers">查询</el-button>
         <el-button type="primary" plain @click="openCreateUser">新增用户</el-button>
       </div>
+      </template>
       <el-table :data="users" border>
         <el-table-column prop="username" label="用户名" width="150" />
         <el-table-column prop="realName" label="姓名" width="130" />
@@ -32,7 +30,7 @@
         <el-table-column prop="email" label="邮箱" min-width="180" />
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="userStatusTagType(row.status)">{{ userStatusLabel(row.status) }}</el-tag>
+            <status-tag :label="userStatusLabel(row.status)" :type="userStatusTagType(row.status)" />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="280">
@@ -75,7 +73,7 @@
           @current-change="changePage"
         />
       </div>
-    </div>
+    </admin-table-card>
 
     <el-dialog
       v-model="userDialogVisible"
@@ -178,6 +176,9 @@
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
+import AdminSummaryCards from '../../../components/admin/AdminSummaryCards.vue'
+import AdminTableCard from '../../../components/admin/AdminTableCard.vue'
+import StatusTag from '../../../components/admin/StatusTag.vue'
 import {
   auditUser,
   createUser,
@@ -206,6 +207,11 @@ function defaultUserForm() {
 }
 
 export default {
+  components: {
+    AdminSummaryCards,
+    AdminTableCard,
+    StatusTag
+  },
   computed: {
     summaryCards() {
       const pending = this.users.filter((item) => item.status === 'PENDING').length

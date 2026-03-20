@@ -1,37 +1,35 @@
 <template>
   <div class="admin-page">
-    <div class="content-card admin-table-card">
-      <div class="admin-summary-grid" style="margin-bottom: 14px">
-        <div v-for="card in summaryCards" :key="card.label" class="admin-summary-card">
-          <div class="admin-summary-label">{{ card.label }}</div>
-          <div class="admin-summary-value">{{ card.value }}</div>
-        </div>
-      </div>
-
-      <div class="admin-toolbar">
-        <el-input
-          v-model="query.keyword"
-          placeholder="请输入仪器名称或编码"
-          clearable
-          style="width: 260px"
-        />
-        <el-select v-model="query.categoryId" clearable placeholder="分类" style="width: 180px">
-          <el-option
-            v-for="item in categories"
-            :key="item.id"
-            :label="item.categoryName"
-            :value="item.id"
+    <admin-table-card title="仪器管理">
+      <template #summary>
+        <admin-summary-cards :items="summaryCards" style="margin-bottom: 14px" />
+      </template>
+      <template #toolbar>
+        <div class="admin-toolbar">
+          <el-input
+            v-model="query.keyword"
+            placeholder="请输入仪器名称或编码"
+            clearable
+            style="width: 260px"
           />
-        </el-select>
-        <el-select v-model="query.status" clearable placeholder="状态" style="width: 140px">
-          <el-option label="正常" value="NORMAL" />
-          <el-option label="禁用" value="DISABLED" />
-          <el-option label="维护中" value="MAINTENANCE" />
-          <el-option label="故障" value="FAULT" />
-        </el-select>
-        <el-button type="primary" @click="search">查询</el-button>
-        <el-button type="primary" plain @click="openCreate">新增仪器</el-button>
-      </div>
+          <el-select v-model="query.categoryId" clearable placeholder="分类" style="width: 180px">
+            <el-option
+              v-for="item in categories"
+              :key="item.id"
+              :label="item.categoryName"
+              :value="item.id"
+            />
+          </el-select>
+          <el-select v-model="query.status" clearable placeholder="状态" style="width: 140px">
+            <el-option label="正常" value="NORMAL" />
+            <el-option label="禁用" value="DISABLED" />
+            <el-option label="维护中" value="MAINTENANCE" />
+            <el-option label="故障" value="FAULT" />
+          </el-select>
+          <el-button type="primary" @click="search">查询</el-button>
+          <el-button type="primary" plain @click="openCreate">新增仪器</el-button>
+        </div>
+      </template>
 
       <el-table :data="instruments" border>
         <el-table-column prop="instrumentName" label="仪器名称" min-width="180" />
@@ -50,9 +48,10 @@
         </el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <el-tag :type="instrumentStatusTagType(row.status)">{{
-              instrumentStatusLabel(row.status)
-            }}</el-tag>
+            <status-tag
+              :label="instrumentStatusLabel(row.status)"
+              :type="instrumentStatusTagType(row.status)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
@@ -76,7 +75,7 @@
           @current-change="changePage"
         />
       </div>
-    </div>
+    </admin-table-card>
 
     <el-dialog
       v-model="dialogVisible"
@@ -219,6 +218,9 @@
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
+import AdminSummaryCards from '../../../components/admin/AdminSummaryCards.vue'
+import AdminTableCard from '../../../components/admin/AdminTableCard.vue'
+import StatusTag from '../../../components/admin/StatusTag.vue'
 import {
   createInstrument,
   deleteInstrument,
@@ -256,6 +258,11 @@ function defaultForm() {
 }
 
 export default {
+  components: {
+    AdminSummaryCards,
+    AdminTableCard,
+    StatusTag
+  },
   computed: {
     summaryCards() {
       const normal = this.instruments.filter((item) => item.status === 'NORMAL').length

@@ -30,6 +30,7 @@ import AdminOpenRulesPage from '../views/admin/instrument/AdminOpenRulesPage.vue
 import AdminMachineOrdersPage from '../views/admin/orders/AdminMachineOrdersPage.vue'
 import AdminSampleOrdersPage from '../views/admin/orders/AdminSampleOrdersPage.vue'
 import AdminRechargeAuditPage from '../views/admin/finance/AdminRechargeAuditPage.vue'
+import AdminFinanceDetailPage from '../views/admin/finance/AdminFinanceDetailPage.vue'
 import AdminSettlementPage from '../views/admin/finance/AdminSettlementPage.vue'
 import AdminNoticesPage from '../views/admin/content/AdminNoticesPage.vue'
 import AdminHelpDocsPage from '../views/admin/content/AdminHelpDocsPage.vue'
@@ -274,17 +275,86 @@ const router = createRouter({
             roles: ['ADMIN', 'DEPT_MANAGER']
           }
         },
+        { path: 'finance', redirect: '/admin/finance/report' },
         {
-          path: 'settlements',
-          component: AdminSettlementPage,
+          path: 'finance/report',
+          component: AdminFinanceDetailPage,
+          props: { mode: 'report' },
           meta: {
-            title: '结算管理',
-            description: '管理结算、退款与异常账处理，统一资金与订单状态的一致性。',
+            title: '经费明细报表',
+            description: '汇总充值、仪器收费、退款与维护支出，支持筛选查询与CSV导出。',
             pageType: 'operation',
-            breadcrumb: ['管理平台', '业务处理', '结算管理'],
+            breadcrumb: ['管理平台', '经费管理', '经费明细报表'],
             roles: ['ADMIN', 'DEPT_MANAGER']
           }
         },
+        {
+          path: 'finance/expenses',
+          component: AdminFinanceDetailPage,
+          props: { mode: 'expense' },
+          meta: {
+            title: '维护支出登记',
+            description: '登记仪器维护/维修/校准支出，并查看支出流水。',
+            pageType: 'operation',
+            breadcrumb: ['管理平台', '经费管理', '维护支出登记'],
+            roles: ['ADMIN', 'DEPT_MANAGER']
+          }
+        },
+        {
+          path: 'finance/budget-warnings',
+          component: AdminFinanceDetailPage,
+          props: { mode: 'budget-warning' },
+          meta: {
+            title: '预算预警',
+            description: '查看预算执行预警信息，支持按年度筛选。',
+            pageType: 'operation',
+            breadcrumb: ['管理平台', '经费管理', '预算预警'],
+            roles: ['ADMIN', 'DEPT_MANAGER']
+          }
+        },
+        {
+          path: 'finance/budget-ledger',
+          component: AdminFinanceDetailPage,
+          props: { mode: 'budget-ledger' },
+          meta: {
+            title: '预算台账',
+            description: '维护预算台账并支持新增预算。',
+            pageType: 'operation',
+            breadcrumb: ['管理平台', '经费管理', '预算台账'],
+            roles: ['ADMIN', 'DEPT_MANAGER']
+          }
+        },
+        { path: 'finance/budgets', redirect: '/admin/finance/budget-ledger' },
+        { path: 'finance-report', redirect: '/admin/finance/report' },
+        { path: 'finance-expenses', redirect: '/admin/finance/expenses' },
+        { path: 'finance-budgets', redirect: '/admin/finance/budget-ledger' },
+        { path: 'finance-details', redirect: '/admin/finance/report' },
+        { path: 'settlements', redirect: '/admin/settlements/overview' },
+        {
+          path: 'settlements/overview',
+          component: AdminSettlementPage,
+          props: { mode: 'settlement' },
+          meta: {
+            title: '结算总览',
+            description: '管理结算、退款等业务，统一资金与订单状态的一致性。',
+            pageType: 'operation',
+            breadcrumb: ['管理平台', '业务处理', '结算管理', '结算总览'],
+            roles: ['ADMIN', 'DEPT_MANAGER']
+          }
+        },
+        {
+          path: 'settlements/anomalies',
+          component: AdminSettlementPage,
+          props: { mode: 'anomaly' },
+          meta: {
+            title: '异常账处理',
+            description: '查看异常账清单并维护处理状态，保障对账闭环。',
+            pageType: 'operation',
+            breadcrumb: ['管理平台', '业务处理', '结算管理', '异常账处理'],
+            roles: ['ADMIN', 'DEPT_MANAGER']
+          }
+        },
+        { path: 'settlement-anomalies', redirect: '/admin/settlements/anomalies' },
         {
           path: 'notices',
           component: AdminNoticesPage,
@@ -337,7 +407,7 @@ const router = createRouter({
     { path: '/college-platforms', redirect: '/home' },
     { path: '/demands', redirect: '/home' },
     { path: '/admin/orders', redirect: '/admin/orders/machine' },
-    { path: '/admin/finance', redirect: '/admin/recharges' },
+    { path: '/admin/finance', redirect: '/admin/finance/report' },
     { path: '/admin/system', redirect: '/admin/users' },
     { path: '/admin/content', redirect: '/admin/notices' }
   ]

@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.finance.repository.FinanceDetailRepository">
+
+  <sql id="finance_detail_union_sql">
+    select
+      'RECHARGE' as biz_type,
+      '充值入账' as biz_type_label,
+      r.recharge_no as biz_no,
+      null as order_no,
+      null as instrument_id,
+      null as instrument_name,
+      u.department_id as department_id,
+      d.dept_name as department_name,
+      r.user_id as user_id,
+      u.real_name as user_name,
+      r.amount as amount,
+      'IN' as inout_type,
+      '收入' as inout_type_label,
+      r.remark as remark,
+      coalesce(r.audit_time, r.create_time) as occur_time
+    from biz_recharge_order r
+    left join sys_user u on u.id = r.user_id
+    left join sys_department d on d.id = u.department_id
+    where r.status = 'PASS'
+
+    union all
+
+    select
+      'SETTLEMENT' as biz_type,
+      '仪器收费' as biz_type_label,
+      s.settlement_no as biz_no,
+      o.order_no as order_no,
+      s.instrument_id as instrument_id,
+      i.instrument_name as instrument_name,
+      o.department_id as department_id,
+      d.dept_name as department_name,
+      o.user_id as user_id,
+      u.real_name as user_name,
+      s.final_amount as amount,
+      'IN' as inout_type,
+      '收入' as inout_type_label,
+      s.price_desc as remark,
+      coalesce(s.settled_time, s.create_time) as occur_time
+    from biz_settlement_record s
+    left join biz_reservation_order o on o.id = s.order_id
+    left join biz_instrument i on i.id = s.instrument_id
+    left join sys_department d on d.id = o.department_id
+    left join sys_user u on u.id = o.user_id
+    where s.settle_status = 'CONFIRMED'
+
+    union all
+
+    select
+      'REFUND' as biz_type,
+      '订单退款' as biz_type_label,
+      s.settlement_no as biz_no,
+      o.order_no as order_no,
+      s.instrument_id as instrument_id,
+      i.instrument_name as instrument_name,
+      o.department_id as department_id,
+      d.dept_name as department_name,
+      o.user_id as user_id,
+      u.real_name as user_name,
+      s.final_amount as amount,
+      'OUT' as inout_type,
+      '支出' as inout_type_label,
+      '订单退款' as remark,
+      coalesce(s.settled_time, s.create_time) as occur_time
+    from biz_settlement_record s
+    left join biz_reservation_order o on o.id = s.order_id
+    left join biz_instrument i on i.id = s.instrument_id
+    left join sys_department d on d.id = o.department_id
+    left join sys_user u on u.id = o.user_id
+    where s.settle_status = 'REFUNDED'
+
+    union all
+
+    select
+      'MAINTENANCE_EXPENSE' as biz_type,
+      '维护支出' as biz_type_label,
+      e.expense_no as biz_no,
+      null as order_no,
+      e.instrument_id as instrument_id,
+      i.instrument_name as instrument_name,
+      e.department_id as department_id,
+      d.dept_name as department_name,
+      null as user_id,
+      null as user_name,
+      e.amount as amount,
+      'OUT' as inout_type,
+      '支出' as inout_type_label,
+      concat(coalesce(e.title, ''), ifnull(concat('：', e.remark), '')) as remark,
+      e.expense_time as occur_time
+    from biz_finance_expense e
+    left join biz_instrument i on i.id = e.instrument_id
+    left join sys_department d on d.id = e.department_id
+  </sql>
+
+  <select id="findPage" resultType="com.unequipment.platform.modules.finance.vo.FinanceDetailVO">
+    select *
+    from (
+      <include refid="finance_detail_union_sql"/>
+    ) t
+    where 1 = 1
+    <if test="keyword != null and keyword != ''">
+      and (
+        t.biz_no like concat('%', #{keyword}, '%')
+        or t.order_no like concat('%', #{keyword}, '%')
+        or t.instrument_name like concat('%', #{keyword}, '%')
+        or t.department_name like concat('%', #{keyword}, '%')
+        or t.user_name like concat('%', #{keyword}, '%')
+        or t.remark like concat('%', #{keyword}, '%')
+      )
+    </if>
+    <if test="bizType != null and bizType != ''">
+      and t.biz_type = #{bizType}
+    </if>
+    <if test="inoutType != null and inoutType != ''">
+      and t.inout_type = #{inoutType}
+    </if>
+    <if test="instrumentId != null">
+      and t.instrument_id = #{instrumentId}
+    </if>
+    <if test="departmentId != null">
+      and t.department_id = #{departmentId}
+    </if>
+    <if test="startTime != null">
+      and t.occur_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and t.occur_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and t.department_id = #{scopeDepartmentId}
+    </if>
+    order by t.occur_time desc, t.biz_type desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPage" resultType="long">
+    select count(1)
+    from (
+      <include refid="finance_detail_union_sql"/>
+    ) t
+    where 1 = 1
+    <if test="keyword != null and keyword != ''">
+      and (
+        t.biz_no like concat('%', #{keyword}, '%')
+        or t.order_no like concat('%', #{keyword}, '%')
+        or t.instrument_name like concat('%', #{keyword}, '%')
+        or t.department_name like concat('%', #{keyword}, '%')
+        or t.user_name like concat('%', #{keyword}, '%')
+        or t.remark like concat('%', #{keyword}, '%')
+      )
+    </if>
+    <if test="bizType != null and bizType != ''">
+      and t.biz_type = #{bizType}
+    </if>
+    <if test="inoutType != null and inoutType != ''">
+      and t.inout_type = #{inoutType}
+    </if>
+    <if test="instrumentId != null">
+      and t.instrument_id = #{instrumentId}
+    </if>
+    <if test="departmentId != null">
+      and t.department_id = #{departmentId}
+    </if>
+    <if test="startTime != null">
+      and t.occur_time &gt;= #{startTime}
+    </if>
+    <if test="endTime != null">
+      and t.occur_time &lt;= #{endTime}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and t.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+</mapper>

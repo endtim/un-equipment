@@ -1,19 +1,21 @@
 <template>
   <div class="admin-page">
-    <div class="content-card admin-table-card">
-      <div class="admin-toolbar">
-        <div class="admin-card-title admin-card-title--tight">分类列表</div>
-        <el-button type="primary" @click="openCreate">新增分类</el-button>
-      </div>
+    <admin-table-card title="仪器分类">
+      <template #toolbar>
+        <div class="admin-toolbar">
+          <el-button type="primary" @click="openCreate">新增分类</el-button>
+        </div>
+      </template>
 
       <el-table :data="categories" border>
         <el-table-column prop="categoryName" label="分类名称" min-width="200" />
         <el-table-column prop="categoryCode" label="分类编码" width="180" />
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'">
-              {{ row.status === 'ENABLED' ? '启用' : '禁用' }}
-            </el-tag>
+            <status-tag
+              :label="row.status === 'ENABLED' ? '启用' : '禁用'"
+              :type="row.status === 'ENABLED' ? 'success' : 'info'"
+            />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="140">
@@ -27,7 +29,7 @@
       <el-pagination
         v-model:current-page="query.pageNum"
         v-model:page-size="query.pageSize"
-        class="pagination"
+        class="admin-pagination"
         layout="total, sizes, prev, pager, next, jumper"
         :page-sizes="[10, 20, 50]"
         :total="total"
@@ -35,7 +37,7 @@
         @size-change="onSizeChange"
       />
       <el-empty v-if="categories.length === 0" description="暂无分类数据" class="admin-empty" />
-    </div>
+    </admin-table-card>
 
     <el-dialog
       v-model="dialogVisible"
@@ -69,6 +71,8 @@
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
+import AdminTableCard from '../../../components/admin/AdminTableCard.vue'
+import StatusTag from '../../../components/admin/StatusTag.vue'
 import {
   createInstrumentCategory,
   deleteInstrumentCategory,
@@ -81,6 +85,10 @@ function defaultForm() {
 }
 
 export default {
+  components: {
+    AdminTableCard,
+    StatusTag
+  },
   data() {
     return {
       categories: [],
@@ -160,19 +168,11 @@ export default {
   gap: 10px;
   margin-bottom: 14px;
   align-items: center;
-  justify-content: space-between;
-}
-
-.admin-card-title--tight {
-  margin: 0;
+  justify-content: flex-end;
 }
 
 .full-width {
   width: 100%;
 }
 
-.pagination {
-  margin-top: 14px;
-  justify-content: flex-end;
-}
 </style>

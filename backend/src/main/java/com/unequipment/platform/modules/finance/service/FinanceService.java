@@ -6,20 +6,31 @@ import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.common.util.BizNoGenerator;
 import com.unequipment.platform.common.util.RoleAuthUtils;
 import com.unequipment.platform.modules.content.service.MessageService;
+import com.unequipment.platform.modules.finance.dto.FinanceAnomalyHandleRequest;
+import com.unequipment.platform.modules.finance.dto.FinanceBudgetSaveRequest;
+import com.unequipment.platform.modules.finance.dto.FinanceExpenseCreateRequest;
 import com.unequipment.platform.modules.finance.dto.RechargeAuditRequest;
 import com.unequipment.platform.modules.finance.dto.RechargeRequest;
 import com.unequipment.platform.modules.finance.entity.Account;
 import com.unequipment.platform.modules.finance.entity.FinanceAnomalyHandle;
+import com.unequipment.platform.modules.finance.entity.FinanceBudget;
+import com.unequipment.platform.modules.finance.entity.FinanceExpense;
 import com.unequipment.platform.modules.finance.entity.RechargeOrder;
 import com.unequipment.platform.modules.finance.entity.SettlementRecord;
 import com.unequipment.platform.modules.finance.entity.TransactionRecord;
-import com.unequipment.platform.modules.finance.repository.AccountRepository;
-import com.unequipment.platform.modules.finance.dto.FinanceAnomalyHandleRequest;
 import com.unequipment.platform.modules.finance.repository.FinanceAnomalyHandleRepository;
+import com.unequipment.platform.modules.finance.repository.FinanceBudgetRepository;
+import com.unequipment.platform.modules.finance.repository.AccountRepository;
+import com.unequipment.platform.modules.finance.repository.FinanceDetailRepository;
+import com.unequipment.platform.modules.finance.repository.FinanceExpenseRepository;
 import com.unequipment.platform.modules.finance.repository.RechargeOrderRepository;
 import com.unequipment.platform.modules.finance.repository.SettlementRecordRepository;
 import com.unequipment.platform.modules.finance.repository.TransactionRecordRepository;
 import com.unequipment.platform.modules.finance.vo.FinanceAnomalyVO;
+import com.unequipment.platform.modules.finance.vo.FinanceBudgetWarningVO;
+import com.unequipment.platform.modules.finance.vo.FinanceDetailVO;
+import com.unequipment.platform.modules.instrument.entity.Instrument;
+import com.unequipment.platform.modules.instrument.repository.InstrumentRepository;
 import com.unequipment.platform.modules.log.service.OperationLogService;
 import com.unequipment.platform.modules.order.entity.ReservationOrder;
 import com.unequipment.platform.modules.order.repository.ReservationOrderRepository;
@@ -45,12 +56,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class FinanceService {
     private static final int MAX_PAGE_SIZE = 200;
     private static final int EXPORT_MAX_ROWS = 10000;
+    private static final int DETAIL_EXPORT_MAX_ROWS = 20000;
     private static final long RECONCILIATION_OVERVIEW_CACHE_MILLIS = Duration.ofSeconds(45).toMillis();
 
     private final AccountRepository accountRepository;
     private final RechargeOrderRepository rechargeOrderRepository;
     private final TransactionRecordRepository transactionRecordRepository;
     private final SettlementRecordRepository settlementRecordRepository;
+    private final FinanceExpenseRepository financeExpenseRepository;
+    private final FinanceDetailRepository financeDetailRepository;
+    private final FinanceBudgetRepository financeBudgetRepository;
+    private final InstrumentRepository instrumentRepository;
     private final MessageService messageService;
     private final OperationLogService operationLogService;
     private final SysUserRepository userRepository;
@@ -298,13 +314,8 @@ public class FinanceService {
         if (confirmed <= 0) {
             SettlementRecord exists = settlementRecordRepository.findByOrderId(order.getId());
             if (exists != null) {
-                settlementRecordRepository.updateStatusByOrderId(
-                    order.getId(),
-                    "CONFIRMED",
-                    LocalDateTime.now(),
-                    operator == null ? null : operator.getId(),
-                    amount
-                );
+                // 并发下若结算记录已不处于 PENDING，不允许无条件回写为 CONFIRMED。
+                throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "结算状态已变化，请刷新后重试");
             } else {
                 SettlementRecord settlement = new SettlementRecord();
                 settlement.setSettlementNo(BizNoGenerator.next("SET"));
@@ -341,15 +352,33 @@ public class FinanceService {
     @Transactional
     public void refundForOrder(ReservationOrder order, String reason, SysUser operator) {
         SettlementRecord settlement = settlementRecordRepository.findByOrderId(order.getId());
-        if (settlement != null) {
-            String settleStatus = settlement.getSettleStatus() == null ? "" : settlement.getSettleStatus().trim().toUpperCase();
-            if ("REFUNDED".equals(settleStatus)) {
-                throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "订单已退款，请勿重复操作");
-            }
-            if ("REFUNDING".equals(settleStatus)) {
-                throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "订单退款处理中，请稍后再试");
-            }
+        if (settlement == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "结算记录不存在，无法执行退款");
         }
+        String settleStatus = normalizeSettlementStatus(settlement.getSettleStatus());
+        if ("REFUNDED".equals(settleStatus)) {
+            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "订单已退款，请勿重复操作");
+        }
+        if ("REFUNDING".equals(settleStatus)) {
+            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "订单退款处理中，请稍后再试");
+        }
+        if (!"CONFIRMED".equals(settleStatus) && !"REFUND_PENDING".equals(settleStatus)) {
+            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "当前结算状态不允许退款");
+        }
+        executeRefund(order, settlement.getId(), settleStatus, reason, operator);
+    }
+
+    @Transactional
+    public void refundForSettlement(ReservationOrder order, Long settlementId, String reason, SysUser operator) {
+        executeRefund(order, settlementId, "REFUNDING", reason, operator);
+    }
+
+    private void executeRefund(ReservationOrder order, Long settlementId, String currentStatus,
+                               String reason, SysUser operator) {
+        if (settlementId == null) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "结算记录ID不能为空");
+        }
+        String expectedStatus = normalizeSettlementStatus(currentStatus);
         Account account = getAccount(order.getUserId());
         BigDecimal amount = settlementAmount(order);
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -360,13 +389,16 @@ public class FinanceService {
         if (changed <= 0) {
             throw new BizException(ErrorCodes.BIZ_ERROR, "退款失败，请稍后重试");
         }
-        settlementRecordRepository.updateStatusByOrderId(
-            order.getId(),
+        int updated = settlementRecordRepository.updateStatusByIdWhenCurrent(
+            settlementId,
+            expectedStatus,
             "REFUNDED",
-            LocalDateTime.now(),
             operator == null ? null : operator.getId(),
-            amount
+            LocalDateTime.now()
         );
+        if (updated <= 0) {
+            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "结算状态已变化，请刷新后重试");
+        }
         recordTransaction(
             order.getUserId(),
             order.getId(),
@@ -446,14 +478,27 @@ public class FinanceService {
 
     @Transactional
     public void markSettlementVoid(ReservationOrder order, SysUser operator) {
-        BigDecimal finalAmount = settlementAmount(order);
-        settlementRecordRepository.updateStatusByOrderId(
-            order.getId(),
+        SettlementRecord settlement = settlementRecordRepository.findByOrderId(order.getId());
+        if (settlement == null) {
+            return;
+        }
+        String currentStatus = normalizeSettlementStatus(settlement.getSettleStatus());
+        if ("VOID".equals(currentStatus)) {
+            return;
+        }
+        if (!"PENDING".equals(currentStatus)) {
+            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "当前结算状态不允许作废");
+        }
+        int changed = settlementRecordRepository.updateStatusByIdWhenCurrent(
+            settlement.getId(),
+            "PENDING",
             "VOID",
-            null,
             operator == null ? null : operator.getId(),
-            finalAmount
+            null
         );
+        if (changed <= 0) {
+            throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "结算状态已变化，请刷新后重试");
+        }
         clearFinanceCache();
     }
 
@@ -530,80 +575,333 @@ public class FinanceService {
         return sb.toString();
     }
 
-    public Map<String, Object> reconciliationOverview(SysUser requester, LocalDateTime startTime, LocalDateTime endTime) {
-        validateTimeRange(startTime, endTime, "对账时间范围不合法，开始时间不能晚于结束时间");
-        String cacheKey = buildReconciliationOverviewCacheKey(requester, startTime, endTime);
-        CacheEntry cached = reconciliationOverviewCache.get(cacheKey);
-        long nowMillis = System.currentTimeMillis();
-        if (cached != null && cached.expireAtMillis > nowMillis && cached.value != null) {
-            return cached.value;
-        }
+    public PageResponse<FinanceDetailVO> pageFinanceDetails(SysUser requester, String keyword, String bizType,
+                                                            String inoutType, Long instrumentId, Long departmentId,
+                                                            LocalDateTime startTime, LocalDateTime endTime,
+                                                            int pageNum, int pageSize) {
+        validateTimeRange(startTime, endTime, "经费明细时间范围不合法，开始时间不能晚于结束时间");
+        int safePageNum = sanitizePageNum(pageNum);
+        int safePageSize = sanitizePageSize(pageSize);
+        int offset = (safePageNum - 1) * safePageSize;
         String roleCode = normalizeRole(requester);
         Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
+        List<FinanceDetailVO> list = financeDetailRepository.findPage(
+            trimToNull(keyword),
+            trimToNull(bizType),
+            trimToNull(inoutType),
+            instrumentId,
+            departmentId,
+            startTime,
+            endTime,
+            roleCode,
+            scopeDepartmentId,
+            offset,
+            safePageSize
+        );
+        long total = financeDetailRepository.countPage(
+            trimToNull(keyword),
+            trimToNull(bizType),
+            trimToNull(inoutType),
+            instrumentId,
+            departmentId,
+            startTime,
+            endTime,
+            roleCode,
+            scopeDepartmentId
+        );
+        return new PageResponse<>(list, total, safePageNum, safePageSize);
+    }
 
-        long rechargeCount = safeGet(
-            () -> rechargeOrderRepository.countByScopeAndCreateTime(startTime, endTime, roleCode, scopeDepartmentId),
-            0L
-        );
-        BigDecimal rechargeAmount = nullSafe(safeGet(
-            () -> rechargeOrderRepository.sumAmountByStatusAndScope("PASS", startTime, endTime, roleCode, scopeDepartmentId),
-            BigDecimal.ZERO
-        ));
-        long settlementCount = safeGet(
-            () -> settlementRecordRepository.countByScopeAndCreateTime(startTime, endTime, roleCode, scopeDepartmentId),
-            0L
-        );
-        BigDecimal settledAmount = nullSafe(safeGet(
-            () -> settlementRecordRepository.sumFinalAmountByStatusAndScope("CONFIRMED", startTime, endTime, roleCode, scopeDepartmentId),
-            BigDecimal.ZERO
-        ));
-        BigDecimal refundedAmount = nullSafe(safeGet(
-            () -> settlementRecordRepository.sumFinalAmountByStatusAndScope("REFUNDED", startTime, endTime, roleCode, scopeDepartmentId),
-            BigDecimal.ZERO
-        ));
-        long rechargePassCount = safeGet(
-            () -> rechargeOrderRepository.countByStatusAndScope("PASS", startTime, endTime, roleCode, scopeDepartmentId),
-            0L
-        );
-        long completedButUnsettled = safeGet(
-            () -> orderRepository.countCompletedButUnsettledByScope(startTime, endTime, roleCode, scopeDepartmentId),
-            0L
-        );
-        long waitingSettlement = safeGet(
-            () -> orderRepository.countWaitingSettlementByScope(startTime, endTime, roleCode, scopeDepartmentId),
-            0L
-        );
-        long confirmedButUnpaid = safeGet(
-            () -> orderRepository.countConfirmedButUnpaidByScope(startTime, endTime, roleCode, scopeDepartmentId),
-            0L
-        );
-        BigDecimal avgSettleHours = nullSafe(safeGet(
-            () -> settlementRecordRepository.avgSettleHoursByScope(startTime, endTime, roleCode, scopeDepartmentId),
-            BigDecimal.ZERO
-        ));
-        BigDecimal avgWaitingSettlementHours = nullSafe(safeGet(
-            () -> orderRepository.avgWaitingSettlementHoursByScope(startTime, endTime, roleCode, scopeDepartmentId),
-            BigDecimal.ZERO
-        ));
+    public String exportFinanceDetailsCsv(SysUser requester, String keyword, String bizType, String inoutType,
+                                          Long instrumentId, Long departmentId,
+                                          LocalDateTime startTime, LocalDateTime endTime) {
+        List<FinanceDetailVO> list = pageFinanceDetails(
+            requester,
+            keyword,
+            bizType,
+            inoutType,
+            instrumentId,
+            departmentId,
+            startTime,
+            endTime,
+            1,
+            DETAIL_EXPORT_MAX_ROWS
+        ).getList();
+        StringBuilder sb = new StringBuilder();
+        sb.append("业务类型,业务单号,订单号,仪器名称,部门,用户,收支方向,金额,发生时间,备注\n");
+        for (FinanceDetailVO item : list) {
+            sb.append(csv(item.getBizTypeLabel())).append(",")
+                .append(csv(item.getBizNo())).append(",")
+                .append(csv(item.getOrderNo())).append(",")
+                .append(csv(item.getInstrumentName())).append(",")
+                .append(csv(item.getDepartmentName())).append(",")
+                .append(csv(item.getUserName())).append(",")
+                .append(csv(item.getInoutTypeLabel())).append(",")
+                .append(csv(item.getAmount())).append(",")
+                .append(csv(item.getOccurTime())).append(",")
+                .append(csv(item.getRemark())).append("\n");
+        }
+        return sb.toString();
+    }
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("rechargeCount", rechargeCount);
-        result.put("rechargePassCount", rechargePassCount);
-        result.put("rechargeAmount", rechargeAmount);
-        result.put("settlementCount", settlementCount);
-        result.put("settledAmount", settledAmount);
-        result.put("refundedAmount", refundedAmount);
-        result.put("rechargePassRate", calculatePercent(rechargePassCount, rechargeCount));
-        result.put("refundRate", calculatePercent(refundedAmount, settledAmount));
-        result.put("avgSettleHours", avgSettleHours);
-        result.put("avgWaitingSettlementHours", avgWaitingSettlementHours);
-        result.put("completedButUnsettled", completedButUnsettled);
-        result.put("waitingSettlementOrders", waitingSettlement);
-        result.put("confirmedButUnpaidOrders", confirmedButUnpaid);
-        result.put("rangeStart", startTime);
-        result.put("rangeEnd", endTime);
-        reconciliationOverviewCache.put(cacheKey, new CacheEntry(result, nowMillis + RECONCILIATION_OVERVIEW_CACHE_MILLIS));
+    @Transactional
+    public FinanceExpense createFinanceExpense(SysUser requester, FinanceExpenseCreateRequest request) {
+        if (requester == null || (!hasRole(requester, "ADMIN") && !hasRole(requester, "DEPT_MANAGER"))) {
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权登记经费支出");
+        }
+        Instrument instrument = instrumentRepository.findById(request.getInstrumentId());
+        if (instrument == null || instrument.getDeleted() != null && instrument.getDeleted() == 1) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "仪器不存在");
+        }
+        if (hasRole(requester, "DEPT_MANAGER")) {
+            if (requester.getDepartmentId() == null
+                || !requester.getDepartmentId().equals(instrument.getDepartmentId())) {
+                throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权登记该仪器的维护支出");
+            }
+        }
+        LocalDateTime now = LocalDateTime.now();
+        FinanceExpense expense = new FinanceExpense();
+        expense.setExpenseNo(BizNoGenerator.next("EXP"));
+        expense.setInstrumentId(instrument.getId());
+        expense.setDepartmentId(instrument.getDepartmentId());
+        expense.setExpenseType(normalizeExpenseType(request.getExpenseType()));
+        expense.setAmount(request.getAmount());
+        expense.setTitle(request.getTitle().trim());
+        expense.setRemark(trimToNull(request.getRemark()));
+        expense.setExpenseTime(request.getExpenseTime());
+        expense.setOperatorUserId(requester.getId());
+        expense.setCreateTime(now);
+        expense.setUpdateTime(now);
+        financeExpenseRepository.insert(expense);
+        operationLogService.save(
+            requester,
+            "FINANCE",
+            "CREATE_FINANCE_EXPENSE",
+            "expenseId:" + expense.getId() + ",expenseNo:" + expense.getExpenseNo()
+                + ",instrumentId:" + expense.getInstrumentId() + ",amount:" + expense.getAmount()
+        );
+        clearFinanceCache();
+        return expense;
+    }
+
+    public PageResponse<FinanceBudget> pageBudgets(SysUser requester, Integer budgetYear,
+                                                   Long departmentId, Long instrumentId, String status,
+                                                   int pageNum, int pageSize) {
+        int safePageNum = sanitizePageNum(pageNum);
+        int safePageSize = sanitizePageSize(pageSize);
+        int offset = (safePageNum - 1) * safePageSize;
+        String roleCode = normalizeRole(requester);
+        Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
+        List<FinanceBudget> list = financeBudgetRepository.findPageByScope(
+            budgetYear,
+            departmentId,
+            instrumentId,
+            trimToNull(status),
+            roleCode,
+            scopeDepartmentId,
+            offset,
+            safePageSize
+        );
+        long total = financeBudgetRepository.countPageByScope(
+            budgetYear,
+            departmentId,
+            instrumentId,
+            trimToNull(status),
+            roleCode,
+            scopeDepartmentId
+        );
+        return new PageResponse<>(list, total, safePageNum, safePageSize);
+    }
+
+    @Transactional
+    public FinanceBudget saveBudget(SysUser requester, FinanceBudgetSaveRequest request) {
+        if (requester == null || (!hasRole(requester, "ADMIN") && !hasRole(requester, "DEPT_MANAGER"))) {
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权维护预算");
+        }
+        if (request.getInstrumentId() != null) {
+            Instrument instrument = instrumentRepository.findById(request.getInstrumentId());
+            if (instrument == null || instrument.getDeleted() != null && instrument.getDeleted() == 1) {
+                throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "仪器不存在");
+            }
+            if (request.getDepartmentId() == null) {
+                request.setDepartmentId(instrument.getDepartmentId());
+            }
+        }
+        if (hasRole(requester, "DEPT_MANAGER")) {
+            if (request.getDepartmentId() == null
+                || requester.getDepartmentId() == null
+                || !requester.getDepartmentId().equals(request.getDepartmentId())) {
+                throw new BizException(ErrorCodes.PERMISSION_DENIED, "仅可维护本部门预算");
+            }
+        }
+        if (request.getWarningRatio().compareTo(BigDecimal.valueOf(100)) > 0) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "预警阈值不能大于100");
+        }
+        FinanceBudget exists = financeBudgetRepository.findByScope(
+            request.getBudgetYear(),
+            request.getDepartmentId(),
+            request.getInstrumentId()
+        );
+        if (request.getId() == null && exists != null) {
+            throw new BizException(ErrorCodes.BIZ_ERROR, "同年度同维度预算已存在");
+        }
+        if (request.getId() != null && exists != null && !request.getId().equals(exists.getId())) {
+            throw new BizException(ErrorCodes.BIZ_ERROR, "同年度同维度预算已存在");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        FinanceBudget budget = request.getId() == null ? new FinanceBudget() : financeBudgetRepository.findById(request.getId());
+        if (request.getId() != null && budget == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "预算记录不存在");
+        }
+        if (request.getId() == null) {
+            budget.setBudgetNo(BizNoGenerator.next("BDG"));
+            budget.setCreateTime(now);
+        }
+        budget.setBudgetYear(request.getBudgetYear());
+        budget.setDepartmentId(request.getDepartmentId());
+        budget.setInstrumentId(request.getInstrumentId());
+        budget.setBudgetAmount(request.getBudgetAmount());
+        budget.setWarningRatio(request.getWarningRatio());
+        budget.setRemark(trimToNull(request.getRemark()));
+        budget.setStatus("ENABLED");
+        budget.setOperatorUserId(requester.getId());
+        budget.setUpdateTime(now);
+        if (request.getId() == null) {
+            financeBudgetRepository.insert(budget);
+        } else {
+            financeBudgetRepository.update(budget);
+        }
+        operationLogService.save(
+            requester,
+            "FINANCE",
+            "SAVE_FINANCE_BUDGET",
+            "budgetId:" + budget.getId() + ",budgetNo:" + budget.getBudgetNo()
+                + ",year:" + budget.getBudgetYear() + ",departmentId:" + budget.getDepartmentId()
+                + ",instrumentId:" + budget.getInstrumentId() + ",amount:" + budget.getBudgetAmount()
+        );
+        return financeBudgetRepository.findById(budget.getId());
+    }
+
+    public List<FinanceBudgetWarningVO> budgetWarnings(SysUser requester, Integer budgetYear) {
+        String roleCode = normalizeRole(requester);
+        Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
+        List<FinanceBudget> budgets = financeBudgetRepository.findAllForWarning(budgetYear, roleCode, scopeDepartmentId);
+        List<FinanceBudgetWarningVO> result = new java.util.ArrayList<>();
+        for (FinanceBudget budget : budgets) {
+            BigDecimal usedAmount = nullSafe(financeExpenseRepository.sumAmountByBudgetScope(
+                budget.getBudgetYear(),
+                budget.getDepartmentId(),
+                budget.getInstrumentId(),
+                roleCode,
+                scopeDepartmentId
+            ));
+            BigDecimal usedRatio = BigDecimal.ZERO;
+            if (budget.getBudgetAmount() != null && budget.getBudgetAmount().compareTo(BigDecimal.ZERO) > 0) {
+                usedRatio = usedAmount.multiply(BigDecimal.valueOf(100))
+                    .divide(budget.getBudgetAmount(), 2, java.math.RoundingMode.HALF_UP);
+            }
+            FinanceBudgetWarningVO vo = new FinanceBudgetWarningVO();
+            vo.setBudgetId(budget.getId());
+            vo.setBudgetNo(budget.getBudgetNo());
+            vo.setBudgetYear(budget.getBudgetYear());
+            vo.setDepartmentId(budget.getDepartmentId());
+            vo.setDepartmentName(budget.getDepartmentName());
+            vo.setInstrumentId(budget.getInstrumentId());
+            vo.setInstrumentName(budget.getInstrumentName());
+            vo.setBudgetAmount(nullSafe(budget.getBudgetAmount()));
+            vo.setWarningRatio(nullSafe(budget.getWarningRatio()));
+            vo.setUsedAmount(usedAmount);
+            vo.setUsedRatio(usedRatio);
+            vo.setWarningLevel(resolveWarningLevel(usedRatio, vo.getWarningRatio()));
+            result.add(vo);
+        }
         return result;
+    }
+
+    public Map<String, Object> reconciliationOverview(SysUser requester, LocalDateTime startTime, LocalDateTime endTime) {
+        validateTimeRange(startTime, endTime, "对账时间范围不合法，开始时间不能晚于结束时间");
+        try {
+            String cacheKey = buildReconciliationOverviewCacheKey(requester, startTime, endTime);
+            CacheEntry cached = reconciliationOverviewCache.get(cacheKey);
+            long nowMillis = System.currentTimeMillis();
+            if (cached != null && cached.expireAtMillis > nowMillis && cached.value != null) {
+                return cached.value;
+            }
+            String roleCode = normalizeRole(requester);
+            Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
+
+            long rechargeCount = safeGet(
+                () -> rechargeOrderRepository.countByScopeAndCreateTime(startTime, endTime, roleCode, scopeDepartmentId),
+                0L
+            );
+            BigDecimal rechargeAmount = nullSafe(safeGet(
+                () -> rechargeOrderRepository.sumAmountByStatusAndScope("PASS", startTime, endTime, roleCode, scopeDepartmentId),
+                BigDecimal.ZERO
+            ));
+            long settlementCount = safeGet(
+                () -> settlementRecordRepository.countSettledByScopeAndSettledTime(startTime, endTime, roleCode, scopeDepartmentId),
+                0L
+            );
+            BigDecimal settledAmount = nullSafe(safeGet(
+                () -> settlementRecordRepository.sumFinalAmountByStatusAndScopeAndSettledTime("CONFIRMED", startTime, endTime, roleCode, scopeDepartmentId),
+                BigDecimal.ZERO
+            ));
+            BigDecimal refundedAmount = nullSafe(safeGet(
+                () -> settlementRecordRepository.sumFinalAmountByStatusAndScopeAndSettledTime("REFUNDED", startTime, endTime, roleCode, scopeDepartmentId),
+                BigDecimal.ZERO
+            ));
+            BigDecimal maintenanceExpenseAmount = nullSafe(safeGet(
+                () -> financeExpenseRepository.sumAmountByScope(startTime, endTime, roleCode, scopeDepartmentId),
+                BigDecimal.ZERO
+            ));
+            long rechargePassCount = safeGet(
+                () -> rechargeOrderRepository.countByStatusAndScope("PASS", startTime, endTime, roleCode, scopeDepartmentId),
+                0L
+            );
+            long completedButUnsettled = safeGet(
+                () -> orderRepository.countCompletedButUnsettledByScope(startTime, endTime, roleCode, scopeDepartmentId),
+                0L
+            );
+            long waitingSettlement = safeGet(
+                () -> orderRepository.countWaitingSettlementByScope(startTime, endTime, roleCode, scopeDepartmentId),
+                0L
+            );
+            long confirmedButUnpaid = safeGet(
+                () -> orderRepository.countConfirmedButUnpaidByScope(startTime, endTime, roleCode, scopeDepartmentId),
+                0L
+            );
+            BigDecimal avgSettleHours = nullSafe(safeGet(
+                () -> settlementRecordRepository.avgSettleHoursByScopeAndSettledTime(startTime, endTime, roleCode, scopeDepartmentId),
+                BigDecimal.ZERO
+            ));
+            BigDecimal avgWaitingSettlementHours = nullSafe(safeGet(
+                () -> orderRepository.avgWaitingSettlementHoursByScope(startTime, endTime, roleCode, scopeDepartmentId),
+                BigDecimal.ZERO
+            ));
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("rechargeCount", rechargeCount);
+            result.put("rechargePassCount", rechargePassCount);
+            result.put("rechargeAmount", rechargeAmount);
+            result.put("settlementCount", settlementCount);
+            result.put("settledAmount", settledAmount);
+            result.put("refundedAmount", refundedAmount);
+            result.put("rechargePassRate", calculatePercent(rechargePassCount, rechargeCount));
+            result.put("refundRate", calculatePercent(refundedAmount, settledAmount));
+            result.put("maintenanceExpenseAmount", maintenanceExpenseAmount);
+            result.put("netIncomeAmount", settledAmount.subtract(refundedAmount).subtract(maintenanceExpenseAmount));
+            result.put("avgSettleHours", avgSettleHours);
+            result.put("avgWaitingSettlementHours", avgWaitingSettlementHours);
+            result.put("completedButUnsettled", completedButUnsettled);
+            result.put("waitingSettlementOrders", waitingSettlement);
+            result.put("confirmedButUnpaidOrders", confirmedButUnpaid);
+            result.put("rangeStart", startTime);
+            result.put("rangeEnd", endTime);
+            reconciliationOverviewCache.put(cacheKey, new CacheEntry(result, nowMillis + RECONCILIATION_OVERVIEW_CACHE_MILLIS));
+            return result;
+        } catch (Exception ignored) {
+            return buildReconciliationOverviewFallback(startTime, endTime);
+        }
     }
 
     public PageResponse<FinanceAnomalyVO> reconciliationAnomalies(SysUser requester, String type,
@@ -743,6 +1041,13 @@ public class FinanceService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    private String normalizeSettlementStatus(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toUpperCase(Locale.ROOT);
+    }
+
     private String normalizeRole(SysUser user) {
         if (hasRole(user, "ADMIN")) {
             return "ADMIN";
@@ -844,6 +1149,36 @@ public class FinanceService {
         return status == null ? "" : status;
     }
 
+    private String resolveWarningLevel(BigDecimal usedRatio, BigDecimal warningRatio) {
+        BigDecimal ratio = nullSafe(usedRatio);
+        BigDecimal threshold = nullSafe(warningRatio);
+        if (threshold.compareTo(BigDecimal.ZERO) <= 0) {
+            threshold = BigDecimal.valueOf(80);
+        }
+        if (ratio.compareTo(BigDecimal.valueOf(100)) >= 0) {
+            return "OVER_BUDGET";
+        }
+        if (ratio.compareTo(threshold) >= 0) {
+            return "WARNING";
+        }
+        return "NORMAL";
+    }
+
+    private String normalizeExpenseType(String expenseType) {
+        String type = trimToNull(expenseType);
+        if (type == null) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "支出类型不能为空");
+        }
+        String upper = type.toUpperCase(Locale.ROOT);
+        if (!"MAINTENANCE".equals(upper)
+            && !"REPAIR".equals(upper)
+            && !"CALIBRATION".equals(upper)
+            && !"OTHER".equals(upper)) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "支出类型不合法");
+        }
+        return upper;
+    }
+
     private boolean needDoubleReview(RechargeOrder order) {
         BigDecimal threshold = rechargeDoubleReviewThreshold == null ? BigDecimal.ZERO : rechargeDoubleReviewThreshold;
         if (threshold.compareTo(BigDecimal.ZERO) <= 0) {
@@ -910,6 +1245,28 @@ public class FinanceService {
             Objects.toString(startTime, "-"),
             Objects.toString(endTime, "-")
         );
+    }
+
+    private Map<String, Object> buildReconciliationOverviewFallback(LocalDateTime startTime, LocalDateTime endTime) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("rechargeCount", 0L);
+        result.put("rechargePassCount", 0L);
+        result.put("rechargeAmount", BigDecimal.ZERO);
+        result.put("settlementCount", 0L);
+        result.put("settledAmount", BigDecimal.ZERO);
+        result.put("refundedAmount", BigDecimal.ZERO);
+        result.put("rechargePassRate", BigDecimal.ZERO);
+        result.put("refundRate", BigDecimal.ZERO);
+        result.put("maintenanceExpenseAmount", BigDecimal.ZERO);
+        result.put("netIncomeAmount", BigDecimal.ZERO);
+        result.put("avgSettleHours", BigDecimal.ZERO);
+        result.put("avgWaitingSettlementHours", BigDecimal.ZERO);
+        result.put("completedButUnsettled", 0L);
+        result.put("waitingSettlementOrders", 0L);
+        result.put("confirmedButUnpaidOrders", 0L);
+        result.put("rangeStart", startTime);
+        result.put("rangeEnd", endTime);
+        return result;
     }
 
     private static class CacheEntry {

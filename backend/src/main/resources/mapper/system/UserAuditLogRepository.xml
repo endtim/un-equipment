@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.system.repository.UserAuditLogRepository">
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into sys_user_audit_log(
+      user_id, action_type, action_result, operator_user_id, operator_role, remark, create_time
+    ) values (
+      #{userId}, #{actionType}, #{actionResult}, #{operatorUserId}, #{operatorRole}, #{remark}, #{createTime}
+    )
+  </insert>
+
+  <select id="findPageByUserId" resultType="com.unequipment.platform.modules.system.entity.UserAuditLog">
+    select l.*,
+           u.username,
+           u.real_name,
+           op.real_name as operator_name
+    from sys_user_audit_log l
+    left join sys_user u on u.id = l.user_id
+    left join sys_user op on op.id = l.operator_user_id
+    where l.user_id = #{userId}
+    order by l.create_time desc, l.id desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countByUserId" resultType="long">
+    select count(1) from sys_user_audit_log where user_id = #{userId}
+  </select>
+
+</mapper>
+

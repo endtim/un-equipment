@@ -1,13 +1,14 @@
 ﻿<template>
   <div class="admin-page">
-    <div class="content-card admin-table-card">
-      <div class="admin-toolbar">
+    <admin-table-card title="开放规则">
+      <template #toolbar>
+      <div class="admin-toolbar rule-toolbar">
         <el-select
           v-model="query.instrumentId"
           clearable
           filterable
           placeholder="请选择仪器"
-          style="width: 280px"
+          class="rule-filter rule-filter--lg"
         >
           <el-option
             v-for="item in instruments"
@@ -16,7 +17,12 @@
             :value="item.id"
           />
         </el-select>
-        <el-select v-model="query.weekDay" clearable placeholder="星期" style="width: 140px">
+        <el-select
+          v-model="query.weekDay"
+          clearable
+          placeholder="星期"
+          class="rule-filter rule-filter--sm"
+        >
           <el-option
             v-for="item in weekOptions"
             :key="item.value"
@@ -24,13 +30,19 @@
             :value="item.value"
           />
         </el-select>
-        <el-select v-model="query.status" clearable placeholder="状态" style="width: 140px">
+        <el-select
+          v-model="query.status"
+          clearable
+          placeholder="状态"
+          class="rule-filter rule-filter--sm"
+        >
           <el-option label="启用" value="ENABLED" />
           <el-option label="停用" value="DISABLED" />
         </el-select>
         <el-button type="primary" @click="search">查询</el-button>
         <el-button type="primary" plain @click="openCreate">新增规则</el-button>
       </div>
+      </template>
 
       <el-table :data="rules" border>
         <el-table-column label="仪器" min-width="220">
@@ -39,17 +51,23 @@
         <el-table-column label="星期" width="180">
           <template #default="{ row }">{{ weekLabels(row) }}</template>
         </el-table-column>
-        <el-table-column label="开始时间" prop="startTime" width="120" />
-        <el-table-column label="结束时间" prop="endTime" width="120" />
-        <el-table-column label="最长预约时长(分钟)" prop="maxReserveMinutes" width="160" />
-        <el-table-column label="时间步长(分钟)" prop="stepMinutes" width="150" />
-        <el-table-column label="生效开始" prop="effectiveStartDate" width="130" />
-        <el-table-column label="生效结束" prop="effectiveEndDate" width="130" />
+        <el-table-column label="开始时间" prop="startTime" width="120" align="center" />
+        <el-table-column label="结束时间" prop="endTime" width="120" align="center" />
+        <el-table-column
+          label="最长预约时长(分钟)"
+          prop="maxReserveMinutes"
+          width="170"
+          align="center"
+        />
+        <el-table-column label="时间步长(分钟)" prop="stepMinutes" width="150" align="center" />
+        <el-table-column label="生效开始" prop="effectiveStartDate" width="130" align="center" />
+        <el-table-column label="生效结束" prop="effectiveEndDate" width="130" align="center" />
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'">
-              {{ row.status === 'ENABLED' ? '启用' : '停用' }}
-            </el-tag>
+            <status-tag
+              :label="row.status === 'ENABLED' ? '启用' : '停用'"
+              :type="row.status === 'ENABLED' ? 'success' : 'info'"
+            />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="140" fixed="right">
@@ -72,7 +90,7 @@
           @current-change="changePage"
         />
       </div>
-    </div>
+    </admin-table-card>
 
     <el-dialog
       v-model="dialogVisible"
@@ -178,6 +196,8 @@
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
+import AdminTableCard from '../../../components/admin/AdminTableCard.vue'
+import StatusTag from '../../../components/admin/StatusTag.vue'
 import {
   createOpenRule,
   deleteOpenRule,
@@ -202,6 +222,10 @@ function defaultForm() {
 }
 
 export default {
+  components: {
+    AdminTableCard,
+    StatusTag
+  },
   data() {
     return {
       rules: [],
@@ -413,3 +437,31 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.rule-toolbar {
+  align-items: center;
+}
+
+.rule-filter--lg {
+  width: 300px;
+}
+
+.rule-filter--sm {
+  width: 150px;
+}
+
+@media (max-width: 1200px) {
+  .rule-filter--lg,
+  .rule-filter--sm {
+    width: 220px;
+  }
+}
+
+@media (max-width: 900px) {
+  .rule-filter--lg,
+  .rule-filter--sm {
+    width: 100%;
+  }
+}
+</style>

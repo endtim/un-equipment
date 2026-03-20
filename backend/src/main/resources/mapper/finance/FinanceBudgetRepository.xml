@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.unequipment.platform.modules.finance.repository.FinanceBudgetRepository">
+
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    insert into biz_finance_budget(
+      budget_no, budget_year, department_id, instrument_id, budget_amount,
+      warning_ratio, status, remark, operator_user_id, create_time, update_time
+    ) values (
+      #{budgetNo}, #{budgetYear}, #{departmentId}, #{instrumentId}, #{budgetAmount},
+      #{warningRatio}, #{status}, #{remark}, #{operatorUserId}, #{createTime}, #{updateTime}
+    )
+  </insert>
+
+  <update id="update">
+    update biz_finance_budget
+    set budget_year = #{budgetYear},
+        department_id = #{departmentId},
+        instrument_id = #{instrumentId},
+        budget_amount = #{budgetAmount},
+        warning_ratio = #{warningRatio},
+        status = #{status},
+        remark = #{remark},
+        operator_user_id = #{operatorUserId},
+        update_time = #{updateTime}
+    where id = #{id}
+  </update>
+
+  <select id="findById" resultType="com.unequipment.platform.modules.finance.entity.FinanceBudget">
+    select b.*, d.dept_name as department_name, i.instrument_name, u.real_name as operator_user_name
+    from biz_finance_budget b
+    left join sys_department d on d.id = b.department_id
+    left join biz_instrument i on i.id = b.instrument_id
+    left join sys_user u on u.id = b.operator_user_id
+    where b.id = #{id}
+    limit 1
+  </select>
+
+  <select id="findByScope" resultType="com.unequipment.platform.modules.finance.entity.FinanceBudget">
+    select *
+    from biz_finance_budget
+    where budget_year = #{budgetYear}
+      and ((department_id is null and #{departmentId} is null) or department_id = #{departmentId})
+      and ((instrument_id is null and #{instrumentId} is null) or instrument_id = #{instrumentId})
+    limit 1
+  </select>
+
+  <select id="findPageByScope" resultType="com.unequipment.platform.modules.finance.entity.FinanceBudget">
+    select b.*, d.dept_name as department_name, i.instrument_name, u.real_name as operator_user_name
+    from biz_finance_budget b
+    left join sys_department d on d.id = b.department_id
+    left join biz_instrument i on i.id = b.instrument_id
+    left join sys_user u on u.id = b.operator_user_id
+    where 1 = 1
+    <if test="budgetYear != null">
+      and b.budget_year = #{budgetYear}
+    </if>
+    <if test="departmentId != null">
+      and b.department_id = #{departmentId}
+    </if>
+    <if test="instrumentId != null">
+      and b.instrument_id = #{instrumentId}
+    </if>
+    <if test="status != null and status != ''">
+      and b.status = #{status}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and b.department_id = #{scopeDepartmentId}
+    </if>
+    order by b.budget_year desc, b.create_time desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPageByScope" resultType="long">
+    select count(1)
+    from biz_finance_budget b
+    where 1 = 1
+    <if test="budgetYear != null">
+      and b.budget_year = #{budgetYear}
+    </if>
+    <if test="departmentId != null">
+      and b.department_id = #{departmentId}
+    </if>
+    <if test="instrumentId != null">
+      and b.instrument_id = #{instrumentId}
+    </if>
+    <if test="status != null and status != ''">
+      and b.status = #{status}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and b.department_id = #{scopeDepartmentId}
+    </if>
+  </select>
+
+  <select id="findAllForWarning" resultType="com.unequipment.platform.modules.finance.entity.FinanceBudget">
+    select b.*, d.dept_name as department_name, i.instrument_name, u.real_name as operator_user_name
+    from biz_finance_budget b
+    left join sys_department d on d.id = b.department_id
+    left join biz_instrument i on i.id = b.instrument_id
+    left join sys_user u on u.id = b.operator_user_id
+    where b.status = 'ENABLED'
+    <if test="budgetYear != null">
+      and b.budget_year = #{budgetYear}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and b.department_id = #{scopeDepartmentId}
+    </if>
+    order by b.budget_year desc, b.create_time desc
+  </select>
+
+</mapper>

@@ -80,3 +80,53 @@ export function auditRecharge(id, data) {
     data
   })
 }
+
+export function getFinanceDetailsPage(params) {
+  return request({
+    url: '/api/admin/finance/details',
+    method: 'get',
+    params
+  })
+}
+
+export function exportFinanceDetails(params) {
+  return request({
+    url: '/api/admin/finance/details/export',
+    method: 'get',
+    params,
+    responseType: 'blob',
+    rawResponse: true
+  })
+}
+
+export function createFinanceExpense(data) {
+  return request({
+    url: '/api/admin/finance/expenses',
+    method: 'post',
+    data
+  })
+}
+
+export function getFinanceBudgetsPage(params) {
+  return request({
+    url: '/api/admin/finance/budgets',
+    method: 'get',
+    params
+  })
+}
+
+export function saveFinanceBudget(data) {
+  return request({
+    url: '/api/admin/finance/budgets',
+    method: 'post',
+    data
+  })
+}
+
+export function getFinanceBudgetWarnings(params) {
+  return request({
+    url: '/api/admin/finance/budget-warnings',
+    method: 'get',
+    params
+  })
+}

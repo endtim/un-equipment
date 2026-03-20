@@ -1,10 +1,11 @@
 <template>
   <div class="admin-page">
-    <div class="content-card admin-table-card">
-      <div class="admin-toolbar">
-        <div class="admin-card-title admin-card-title--tight">部门列表</div>
-        <el-button type="primary" @click="openCreate">新增部门</el-button>
-      </div>
+    <admin-table-card title="部门管理">
+      <template #toolbar>
+        <div class="admin-toolbar">
+          <el-button type="primary" @click="openCreate">新增部门</el-button>
+        </div>
+      </template>
 
       <el-table :data="departments" border>
         <el-table-column prop="deptName" label="部门名称" min-width="180" />
@@ -13,9 +14,10 @@
         <el-table-column prop="email" label="邮箱" min-width="180" />
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'">
-              {{ row.status === 'ENABLED' ? '启用' : '禁用' }}
-            </el-tag>
+            <status-tag
+              :label="row.status === 'ENABLED' ? '启用' : '禁用'"
+              :type="row.status === 'ENABLED' ? 'success' : 'info'"
+            />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="140">
@@ -29,7 +31,7 @@
       <el-pagination
         v-model:current-page="query.pageNum"
         v-model:page-size="query.pageSize"
-        class="pagination"
+        class="admin-pagination"
         layout="total, sizes, prev, pager, next, jumper"
         :page-sizes="[10, 20, 50]"
         :total="total"
@@ -37,7 +39,7 @@
         @size-change="onSizeChange"
       />
       <el-empty v-if="departments.length === 0" description="暂无部门数据" class="admin-empty" />
-    </div>
+    </admin-table-card>
 
     <el-dialog
       v-model="dialogVisible"
@@ -91,6 +93,8 @@
 
 <script>
 import { ElMessage, ElMessageBox } from 'element-plus'
+import AdminTableCard from '../../../components/admin/AdminTableCard.vue'
+import StatusTag from '../../../components/admin/StatusTag.vue'
 import {
   createDepartment,
   deleteDepartment,
@@ -112,6 +116,10 @@ function defaultForm() {
 }
 
 export default {
+  components: {
+    AdminTableCard,
+    StatusTag
+  },
   data() {
     return {
       departments: [],
@@ -192,19 +200,11 @@ export default {
   gap: 10px;
   margin-bottom: 14px;
   align-items: center;
-  justify-content: space-between;
-}
-
-.admin-card-title--tight {
-  margin: 0;
+  justify-content: flex-end;
 }
 
 .full-width {
   width: 100%;
 }
 
-.pagination {
-  margin-top: 14px;
-  justify-content: flex-end;
-}
 </style>

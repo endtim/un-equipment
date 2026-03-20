@@ -1,18 +1,24 @@
 <template>
   <div class="admin-page">
-    <div class="content-card admin-table-card">
-      <h3 class="admin-card-title">操作日志</h3>
+    <admin-table-card title="操作日志">
+      <template #toolbar>
       <div class="admin-toolbar">
-        <el-select v-model="query.moduleName" clearable placeholder="模块">
+        <el-select v-model="query.moduleName" clearable placeholder="模块" class="admin-filter--sm">
           <el-option label="系统管理" value="SYSTEM" />
           <el-option label="订单管理" value="ORDER" />
           <el-option label="财务管理" value="FINANCE" />
           <el-option label="仪器管理" value="INSTRUMENT" />
           <el-option label="内容管理" value="CONTENT" />
         </el-select>
-        <el-input v-model="query.keyword" placeholder="搜索操作名称、接口路径或资源ID" clearable />
+        <el-input
+          v-model="query.keyword"
+          placeholder="搜索操作名称、接口路径或资源ID"
+          clearable
+          class="admin-filter--xl"
+        />
         <el-button type="primary" @click="search">查询</el-button>
       </div>
+      </template>
 
       <el-table :data="logs" border>
         <el-table-column prop="moduleName" label="模块" width="120">
@@ -33,9 +39,11 @@
         <el-table-column prop="resultCode" label="结果码" width="90" />
         <el-table-column label="结果" width="90">
           <template #default="{ row }">
-            <el-tag :type="row.resultCode === 200 ? 'success' : 'danger'" size="small">
-              {{ row.resultLabel || (row.resultCode === 200 ? '成功' : '失败') }}
-            </el-tag>
+            <status-tag
+              :label="row.resultLabel || (row.resultCode === 200 ? '成功' : '失败')"
+              :type="row.resultCode === 200 ? 'success' : 'danger'"
+              size="small"
+            />
           </template>
         </el-table-column>
         <el-table-column
@@ -58,15 +66,21 @@
           @current-change="changePage"
         />
       </div>
-    </div>
+    </admin-table-card>
   </div>
 </template>
 
 <script>
+import AdminTableCard from '../../components/admin/AdminTableCard.vue'
+import StatusTag from '../../components/admin/StatusTag.vue'
 import { getOperationLogs } from '../../api/log'
 import { formatDateTime } from '../../utils/datetime'
 
 export default {
+  components: {
+    AdminTableCard,
+    StatusTag
+  },
   data() {
     return {
       logs: [],
@@ -150,15 +164,3 @@ export default {
   }
 }
 </script>
-
-<style scoped>
-.admin-toolbar {
-  margin-bottom: 16px;
-}
-
-.admin-pagination {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
-}
-</style>
