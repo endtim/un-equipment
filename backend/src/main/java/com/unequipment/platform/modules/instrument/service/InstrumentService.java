@@ -340,6 +340,7 @@ public class InstrumentService {
             throw new BizException(ErrorCodes.ORDER_TIME_RANGE_INVALID, "预约时长必须与时间步长对齐");
         }
 
+        // 开放规则采用“星期 + 时间段 + 生效日期”三维匹配，任一不满足都不允许下单。
         List<InstrumentOpenRule> rules = openRuleRepository.findByInstrumentId(instrument.getId()).stream()
             .filter(rule -> "ENABLED".equalsIgnoreCase(rule.getStatus()))
             .collect(Collectors.toList());
@@ -393,6 +394,7 @@ public class InstrumentService {
         }
         assertInstrumentManagePermission(instrument, operator);
         if (reservationOrderRepository.countByInstrumentId(id) > 0) {
+            // 有历史订单的仪器禁止物理意义删除，避免破坏订单与统计可追溯性。
             throw new BizException(ErrorCodes.BIZ_ERROR, "仪器存在预约记录，不能删除");
         }
         LocalDateTime now = LocalDateTime.now();
@@ -405,6 +407,7 @@ public class InstrumentService {
     public List<InstrumentOpenRule> allOpenRules(SysUser operator) {
         assertAdminOrInstrumentManager(operator);
         String roleCode = resolveManageRoleCode(operator);
+        // 开放规则列表按角色范围裁剪，防止负责人看到无关仪器规则。
         return openRuleRepository.findAllByScope(roleCode, operator.getId(), operator.getDepartmentId());
     }
 
@@ -862,6 +865,7 @@ public class InstrumentService {
     }
 
     public void assertAdminOrInstrumentManager(SysUser operator) {
+        // 仪器配置类操作统一限制在管理员、负责人、院系管理员三类角色。
         if (hasRole(operator, "ADMIN") || hasRole(operator, "INSTRUMENT_OWNER") || hasRole(operator, "DEPT_MANAGER")) {
             return;
         }

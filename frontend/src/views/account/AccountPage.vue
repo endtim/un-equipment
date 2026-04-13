@@ -164,14 +164,26 @@ export default {
       ]
     }
   },
-  async created() {
-    await this.loadAll()
+  watch: {
+    mode: {
+      immediate: true,
+      async handler() {
+        // 账户中心与充值申请共用组件，切页时重置分页避免沿用上一页码导致数据错位。
+        await this.initializeByMode()
+      }
+    }
   },
   methods: {
+    async initializeByMode() {
+      this.txnQuery.pageNum = 1
+      this.rechargeQuery.pageNum = 1
+      await this.loadAll()
+    },
     formatDateTimeCell(row, column, value) {
       return formatDateTime(value)
     },
     async loadAll() {
+      // 账户信息、交易流水、充值记录并行加载，缩短首屏等待时间。
       await Promise.all([this.loadAccount(), this.loadTransactions(), this.loadRecharges()])
     },
     async loadAccount() {
@@ -199,6 +211,7 @@ export default {
       await submitRecharge(this.recharge)
       this.$message.success('充值申请已提交')
       this.recharge.remark = ''
+      // 提交后回到充值记录第一页，保证用户能立即看到最新申请单。
       this.rechargeQuery.pageNum = 1
       await this.loadAll()
     },

@@ -218,11 +218,13 @@ public class SystemAdminService {
         String action = request.getAction().trim().toUpperCase(Locale.ROOT);
         String targetStatus;
         if ("APPROVE".equals(action)) {
+            // 通过后直接启用账号，后续登录不再走待审核拦截。
             targetStatus = "ENABLED";
         } else if ("REJECT".equals(action)) {
             if (!StringUtils.hasText(request.getRemark())) {
                 throw new BizException(ErrorCodes.INVALID_REQUEST, "驳回时请填写驳回原因");
             }
+            // 驳回必须记录原因，避免外部用户无法追溯失败原因。
             targetStatus = "REJECTED";
         } else {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "审核动作不合法，仅支持 APPROVE 或 REJECT");
@@ -249,6 +251,7 @@ public class SystemAdminService {
         assertCanManageTargetUser(target, operator);
         if (operator != null && operator.getId() != null && operator.getId().equals(target.getId())
             && "DISABLED".equalsIgnoreCase(request.getStatus())) {
+            // 防止管理员误操作把自己禁用导致后台无人可用。
             throw new BizException(ErrorCodes.INVALID_REQUEST, "不允许禁用当前登录账号");
         }
         String status = validateUserManageStatus(request.getStatus());
@@ -328,6 +331,7 @@ public class SystemAdminService {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "用户不存在");
         }
         assertCanManageTargetUser(target, operator);
+        // 删除用户前先清理角色映射，避免软删除后残留脏关联数据。
         userRoleRepository.deleteByUserId(id);
         userRepository.softDelete(id, LocalDateTime.now());
         operationLogService.save(operator, "SYSTEM", "DELETE_USER", "userId:" + id);
@@ -394,6 +398,7 @@ public class SystemAdminService {
             throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限操作其他部门用户");
         }
         if ("ADMIN".equalsIgnoreCase(target.getPrimaryRoleCode())) {
+            // 院系管理员永远不能操作管理员账号，避免权限链路被下级篡改。
             throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权限操作超级管理员账号");
         }
     }
@@ -458,6 +463,7 @@ public class SystemAdminService {
     }
 
     private void appendUserAuditLog(Long userId, String actionType, String actionResult, SysUser operator, String remark) {
+        // 用户审核日志与操作日志分离：前者面向账号生命周期审计，后者面向接口行为追踪。
         UserAuditLog log = new UserAuditLog();
         log.setUserId(userId);
         log.setActionType(actionType);

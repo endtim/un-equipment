@@ -61,7 +61,7 @@
           v-model="query.instrumentId"
           :min="1"
           :controls="false"
-          placeholder="仪器ID"
+          placeholder="仪器编号"
           style="width: 130px"
         />
         <el-date-picker
@@ -74,7 +74,7 @@
           @change="onQueryChange"
         />
         <el-button type="primary" @click="onQueryChange">查询</el-button>
-        <el-button v-if="isReportMode" type="success" plain @click="exportCsv">导出CSV</el-button>
+        <el-button v-if="isReportMode" type="success" plain @click="exportCsv">导出报表</el-button>
         <el-button v-if="isExpenseMode" type="primary" plain @click="openExpenseDialog"
           >新增支出</el-button
         >
@@ -457,6 +457,7 @@ export default {
       if (!departmentId) {
         return this.instruments
       }
+      // 预算录入时按部门过滤仪器选项，避免提交“部门-仪器”跨归属组合。
       return this.instruments.filter(
         (item) => this.resolveInstrumentDepartmentId(item) === departmentId
       )
@@ -478,6 +479,7 @@ export default {
     mode: {
       immediate: true,
       async handler() {
+        // 页面复用为“报表/支出/预算预警/预算台账”四种模式，切换时需重置到对应初始查询语义。
         await this.initializeByMode()
       }
     }
@@ -491,6 +493,7 @@ export default {
         return
       }
       await this.executeSafely(async () => {
+        // 部门与仪器下拉在多个模式都会复用，统一并行加载可减少重复请求和切页闪烁。
         const [departments, instruments] = await Promise.all([
           getAdminDepartments(),
           getAdminInstruments({ pageNum: 1, pageSize: 200 })
@@ -502,6 +505,7 @@ export default {
     async initializeByMode() {
       await this.ensureBaseOptions()
       if (this.isExpenseMode) {
+        // 维护支出模式固定为“维护支出 + 支出方向”，防止用户误查到收入流水。
         this.query.bizType = 'MAINTENANCE_EXPENSE'
         this.query.inoutType = 'OUT'
         this.query.pageNum = 1
@@ -556,6 +560,7 @@ export default {
     },
     buildParams() {
       const [startTime, endTime] = this.query.timeRange || []
+      // 支出模式强制覆盖业务类型与收支方向，避免清空筛选后参数被误置空导致口径漂移。
       const bizType = this.isExpenseMode ? 'MAINTENANCE_EXPENSE' : this.query.bizType || undefined
       const inoutType = this.isExpenseMode ? 'OUT' : this.query.inoutType || undefined
       return {
@@ -589,6 +594,7 @@ export default {
         return
       }
       const departmentId = Number(this.budgetForm.departmentId || 0)
+      // 预算按“部门+仪器”维度落库，切换部门后若当前仪器不再归属该部门，必须清空避免越权组合提交。
       if (departmentId > 0 && this.resolveInstrumentDepartmentId(selected) !== departmentId) {
         this.budgetForm.instrumentId = null
       }
@@ -602,6 +608,7 @@ export default {
     },
     async loadOverview() {
       if (!this.isReportMode) {
+        // 仅报表模式展示汇总看板，其他模式不请求概览数据以减少无效调用。
         return
       }
       await this.executeSafely(async () => {
@@ -645,6 +652,7 @@ export default {
     },
     resetBudgetYear() {
       this.budgetYear = dayjs().year()
+      // 年份重置后按当前模式刷新对应数据集，避免预算台账与预警页行为不一致。
       if (this.isBudgetWarningMode) {
         this.loadBudgetWarnings()
       } else if (this.isBudgetLedgerMode) {
@@ -688,7 +696,7 @@ export default {
         link.click()
         document.body.removeChild(link)
         window.URL.revokeObjectURL(url)
-        ElMessage.success('CSV导出成功')
+        ElMessage.success('报表导出成功')
       })
     },
     resetExpenseForm() {
@@ -734,6 +742,7 @@ export default {
         })
         ElMessage.success('预算保存成功')
         this.budgetDialogVisible = false
+        // 保存后按当前页签刷新，保证用户留在原工作上下文。
         if (this.isBudgetLedgerMode) {
           await this.loadBudgets()
         } else if (this.isBudgetWarningMode) {

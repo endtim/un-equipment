@@ -282,7 +282,7 @@ const router = createRouter({
           props: { mode: 'report' },
           meta: {
             title: '经费明细报表',
-            description: '汇总充值、仪器收费、退款与维护支出，支持筛选查询与CSV导出。',
+            description: '汇总充值、仪器收费、退款与维护支出，支持筛选查询与报表导出。',
             pageType: 'operation',
             breadcrumb: ['管理平台', '经费管理', '经费明细报表'],
             roles: ['ADMIN', 'DEPT_MANAGER']
@@ -414,6 +414,7 @@ const router = createRouter({
 })
 
 function resolveRequiredRoles(to) {
+  // 子路由可覆盖父级 roles，取匹配链路最后一个有效配置作为最终权限要求。
   const roles = to.matched
     .map((record) => record.meta?.roles)
     .filter((item) => Array.isArray(item) && item.length > 0)
@@ -429,6 +430,7 @@ async function ensureUserLoaded() {
     return true
   }
   if (!loadingUserPromise) {
+    // 并发导航场景复用同一个用户信息请求，避免短时间重复拉取造成状态抖动。
     loadingUserPromise = getUserInfo()
       .then((user) => {
         store.commit('setAuth', {
@@ -469,11 +471,13 @@ router.beforeEach(async (to) => {
     to.matched.some((record) => record.meta.admin) &&
     (!user || ['INTERNAL_USER', 'EXTERNAL_USER'].includes(user.roleCode))
   ) {
+    // 管理端兜底拦截：即便已登录，普通用户也不可进入后台页面。
     return '/home'
   }
 
   const requiredRoles = resolveRequiredRoles(to)
   if (requiredRoles && (!user || !requiredRoles.includes(user.roleCode))) {
+    // 精细化角色校验：按当前路由声明的最小角色集做最终鉴权。
     return '/home'
   }
 

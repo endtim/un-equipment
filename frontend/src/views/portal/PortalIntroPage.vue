@@ -1,5 +1,21 @@
 <template>
   <div class="portal-subpage">
+    <div class="content-card sub-section info-banner">
+      <div class="section-title">项目基本信息</div>
+      <div class="info-table">
+        <div class="info-row"><span>系统名称</span><strong>{{ siteInfo.systemName }}</strong></div>
+        <div class="info-row"><span>版本号</span><strong>{{ siteInfo.version }}</strong></div>
+        <div class="info-row"><span>指导老师</span><strong>{{ siteInfo.supervisorName }}</strong></div>
+        <div class="info-row"><span>设计者</span><strong>{{ siteInfo.designerName }}</strong></div>
+        <div class="info-row"><span>年级班级</span><strong>{{ siteInfo.gradeClass }}</strong></div>
+        <div class="info-row"><span>专业</span><strong>{{ siteInfo.major }}</strong></div>
+        <div class="info-row"><span>学校</span><strong>{{ siteInfo.school }}</strong></div>
+        <div class="info-row"><span>学院</span><strong>{{ siteInfo.college }}</strong></div>
+        <div class="info-row"><span>设计时间</span><strong>{{ siteInfo.designTime }}</strong></div>
+        <div class="info-row info-row--wide"><span>版权信息</span><strong>{{ siteInfo.copyright }}</strong></div>
+      </div>
+    </div>
+
     <div class="content-card sub-section">
       <div class="section-title">建设目标</div>
       <p class="paragraph">
@@ -45,15 +61,65 @@
   </div>
 </template>
 
+<script>
+import siteInfo from '../../config/siteInfo'
+
+export default {
+  computed: {
+    siteInfo() {
+      // 门户“平台简介”和全站页脚共用同一站点配置，避免多处文案维护不一致。
+      return siteInfo
+    }
+  }
+}
+</script>
+
 <style scoped>
 .portal-subpage {
   display: flex;
   flex-direction: column;
   gap: 18px;
 }
+
 .sub-section {
   padding: 24px;
 }
+
+.info-banner {
+  background: linear-gradient(180deg, #fbfdff, #f6faff);
+}
+
+.info-table {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.info-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid #dbe5f2;
+  background: #fff;
+}
+
+.info-row span {
+  font-size: 13px;
+  color: #6f829a;
+}
+
+.info-row strong {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #173d73;
+}
+
+.info-row--wide {
+  grid-column: 1 / -1;
+}
+
 .paragraph {
   margin: 0 0 14px;
   line-height: 1.9;
@@ -71,6 +137,7 @@
   color: #44566f;
 }
 @media (max-width: 900px) {
+  .info-table,
   .info-grid {
     grid-template-columns: 1fr;
   }

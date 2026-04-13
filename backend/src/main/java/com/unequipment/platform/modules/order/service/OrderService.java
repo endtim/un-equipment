@@ -69,6 +69,7 @@ public class OrderService {
     private static final Map<String, Set<String>> ACTION_ALLOWED_TYPE;
 
     static {
+        // 动作-状态白名单：所有订单动作都必须先过状态机校验，避免越级流转。
         Map<String, Set<String>> statusMap = new HashMap<>();
         statusMap.put(ACTION_AUDIT, setOf("PENDING_AUDIT"));
         statusMap.put(ACTION_CHECK_IN, setOf("WAITING_USE"));
@@ -81,6 +82,7 @@ public class OrderService {
         statusMap.put(ACTION_ADJUST_AMOUNT, setOf("WAITING_SETTLEMENT"));
         ACTION_ALLOWED_STATUS = Collections.unmodifiableMap(statusMap);
 
+        // 动作-订单类型白名单：例如“签到”只允许 MACHINE，“接样”只允许 SAMPLE。
         Map<String, Set<String>> typeMap = new HashMap<>();
         typeMap.put(ACTION_AUDIT, setOf(TYPE_MACHINE, TYPE_SAMPLE));
         typeMap.put(ACTION_CHECK_IN, setOf(TYPE_MACHINE));
@@ -119,8 +121,10 @@ public class OrderService {
 
         ReservationOrder created = null;
         BizException lastConflict = null;
+        // 高并发下可能出现同一时段竞争，冲突场景按短退避重试，提升成功率同时保持幂等。
         for (int attempt = 1; attempt <= CREATE_RETRY_TIMES; attempt++) {
             try {
+                // 入库前后双重冲突校验，尽量缩小“校验通过到写入”窗口的并发穿透风险。
                 ensureNoMachineConflict(instrument.getId(), request.getReservedStart(), request.getReservedEnd(), null);
                 BigDecimal hours = BigDecimal.valueOf(Duration.between(request.getReservedStart(), request.getReservedEnd()).toMinutes())
                     .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
@@ -141,6 +145,7 @@ public class OrderService {
                 ensureNoMachineConflict(instrument.getId(), request.getReservedStart(), request.getReservedEnd(), null);
                 orderRepository.insert(order);
                 if ("PASS".equalsIgnoreCase(order.getAuditStatus())) {
+                    // 自动通过场景下立即冻结预估金额，避免后续结算时余额被其他订单占用。
                     financeService.freezeForOrder(order);
                     appendAudit(order, user, "PASS", "AUTO_APPROVE", "上机预约提交后自动通过");
                     messageService.send(user, "预约提交成功", "您的上机预约已提交并自动通过。");
@@ -201,6 +206,7 @@ public class OrderService {
         sampleOrderRepository.insert(sampleOrder);
 
         if ("PASS".equalsIgnoreCase(order.getAuditStatus())) {
+            // 送样自动通过同样执行资金冻结，保持上机/送样两条链路口径一致。
             financeService.freezeForOrder(order);
             appendAudit(order, user, "PASS", "AUTO_APPROVE", "送样预约提交后自动通过");
             messageService.send(user, "预约提交成功", "您的送样预约已提交并自动通过。");
@@ -228,8 +234,10 @@ public class OrderService {
 
         if ("APPROVE".equals(action)) {
             if (TYPE_MACHINE.equals(order.getOrderType())) {
+                // 审核通过前再次做时段冲突校验，拦截“提交后到审核前”新产生的冲突订单。
                 ensureNoMachineConflict(order.getInstrumentId(), order.getReserveStart(), order.getReserveEnd(), order.getId());
             }
+            // 审核阶段按“可用余额”而非总余额校验，避免冻结资金导致的透支通过。
             financeService.ensureEnoughAvailableBalance(simpleUser(order.getUserId()), nullSafe(order.getEstimatedAmount()));
             financeService.freezeForOrder(order);
             order.setAuditStatus("PASS");
@@ -262,6 +270,7 @@ public class OrderService {
 
         UsageRecord usage = usageRecordRepository.findByOrderId(orderId);
         if (usage == null) {
+            // 历史/异常场景下缺少上机记录时补建，保证后续结束上机与统计可持续进行。
             usage = new UsageRecord();
             usage.setOrderId(orderId);
             usage.setInstrumentId(order.getInstrumentId());
@@ -328,6 +337,7 @@ public class OrderService {
         order.setOrderStatus("WAITING_SETTLEMENT");
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
+        // 结果上传后立即补齐待结算记录，确保财务侧可以直接接管结算流程。
         financeService.ensurePendingSettlementRecord(order);
         appendAudit(order, operator, "PASS", "UPLOAD_RESULT", "检测结果已上传");
         operationLogService.save(operator, "ORDER", "UPLOAD_SAMPLE_RESULT", "orderId:" + orderId);
@@ -354,6 +364,7 @@ public class OrderService {
 
         usage.setEndTime(now);
         long seconds = ChronoUnit.SECONDS.between(usage.getStartTime(), usage.getEndTime());
+        // 机时向上取整到分钟，最少按 1 分钟计费，防止极短会话出现 0 金额。
         int actualMinutes = (int) Math.max(1L, (seconds + 59) / 60);
         usage.setActualMinutes(actualMinutes);
         usage.setAbnormalDesc(request.getComment());
@@ -371,6 +382,7 @@ public class OrderService {
         order.setOrderStatus("WAITING_SETTLEMENT");
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
+        // 结束上机并不直接扣费，先进入待结算，给财务留出人工复核与调价入口。
         financeService.ensurePendingSettlementRecord(order);
         appendAudit(order, operator, "PASS", "FINISH_USE", "上机已结束，等待结算");
         operationLogService.save(operator, "ORDER", "FINISH_MACHINE_ORDER", "orderId:" + orderId);
@@ -388,6 +400,7 @@ public class OrderService {
         if (changed <= 0) {
             throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "订单正在结算或已完成结算，请勿重复操作");
         }
+        // 先标记 SETTLING 再扣费，防止并发重复点击导致重复结算。
         order.setOrderStatus("SETTLING");
         financeService.deductForOrder(order, operator);
         order.setSettlementStatus("CONFIRMED");
@@ -412,10 +425,12 @@ public class OrderService {
         assertActionAllowed(order, ACTION_CANCEL);
         assertUserCancelable(order);
         if ("PAID".equalsIgnoreCase(order.getPayStatus())) {
+            // 已支付取消走退款链路，保证余额与结算状态同步回滚。
             financeService.refundForOrder(order, "用户取消订单", user);
             order.setPayStatus("REFUNDED");
             order.setSettlementStatus("REFUNDED");
         } else {
+            // 未支付取消只需解冻并作废待结算记录，避免留存悬挂财务占位数据。
             financeService.releaseFreezeForOrder(order);
             order.setSettlementStatus("VOID");
             financeService.markSettlementVoid(order, user);
@@ -441,6 +456,7 @@ public class OrderService {
         if ("PAID".equalsIgnoreCase(order.getPayStatus())) {
             throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "已支付订单不能直接关闭，请走退款流程");
         }
+        // 管理员关单与用户取消同样需要释放冻结并作废结算，保持财务状态闭环。
         financeService.releaseFreezeForOrder(order);
         order.setOrderStatus("CANCELED");
         order.setSettlementStatus("VOID");
@@ -464,6 +480,7 @@ public class OrderService {
         order.setFinalAmount(nullSafe(request.getFinalAmount()));
         order.setUpdateTime(LocalDateTime.now());
         orderRepository.update(order);
+        // 调价后同步刷新待结算记录，确保结算页面看到的是最新应收金额。
         financeService.ensurePendingSettlementRecord(order);
         appendAudit(order, user, "PASS", "ADJUST_AMOUNT", request.getComment());
         operationLogService.save(user, "ORDER", "ADJUST_ORDER_AMOUNT", "orderId:" + orderId);
@@ -499,11 +516,13 @@ public class OrderService {
     @Transactional
     public int autoCloseExpiredPendingAudit(LocalDateTime cutoffTime, int batchSize) {
         int safeBatch = Math.max(1, Math.min(batchSize, 500));
+        // 批量自动关单限制最大批次，避免定时任务长事务占用过久。
         List<ReservationOrder> expiredOrders = orderRepository.findPendingAuditExpired(cutoffTime, safeBatch);
         int closed = 0;
         for (ReservationOrder row : expiredOrders) {
             ReservationOrder order = getOrderForUpdate(row.getId());
             if (!"PENDING_AUDIT".equals(order.getOrderStatus())) {
+                // 并发下状态可能已被人工处理，跳过避免覆盖新状态。
                 continue;
             }
             order.setOrderStatus("CANCELED");
@@ -531,6 +550,7 @@ public class OrderService {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "最小金额不能大于最大金额");
         }
         int offset = Math.max(pageNum - 1, 0) * pageSize;
+        // 管理端分页按角色范围下钻：管理员全量，负责人/院系管理员按各自权限裁剪。
         String roleCode = resolveManageRoleCode(user);
         List<ReservationOrder> list = orderRepository.findPageForAdmin(
             orderType, status, keyword, submitStart, submitEnd,
@@ -572,6 +592,7 @@ public class OrderService {
     }
 
     private void updateOrderWithExpectedStatus(ReservationOrder order, String expectedStatus, String failMessage) {
+        // 使用“按期望状态更新”实现轻量乐观锁，阻断并发覆盖。
         int changed = orderRepository.updateByIdAndStatus(order, expectedStatus);
         if (changed <= 0) {
             throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, failMessage);
@@ -579,6 +600,7 @@ public class OrderService {
     }
 
     private ReservationOrder buildBaseOrder(SysUser user, Instrument instrument, String orderType) {
+        // 统一初始化订单默认状态，避免不同创建入口出现初始状态漂移。
         ReservationOrder order = new ReservationOrder();
         String orderPrefix = TYPE_MACHINE.equals(orderType) ? "ORDM" : "ORDS";
         order.setOrderNo(BizNoGenerator.next(orderPrefix));
@@ -693,6 +715,7 @@ public class OrderService {
     }
 
     private void applyAuditPolicy(ReservationOrder order, Instrument instrument) {
+        // 免审核仪器直接进入待履约状态；需审核仪器保持待审核，后续由审核动作推进。
         if (instrument.getNeedAudit() != null && instrument.getNeedAudit() == 0) {
             order.setAuditStatus("PASS");
             order.setOrderStatus(TYPE_MACHINE.equals(order.getOrderType()) ? "WAITING_USE" : "WAITING_RECEIVE");
@@ -708,6 +731,7 @@ public class OrderService {
         if (limit.compareTo(BigDecimal.ZERO) <= 0) {
             return;
         }
+        // 按用户类型应用单笔限额，防止超额订单进入审核/结算链路。
         if (nullSafe(amount).compareTo(limit) > 0) {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "单笔订单金额超过预算限额");
         }
@@ -726,6 +750,7 @@ public class OrderService {
     }
 
     private void shortBackoff(int attempt) {
+        // 冲突重试采用短暂线性退避，降低同一时刻重复竞争概率。
         long millis = 30L * attempt;
         try {
             Thread.sleep(millis);
@@ -757,6 +782,7 @@ public class OrderService {
             return;
         }
         if (!LocalDateTime.now().plusHours(2).isBefore(order.getReserveStart())) {
+            // 开机前两小时内限制用户自行取消，避免临近排班时段反复占坑。
             throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "开机前2小时内不可自行取消，请联系管理员处理");
         }
     }
@@ -780,6 +806,7 @@ public class OrderService {
     }
 
     private boolean canManage(ReservationOrder order, SysUser user) {
+        // 权限边界：管理员全量，负责人按 owner，院系管理员按 department。
         if (hasRole(user, "ADMIN")) {
             return true;
         }
@@ -832,6 +859,7 @@ public class OrderService {
     }
 
     private void assertActionAllowed(ReservationOrder order, String action) {
+        // 先校验订单类型，再校验状态，确保动作校验语义明确且报错可读。
         Set<String> allowedTypes = ACTION_ALLOWED_TYPE.getOrDefault(action, Collections.emptySet());
         if (!allowedTypes.contains(order.getOrderType())) {
             throw new BizException(ErrorCodes.ORDER_TYPE_NOT_ALLOWED, "当前订单类型不支持该操作");

@@ -278,7 +278,7 @@
               {{ detail.runtimeStatus?.available ? '可预约' : '不可预约' }}
             </el-tag>
             <div class="runtime-text">
-              {{ detail.runtimeStatus?.reason || '当前状态正常，可按开放规则预约。' }}
+              {{ runtimeReasonText }}
             </div>
             <div v-if="detail.runtimeStatus?.recoverTime" class="runtime-text">
               预计恢复时间：{{ formatDateTime(detail.runtimeStatus.recoverTime) }}
@@ -304,7 +304,12 @@
 import dayjs from 'dayjs'
 import { getInstrumentDetail, getInstrumentReservedSlots } from '../../api/instrument'
 import { createMachineReservation, createSampleReservation } from '../../api/order'
-import { bookingUnitLabel, openModeLabel, orderStatusLabel } from '../../utils/dicts'
+import {
+  bookingUnitLabel,
+  instrumentStatusLabel,
+  openModeLabel,
+  orderStatusLabel
+} from '../../utils/dicts'
 import { formatDateTime as formatDateTimeUtil } from '../../utils/datetime'
 
 export default {
@@ -362,8 +367,13 @@ export default {
       if (this.canReserve) {
         return ''
       }
-      return (
+      return this.localizedRuntimeReason(
         this.detail?.runtimeStatus?.reason || '当前仪器处于停用、维护或未开放状态，暂不可预约。'
+      )
+    },
+    runtimeReasonText() {
+      return this.localizedRuntimeReason(
+        this.detail?.runtimeStatus?.reason || '当前状态正常，可按开放规则预约。'
       )
     },
     bookingUnitText() {
@@ -375,6 +385,7 @@ export default {
       if (!value) {
         return
       }
+      // 开始时间联动已预约时段日期，避免用户看见的是“当天可约”却提交了其他日期。
       const nextDate = dayjs(value).format('YYYY-MM-DD')
       if (nextDate && nextDate !== this.slotDate) {
         this.slotDate = nextDate
@@ -389,6 +400,7 @@ export default {
     openModeLabel,
     async load() {
       this.detail = await getInstrumentDetail(this.id)
+      // 详情加载后按路由偏好自动选择上机/送样模式，减少用户二次点击。
       this.activeReserve = this.preferredReserveMode
       await this.loadReservedSlots()
     },
@@ -410,6 +422,7 @@ export default {
       }
     },
     normalizeReservedSlot(item) {
+      // 历史数据可能存在日期时间格式不一致，这里统一标准化后再做冲突判定和展示。
       const startAt = this.resolveDateTime(item.reservedStart, item.startTime)
       const endAt = this.resolveDateTime(item.reservedEnd, item.endTime)
       const startText = startAt ? dayjs(startAt).format('HH:mm') : ''
@@ -455,6 +468,7 @@ export default {
       if (!startAt.isValid() || !endAt.isValid()) {
         return false
       }
+      // 使用时间区间重叠判定（start < slotEnd && end > slotStart）避免边界误判冲突。
       return this.reservedSlots.some((slot) => {
         const slotStart = dayjs(slot.startAt)
         const slotEnd = dayjs(slot.endAt)
@@ -463,6 +477,7 @@ export default {
     },
     goBack() {
       const query = { ...this.$route.query }
+      // 返回列表时清理详情页专用参数，避免污染列表页查询条件。
       delete query.returnPath
       delete query.reserve
       this.$router.push({
@@ -487,6 +502,7 @@ export default {
         this.slotDate = formDate
         await this.loadReservedSlots()
       }
+      // 提交前做一次前端冲突兜底，尽量在本地就阻断明显重叠预约。
       if (
         this.hasReservedSlotConflict(this.machineForm.reservedStart, this.machineForm.reservedEnd)
       ) {
@@ -530,6 +546,22 @@ export default {
     },
     formatDateTime(value) {
       return formatDateTimeUtil(value)
+    },
+    localizedRuntimeReason(reason) {
+      const source = String(reason || '').trim()
+      if (!source) {
+        return ''
+      }
+      // 后端可能返回状态枚举码，前端统一转中文，避免出现 MAINTENANCE 这类英文业务提示词。
+      const statusCodeMapping = {
+        NORMAL: instrumentStatusLabel('NORMAL'),
+        DISABLED: instrumentStatusLabel('DISABLED'),
+        MAINTENANCE: instrumentStatusLabel('MAINTENANCE'),
+        FAULT: instrumentStatusLabel('FAULT')
+      }
+      return Object.keys(statusCodeMapping).reduce((text, code) => {
+        return text.replaceAll(code, statusCodeMapping[code])
+      }, source)
     },
     weekLabels(rule) {
       const text = rule?.weekDays || (rule?.weekDay != null ? String(rule.weekDay) : '')

@@ -145,6 +145,7 @@ public class FinanceService {
         String action = request.getAction() == null ? "" : request.getAction().trim().toUpperCase(Locale.ROOT);
         String targetStatus;
         String targetRemark = order.getRemark();
+        // 大额充值开启双审后，审批流会从 PENDING -> REVIEW_PENDING -> PASS，避免单人一次性放款。
         boolean needDoubleReview = needDoubleReview(order);
         String currentStatus = order.getStatus() == null ? "" : order.getStatus().trim().toUpperCase(Locale.ROOT);
         if ("REJECT".equals(action)) {
@@ -176,6 +177,7 @@ public class FinanceService {
             return rechargeOrderRepository.findById(id);
         } else if ("APPROVE".equals(action)) {
             if (needDoubleReview) {
+                // 初审阶段仅允许把待审核单推进到“待复核”，通过条件更新防止重复点击导致越级通过。
                 if ("PENDING".equals(currentStatus)) {
                     int changed = rechargeOrderRepository.updateFirstApproveIfPending(
                         order.getId(),
@@ -207,6 +209,7 @@ public class FinanceService {
                     && order.getFirstAuditUserId().equals(auditor.getId())) {
                     throw new BizException(ErrorCodes.BIZ_ERROR, "大额充值需双人复核，复核人不能与初审人相同");
                 }
+                // 复核阶段再次使用“当前状态匹配”更新，确保并发下只会有一个复核结果生效。
                 int changed = rechargeOrderRepository.updateSecondApproveIfReviewPending(
                     order.getId(),
                     "PASS",
@@ -277,6 +280,7 @@ public class FinanceService {
         BigDecimal amount = settlementAmount(order);
         BigDecimal frozenAmount = frozenAmount(order);
         BigDecimal accountFrozen = nullSafe(account.getFrozenAmount());
+        // 结算时只释放“可释放且不超过本次应扣”的冻结金额，避免把历史冻结额度误释放。
         BigDecimal releasableFrozen = accountFrozen.min(frozenAmount).min(amount);
         if (releasableFrozen.compareTo(BigDecimal.ZERO) < 0) {
             releasableFrozen = BigDecimal.ZERO;
@@ -317,6 +321,7 @@ public class FinanceService {
                 // 并发下若结算记录已不处于 PENDING，不允许无条件回写为 CONFIRMED。
                 throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "结算状态已变化，请刷新后重试");
             } else {
+                // 历史脏数据可能缺失结算记录，这里兜底补建一条已结算记录，保证订单与财务账一致。
                 SettlementRecord settlement = new SettlementRecord();
                 settlement.setSettlementNo(BizNoGenerator.next("SET"));
                 settlement.setOrderId(order.getId());
@@ -397,6 +402,7 @@ public class FinanceService {
             LocalDateTime.now()
         );
         if (updated <= 0) {
+            // 退款状态更新必须命中期望状态，防止重复回调或并发审批把同一结算单重复退款。
             throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "结算状态已变化，请刷新后重试");
         }
         recordTransaction(
@@ -426,6 +432,7 @@ public class FinanceService {
         BigDecimal finalAmount = settlementAmount(order);
         String billType = resolveBillType(order.getUserId());
         if (exists == null) {
+            // 下单后先落一条待结算记录，保证订单在结算前也有可追踪的财务占位数据。
             SettlementRecord settlement = new SettlementRecord();
             settlement.setSettlementNo(BizNoGenerator.next("SET"));
             settlement.setOrderId(order.getId());
@@ -442,6 +449,7 @@ public class FinanceService {
             clearFinanceCache();
             return;
         }
+        // 已存在待结算记录时只刷新金额口径，不改终态字段，避免覆盖人工处理过的结算结果。
         settlementRecordRepository.updatePendingByOrderId(
             order.getId(),
             billType,
@@ -460,6 +468,7 @@ public class FinanceService {
             return;
         }
         Account account = getAccount(order.getUserId());
+        // 冻结预估金额前必须校验可用余额，避免“余额充足但可用不足”的并发透支。
         int changed = accountRepository.freezeAmountIfAvailable(account.getId(), amount, LocalDateTime.now());
         if (changed <= 0) {
             throw new BizException(ErrorCodes.FINANCE_INSUFFICIENT_BALANCE, "可用余额不足，无法冻结预估金额");
@@ -473,6 +482,7 @@ public class FinanceService {
             return;
         }
         Account account = getAccount(order.getUserId());
+        // 解冻作为补偿动作不抛余额不足异常，允许在重复回滚场景下保持幂等收敛。
         accountRepository.unfreezeAmount(account.getId(), amount, LocalDateTime.now());
     }
 
@@ -489,6 +499,7 @@ public class FinanceService {
         if (!"PENDING".equals(currentStatus)) {
             throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "当前结算状态不允许作废");
         }
+        // 仅允许从 PENDING 作废，防止已结算/已退款记录被误作废破坏账务链路。
         int changed = settlementRecordRepository.updateStatusByIdWhenCurrent(
             settlement.getId(),
             "PENDING",
@@ -512,6 +523,7 @@ public class FinanceService {
         int safePageNum = sanitizePageNum(pageNum);
         int safePageSize = sanitizePageSize(pageSize);
         int offset = (safePageNum - 1) * safePageSize;
+        // 分页查询统一带上角色范围，确保查询结果与后台权限模型保持一致。
         String roleCode = normalizeRole(requester);
         Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
         List<RechargeOrder> list = rechargeOrderRepository.findPageByScope(
@@ -547,6 +559,7 @@ public class FinanceService {
                                      Long userId, Long auditUserId,
                                      BigDecimal minAmount, BigDecimal maxAmount,
                                      LocalDateTime startTime, LocalDateTime endTime) {
+        // 导出复用分页查询逻辑，避免导出口径与列表口径出现不一致。
         List<RechargeOrder> list = pageRecharges(
             requester,
             keyword,
@@ -583,6 +596,7 @@ public class FinanceService {
         int safePageNum = sanitizePageNum(pageNum);
         int safePageSize = sanitizePageSize(pageSize);
         int offset = (safePageNum - 1) * safePageSize;
+        // 经费明细受角色与部门范围双重约束，避免跨部门流水泄露。
         String roleCode = normalizeRole(requester);
         Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
         List<FinanceDetailVO> list = financeDetailRepository.findPage(
@@ -615,6 +629,7 @@ public class FinanceService {
     public String exportFinanceDetailsCsv(SysUser requester, String keyword, String bizType, String inoutType,
                                           Long instrumentId, Long departmentId,
                                           LocalDateTime startTime, LocalDateTime endTime) {
+        // 明细导出也走统一查询入口，保证筛选条件、权限和汇总口径完全一致。
         List<FinanceDetailVO> list = pageFinanceDetails(
             requester,
             keyword,
@@ -827,6 +842,7 @@ public class FinanceService {
             if (cached != null && cached.expireAtMillis > nowMillis && cached.value != null) {
                 return cached.value;
             }
+            // 指标聚合失败不应阻断页面，后续 safeGet 会按字段降级为安全默认值。
             String roleCode = normalizeRole(requester);
             Long scopeDepartmentId = requester == null ? null : requester.getDepartmentId();
 
@@ -897,9 +913,11 @@ public class FinanceService {
             result.put("confirmedButUnpaidOrders", confirmedButUnpaid);
             result.put("rangeStart", startTime);
             result.put("rangeEnd", endTime);
+            // 对账总览短时缓存，减少高频刷新导致的统计 SQL 压力。
             reconciliationOverviewCache.put(cacheKey, new CacheEntry(result, nowMillis + RECONCILIATION_OVERVIEW_CACHE_MILLIS));
             return result;
         } catch (Exception ignored) {
+            // 兜底返回全零结构，保证前端看板可渲染且不会因为单点统计异常白屏。
             return buildReconciliationOverviewFallback(startTime, endTime);
         }
     }
@@ -944,14 +962,45 @@ public class FinanceService {
         if (requester == null || (!hasRole(requester, "ADMIN") && !hasRole(requester, "DEPT_MANAGER"))) {
             throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权处理异常账");
         }
-        String anomalyType = request.getAnomalyType().trim().toUpperCase(Locale.ROOT);
+        String anomalyType = normalizeAnomalyType(request.getAnomalyType());
         Long orderId = request.getOrderId();
+        // 处理异常账前先锁订单，避免处理过程与正常结算/退款并发写同一订单状态。
+        ReservationOrder order = orderRepository.findByIdForUpdate(orderId);
+        if (order == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "订单不存在");
+        }
+        // 院系管理员只能处理本部门订单，避免越权处理异常账。
+        if (hasRole(requester, "DEPT_MANAGER")
+            && (requester.getDepartmentId() == null
+            || order.getDepartmentId() == null
+            || !requester.getDepartmentId().equals(order.getDepartmentId()))) {
+            throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权处理该订单的异常账");
+        }
+
+        if (request.getSettlementId() != null) {
+            SettlementRecord settlement = settlementRecordRepository.findById(request.getSettlementId());
+            if (settlement == null || !Objects.equals(settlement.getOrderId(), orderId)) {
+                throw new BizException(ErrorCodes.INVALID_REQUEST, "结算单与订单不匹配");
+            }
+        }
+
+        String handleStatus = request.getHandleStatus().trim().toUpperCase(Locale.ROOT);
+        if ("RESOLVED".equals(handleStatus)) {
+            // “标记已处理”前先执行最小自动修复，并二次校验异常是否真的消失，避免只改状态不修数据。
+            autoRepairAnomaly(anomalyType, order, requester);
+            ReservationOrder latestOrder = orderRepository.findById(orderId);
+            SettlementRecord latestSettlement = settlementRecordRepository.findByOrderId(orderId);
+            if (isAnomalyStillExists(anomalyType, latestOrder, latestSettlement)) {
+                throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "异常仍未消除，请先完成对应业务修复后再标记已处理");
+            }
+        }
+
         LocalDateTime now = LocalDateTime.now();
         financeAnomalyHandleRepository.upsert(
             anomalyType,
             orderId,
             request.getSettlementId(),
-            request.getHandleStatus(),
+            handleStatus,
             trimToNull(request.getHandleComment()),
             requester.getId(),
             now,
@@ -962,8 +1011,111 @@ public class FinanceService {
             requester,
             "FINANCE",
             "HANDLE_RECONCILIATION_ANOMALY",
-            "type:" + anomalyType + ",orderId:" + orderId + ",status:" + request.getHandleStatus()
+            "type:" + anomalyType + ",orderId:" + orderId + ",status:" + handleStatus
         );
+    }
+
+    private String normalizeAnomalyType(String anomalyType) {
+        String type = trimToNull(anomalyType);
+        if (type == null) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "异常类型不能为空");
+        }
+        String upper = type.toUpperCase(Locale.ROOT);
+        if (!"COMPLETED_UNSETTLED".equals(upper)
+            && !"WAITING_SETTLEMENT".equals(upper)
+            && !"CONFIRMED_UNPAID".equals(upper)
+            && !"REFUNDED_UNMATCHED".equals(upper)) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "异常类型不支持自动处理");
+        }
+        return upper;
+    }
+
+    /**
+     * 异常账“已处理”动作会尝试执行最小自动修复：
+     * 1) 已完成未结算/待结算滞留：补扣费并落完成态
+     * 2) 已结算未支付：补回写支付状态
+     * 3) 已退款未冲正：补回写结算退款状态
+     */
+    private void autoRepairAnomaly(String anomalyType, ReservationOrder order, SysUser operator) {
+        SettlementRecord settlement = settlementRecordRepository.findByOrderId(order.getId());
+        if ("COMPLETED_UNSETTLED".equals(anomalyType) || "WAITING_SETTLEMENT".equals(anomalyType)) {
+            // 完成/待结算异常优先补扣费，再统一回写订单结算与支付状态，确保账务与订单同向收敛。
+            if (settlement == null || "PENDING".equalsIgnoreCase(settlement.getSettleStatus())) {
+                deductForOrder(order, operator);
+            }
+            order.setSettlementStatus("CONFIRMED");
+            order.setPayStatus("PAID");
+            order.setOrderStatus("COMPLETED");
+            if (order.getFinishTime() == null) {
+                order.setFinishTime(LocalDateTime.now());
+            }
+            order.setUpdateTime(LocalDateTime.now());
+            if (orderRepository.update(order) <= 0) {
+                throw new BizException(ErrorCodes.BIZ_ERROR, "订单状态回写失败，请稍后重试");
+            }
+            return;
+        }
+
+        if ("CONFIRMED_UNPAID".equals(anomalyType)) {
+            if (settlement == null || !"CONFIRMED".equalsIgnoreCase(settlement.getSettleStatus())) {
+                throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "当前结算状态不允许标记已支付");
+            }
+            order.setPayStatus("PAID");
+            if ("WAITING_SETTLEMENT".equalsIgnoreCase(order.getOrderStatus())
+                || "SETTLING".equalsIgnoreCase(order.getOrderStatus())) {
+                order.setOrderStatus("COMPLETED");
+            }
+            order.setSettlementStatus("CONFIRMED");
+            order.setUpdateTime(LocalDateTime.now());
+            if (orderRepository.update(order) <= 0) {
+                throw new BizException(ErrorCodes.BIZ_ERROR, "订单支付状态回写失败，请稍后重试");
+            }
+            return;
+        }
+
+        if ("REFUNDED_UNMATCHED".equals(anomalyType)) {
+            if (!"REFUNDED".equalsIgnoreCase(order.getPayStatus())) {
+                throw new BizException(ErrorCodes.ORDER_STATUS_NOT_ALLOWED, "订单支付状态不是已退款，无法执行冲正修复");
+            }
+            if (settlement == null) {
+                throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "缺少结算记录，无法自动修复，请人工处理");
+            }
+            String currentStatus = normalizeSettlementStatus(settlement.getSettleStatus());
+            if (!"REFUNDED".equals(currentStatus)) {
+                settlementRecordRepository.updateStatusById(
+                    settlement.getId(),
+                    "REFUNDED",
+                    operator == null ? null : operator.getId(),
+                    LocalDateTime.now()
+                );
+            }
+        }
+    }
+
+    private boolean isAnomalyStillExists(String anomalyType, ReservationOrder order, SettlementRecord settlement) {
+        if (order == null) {
+            return false;
+        }
+        String orderStatus = trimToNull(order.getOrderStatus());
+        String payStatus = trimToNull(order.getPayStatus());
+        String settleStatus = settlement == null ? null : trimToNull(settlement.getSettleStatus());
+        if ("COMPLETED_UNSETTLED".equals(anomalyType)) {
+            return "COMPLETED".equalsIgnoreCase(orderStatus)
+                && (settlement == null || "PENDING".equalsIgnoreCase(settleStatus));
+        }
+        if ("WAITING_SETTLEMENT".equals(anomalyType)) {
+            return "WAITING_SETTLEMENT".equalsIgnoreCase(orderStatus);
+        }
+        if ("CONFIRMED_UNPAID".equals(anomalyType)) {
+            return settlement != null
+                && "CONFIRMED".equalsIgnoreCase(settleStatus)
+                && !"PAID".equalsIgnoreCase(payStatus);
+        }
+        if ("REFUNDED_UNMATCHED".equals(anomalyType)) {
+            return "REFUNDED".equalsIgnoreCase(payStatus)
+                && (settlement == null || !"REFUNDED".equalsIgnoreCase(settleStatus));
+        }
+        return false;
     }
 
     public Account getAccount(SysUser user) {
@@ -1103,6 +1255,7 @@ public class FinanceService {
             T value = supplier.get();
             return value == null ? fallback : value;
         } catch (Exception ignored) {
+            // 统计类查询统一吞异常并降级，避免某一条 SQL 失败影响整页指标可用性。
             return fallback;
         }
     }
@@ -1152,6 +1305,7 @@ public class FinanceService {
     private String resolveWarningLevel(BigDecimal usedRatio, BigDecimal warningRatio) {
         BigDecimal ratio = nullSafe(usedRatio);
         BigDecimal threshold = nullSafe(warningRatio);
+        // 没有配置阈值时按 80% 的平台默认阈值预警，避免阈值缺失导致预算超用无告警。
         if (threshold.compareTo(BigDecimal.ZERO) <= 0) {
             threshold = BigDecimal.valueOf(80);
         }
@@ -1184,6 +1338,7 @@ public class FinanceService {
         if (threshold.compareTo(BigDecimal.ZERO) <= 0) {
             return false;
         }
+        // 金额达到阈值时触发双审，等于阈值也纳入复核，避免边界值绕过风控。
         return nullSafe(order.getAmount()).compareTo(threshold) >= 0;
     }
 
@@ -1191,6 +1346,7 @@ public class FinanceService {
         if (denominator <= 0 || numerator <= 0) {
             return BigDecimal.ZERO;
         }
+        // 统一保留两位小数，和前端看板百分比展示精度保持一致。
         return BigDecimal.valueOf(numerator)
             .multiply(BigDecimal.valueOf(100))
             .divide(BigDecimal.valueOf(denominator), 2, java.math.RoundingMode.HALF_UP);
@@ -1211,6 +1367,7 @@ public class FinanceService {
         if (anomaly == null || anomaly.getOrderId() == null || anomaly.getAnomalyType() == null) {
             return;
         }
+        // 异常账清单与处理记录分表存储，这里做补齐，保证列表可直接显示处理状态。
         FinanceAnomalyHandle handle = financeAnomalyHandleRepository.findByTypeAndOrderId(
             anomaly.getAnomalyType(),
             anomaly.getOrderId()
@@ -1237,6 +1394,7 @@ public class FinanceService {
     private String buildReconciliationOverviewCacheKey(SysUser requester, LocalDateTime startTime, LocalDateTime endTime) {
         Long requesterId = requester == null ? null : requester.getId();
         Long departmentId = requester == null ? null : requester.getDepartmentId();
+        // 缓存键包含角色、用户、部门和时间范围，防止不同权限范围复用到错误的汇总结果。
         return String.join("|",
             "overview",
             normalizeRole(requester),
@@ -1248,6 +1406,7 @@ public class FinanceService {
     }
 
     private Map<String, Object> buildReconciliationOverviewFallback(LocalDateTime startTime, LocalDateTime endTime) {
+        // fallback 结构与正常返回字段保持一致，避免前端因字段缺失出现兼容问题。
         Map<String, Object> result = new HashMap<>();
         result.put("rechargeCount", 0L);
         result.put("rechargePassCount", 0L);

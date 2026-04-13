@@ -234,6 +234,7 @@
   </update>
 
   <update id="updateByIdAndStatus">
+    <!-- 轻量乐观锁：仅当订单仍处于期望状态时更新，防并发覆盖 -->
     update biz_reservation_order
     set order_status=#{order.orderStatus},
         audit_status=#{order.auditStatus},
@@ -251,6 +252,7 @@
   </update>
 
   <update id="markSettling">
+    <!-- 结算抢占：仅 WAITING_SETTLEMENT 且未支付订单可置为 SETTLING，防重复结算 -->
     update biz_reservation_order
     set order_status='SETTLING', update_time=#{updateTime}
     where id=#{id} and deleted=0 and order_status='WAITING_SETTLEMENT' and (pay_status is null or pay_status &lt;&gt; 'PAID')
@@ -330,6 +332,7 @@
   </select>
 
   <select id="avgWaitingSettlementHoursByScope" resultType="java.math.BigDecimal">
+    <!-- 待结算平均滞留按“当前时刻 - 创建时间”计算，用于对账看板实时监控 -->
     select coalesce(avg(timestampdiff(minute, o.create_time, now()) / 60.0), 0)
     from biz_reservation_order o
     where o.deleted = 0

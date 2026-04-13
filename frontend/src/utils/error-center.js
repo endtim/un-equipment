@@ -32,6 +32,7 @@ function stringifyError(error) {
 }
 
 function isHandledRequestError(error) {
+  // 请求层已对业务/鉴权/网络错误做统一提示，这类异常不再上报全局错误页，避免重复弹错。
   return (
     !!error &&
     (error.name === 'RequestError' ||
@@ -48,6 +49,7 @@ function shouldIgnoreGlobalNoise(error) {
   }
   const normalized = String(message).toLowerCase()
   return (
+    // 忽略浏览器已知噪音，避免无业务影响的 ResizeObserver 警告污染全局错误中心。
     normalized.includes('resizeobserver loop completed with undelivered notifications') ||
     normalized.includes('resizeobserver loop limit exceeded')
   )
@@ -82,7 +84,7 @@ export function installGlobalErrorHandlers({ app, router }) {
       return
     }
     reportGlobalError(error, {
-      source: 'Vue组件',
+      source: '组件渲染',
       detail: info
     })
   }
@@ -102,6 +104,7 @@ export function installGlobalErrorHandlers({ app, router }) {
 
   window.addEventListener('unhandledrejection', (event) => {
     if (isHandledRequestError(event.reason)) {
+      // 已被请求层消费的 Promise 异常直接阻断默认控制台报错。
       event.preventDefault()
       return
     }
@@ -109,6 +112,6 @@ export function installGlobalErrorHandlers({ app, router }) {
       event.preventDefault()
       return
     }
-    reportGlobalError(event.reason, { source: '未处理Promise异常' })
+    reportGlobalError(event.reason, { source: '未处理异步异常' })
   })
 }

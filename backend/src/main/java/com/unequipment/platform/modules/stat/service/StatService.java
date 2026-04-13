@@ -34,6 +34,7 @@ public class StatService {
     public List<Map<String, Object>> platformMembers(SysUser user) {
         String roleCode = roleCode(user);
         Long scopeDepartmentId = scopeDepartmentId(user);
+        // 平台成员统计同样受角色范围限制，院系管理员仅看到本部门聚合结果。
         List<Map<String, Object>> rows = statQueryRepository.queryPlatformMembers(roleCode, scopeDepartmentId);
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map<String, Object> item : rows) {
@@ -98,6 +99,7 @@ public class StatService {
             () -> statQueryRepository.queryDepartmentDistribution(startTime, endTime, roleCode, scopeDepartmentId),
             new ArrayList<>()
         )));
+        // 趋势数据按“快照优先、实时兜底”策略构建，兼顾性能与时效。
         result.put("orderTrend", buildTrend(startTime, endTime, roleCode, scopeDepartmentId));
         result.put("periodStart", startTime);
         result.put("periodEnd", endTime);
@@ -160,6 +162,7 @@ public class StatService {
         if (user == null) {
             return null;
         }
+        // SQL 侧会根据 roleCode 判断是否使用该字段，非院系角色传入也不会扩大权限。
         return user.getDepartmentId();
     }
 

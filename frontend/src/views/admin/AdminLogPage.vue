@@ -12,7 +12,7 @@
         </el-select>
         <el-input
           v-model="query.keyword"
-          placeholder="搜索操作名称、接口路径或资源ID"
+          placeholder="搜索操作名称、接口路径或资源编号"
           clearable
           class="admin-filter--xl"
         />
@@ -35,7 +35,7 @@
         <el-table-column prop="requestMethod" label="方法" width="90" />
         <el-table-column prop="requestUri" label="请求信息" min-width="260" show-overflow-tooltip />
         <el-table-column prop="requestIp" label="IP" width="140" />
-        <el-table-column prop="bizId" label="资源ID" width="100" />
+        <el-table-column prop="bizId" label="资源编号" width="100" />
         <el-table-column prop="resultCode" label="结果码" width="90" />
         <el-table-column label="结果" width="90">
           <template #default="{ row }">
@@ -104,12 +104,14 @@ export default {
     },
     restoreQuery() {
       const query = this.$route.query || {}
+      // 日志页支持链接分享，进入页面先回填 URL 查询参数恢复筛选上下文。
       this.query.moduleName = query.moduleName || ''
       this.query.keyword = query.keyword || ''
       this.query.pageNum = Number(query.pageNum || 1)
       this.query.pageSize = Number(query.pageSize || 10)
     },
     syncQuery() {
+      // 每次加载后同步当前筛选到地址栏，保证刷新/回退后查询条件不丢失。
       this.$router.replace({
         path: this.$route.path,
         query: {
@@ -124,6 +126,7 @@ export default {
       const data = await getOperationLogs(this.query)
       this.logs = data.list || []
       this.total = data.total || 0
+      // 统一在数据拉取完成后回写 URL，避免中途状态导致地址栏与页面不一致。
       this.syncQuery()
     },
     async search() {

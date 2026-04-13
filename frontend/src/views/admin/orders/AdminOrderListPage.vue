@@ -206,6 +206,7 @@ import {
 } from '../../../api/order'
 
 const CLOSABLE_STATUS = [
+  // 仅允许关闭尚未完成终态且仍可人工终止的订单，避免已完成/已取消订单重复关单。
   'PENDING_AUDIT',
   'WAITING_USE',
   'IN_USE',
@@ -275,11 +276,23 @@ export default {
       ]
     }
   },
-  async created() {
-    await this.loadDepartments()
-    await this.load()
+  watch: {
+    orderType: {
+      immediate: true,
+      async handler() {
+        // 上机/送样复用同一页面组件，切换类型时需要重置分页并重新加载对应数据集。
+        await this.initializePage()
+      }
+    }
   },
   methods: {
+    async initializePage() {
+      this.query.pageNum = 1
+      await this.executeSafely(async () => {
+        await this.loadDepartments()
+        await this.load()
+      })
+    },
     async executeSafely(action) {
       try {
         await action()
@@ -292,6 +305,7 @@ export default {
     },
     buildParams() {
       const [submitStart, submitEnd] = this.query.submitRange || []
+      // 查询参数统一在此收敛，空值转 undefined，避免把空字符串传给后端干扰条件判断。
       return {
         orderType: this.orderType,
         status: this.query.status || undefined,
@@ -372,6 +386,7 @@ export default {
     },
     async adjustAmount(row) {
       try {
+        // 金额调整先做前端格式校验，再补充说明，确保财务改价有审计语义。
         const { value } = await ElMessageBox.prompt('请输入结算金额（元）', '调整订单金额', {
           confirmButtonText: '确认',
           cancelButtonText: '取消',
@@ -403,6 +418,7 @@ export default {
     },
     async closeOrder(row) {
       await this.executeSafely(async () => {
+        // 关闭订单必须填写原因，便于后续追踪提前终止的业务背景。
         const comment = await this.askComment('关闭订单', true)
         if (!comment) {
           return
@@ -431,6 +447,7 @@ export default {
         )
         return (value || '').trim()
       } catch (error) {
+        // 统一把取消弹窗映射为空字符串，调用方可按业务决定是否继续执行。
         return ''
       }
     },

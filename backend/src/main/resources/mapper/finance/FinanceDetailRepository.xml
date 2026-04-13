@@ -5,6 +5,10 @@
 <mapper namespace="com.unequipment.platform.modules.finance.repository.FinanceDetailRepository">
 
   <sql id="finance_detail_union_sql">
+    <!--
+      经费明细采用统一 UNION 口径聚合四类业务流水，保证报表分页、导出和统计口径一致，
+      避免前端按业务类型分多次请求后出现时间窗口不一致。
+    -->
     select
       'RECHARGE' as biz_type,
       '充值入账' as biz_type_label,
@@ -20,11 +24,27 @@
       'IN' as inout_type,
       '收入' as inout_type_label,
       r.remark as remark,
+      <!-- 充值流水优先取审核时间，未审核场景兜底创建时间，保证时间口径稳定可排序 -->
       coalesce(r.audit_time, r.create_time) as occur_time
     from biz_recharge_order r
     left join sys_user u on u.id = r.user_id
     left join sys_department d on d.id = u.department_id
     where r.status = 'PASS'
+      and (#{bizType} is null or #{bizType} = '' or #{bizType} = 'RECHARGE')
+      and (#{inoutType} is null or #{inoutType} = '' or #{inoutType} = 'IN')
+      <if test="startTime != null">
+        and coalesce(r.audit_time, r.create_time) &gt;= #{startTime}
+      </if>
+      <if test="endTime != null">
+        and coalesce(r.audit_time, r.create_time) &lt;= #{endTime}
+      </if>
+      <if test="departmentId != null">
+        and u.department_id = #{departmentId}
+      </if>
+      <if test="roleCode == 'DEPT_MANAGER'">
+        <!-- 院系管理员只能查看本部门流水，后端再次过滤避免前端参数越权 -->
+        and u.department_id = #{scopeDepartmentId}
+      </if>
 
     union all
 
@@ -43,6 +63,7 @@
       'IN' as inout_type,
       '收入' as inout_type_label,
       s.price_desc as remark,
+      <!-- 结算明细优先以 settled_time 作为发生时间，兼容历史数据为空时的创建时间 -->
       coalesce(s.settled_time, s.create_time) as occur_time
     from biz_settlement_record s
     left join biz_reservation_order o on o.id = s.order_id
@@ -50,6 +71,24 @@
     left join sys_department d on d.id = o.department_id
     left join sys_user u on u.id = o.user_id
     where s.settle_status = 'CONFIRMED'
+      and (#{bizType} is null or #{bizType} = '' or #{bizType} = 'SETTLEMENT')
+      and (#{inoutType} is null or #{inoutType} = '' or #{inoutType} = 'IN')
+      <if test="startTime != null">
+        and coalesce(s.settled_time, s.create_time) &gt;= #{startTime}
+      </if>
+      <if test="endTime != null">
+        and coalesce(s.settled_time, s.create_time) &lt;= #{endTime}
+      </if>
+      <if test="instrumentId != null">
+        and s.instrument_id = #{instrumentId}
+      </if>
+      <if test="departmentId != null">
+        and o.department_id = #{departmentId}
+      </if>
+      <if test="roleCode == 'DEPT_MANAGER'">
+        <!-- 结算收入同样按部门做后端隔离，防止跨部门订单泄露 -->
+        and o.department_id = #{scopeDepartmentId}
+      </if>
 
     union all
 
@@ -68,6 +107,7 @@
       'OUT' as inout_type,
       '支出' as inout_type_label,
       '订单退款' as remark,
+      <!-- 退款流水沿用结算单时间口径，便于和结算收入在同一时间轴对比 -->
       coalesce(s.settled_time, s.create_time) as occur_time
     from biz_settlement_record s
     left join biz_reservation_order o on o.id = s.order_id
@@ -75,6 +115,24 @@
     left join sys_department d on d.id = o.department_id
     left join sys_user u on u.id = o.user_id
     where s.settle_status = 'REFUNDED'
+      and (#{bizType} is null or #{bizType} = '' or #{bizType} = 'REFUND')
+      and (#{inoutType} is null or #{inoutType} = '' or #{inoutType} = 'OUT')
+      <if test="startTime != null">
+        and coalesce(s.settled_time, s.create_time) &gt;= #{startTime}
+      </if>
+      <if test="endTime != null">
+        and coalesce(s.settled_time, s.create_time) &lt;= #{endTime}
+      </if>
+      <if test="instrumentId != null">
+        and s.instrument_id = #{instrumentId}
+      </if>
+      <if test="departmentId != null">
+        and o.department_id = #{departmentId}
+      </if>
+      <if test="roleCode == 'DEPT_MANAGER'">
+        <!-- 退款流水继承订单所属部门权限，确保收支口径与结算一致 -->
+        and o.department_id = #{scopeDepartmentId}
+      </if>
 
     union all
 
@@ -97,9 +155,29 @@
     from biz_finance_expense e
     left join biz_instrument i on i.id = e.instrument_id
     left join sys_department d on d.id = e.department_id
+    where 1 = 1
+      and (#{bizType} is null or #{bizType} = '' or #{bizType} = 'MAINTENANCE_EXPENSE')
+      and (#{inoutType} is null or #{inoutType} = '' or #{inoutType} = 'OUT')
+      <if test="startTime != null">
+        and e.expense_time &gt;= #{startTime}
+      </if>
+      <if test="endTime != null">
+        and e.expense_time &lt;= #{endTime}
+      </if>
+      <if test="instrumentId != null">
+        and e.instrument_id = #{instrumentId}
+      </if>
+      <if test="departmentId != null">
+        and e.department_id = #{departmentId}
+      </if>
+      <if test="roleCode == 'DEPT_MANAGER'">
+        <!-- 维护支出按支出归属部门限制访问范围 -->
+        and e.department_id = #{scopeDepartmentId}
+      </if>
   </sql>
 
   <select id="findPage" resultType="com.unequipment.platform.modules.finance.vo.FinanceDetailVO">
+    <!-- 先统一聚合再做关键字过滤与排序，确保分页顺序是全量流水维度而非单业务维度 -->
     select *
     from (
       <include refid="finance_detail_union_sql"/>
@@ -114,27 +192,6 @@
         or t.user_name like concat('%', #{keyword}, '%')
         or t.remark like concat('%', #{keyword}, '%')
       )
-    </if>
-    <if test="bizType != null and bizType != ''">
-      and t.biz_type = #{bizType}
-    </if>
-    <if test="inoutType != null and inoutType != ''">
-      and t.inout_type = #{inoutType}
-    </if>
-    <if test="instrumentId != null">
-      and t.instrument_id = #{instrumentId}
-    </if>
-    <if test="departmentId != null">
-      and t.department_id = #{departmentId}
-    </if>
-    <if test="startTime != null">
-      and t.occur_time &gt;= #{startTime}
-    </if>
-    <if test="endTime != null">
-      and t.occur_time &lt;= #{endTime}
-    </if>
-    <if test="roleCode == 'DEPT_MANAGER'">
-      and t.department_id = #{scopeDepartmentId}
     </if>
     order by t.occur_time desc, t.biz_type desc
     limit #{offset}, #{pageSize}
@@ -155,27 +212,6 @@
         or t.user_name like concat('%', #{keyword}, '%')
         or t.remark like concat('%', #{keyword}, '%')
       )
-    </if>
-    <if test="bizType != null and bizType != ''">
-      and t.biz_type = #{bizType}
-    </if>
-    <if test="inoutType != null and inoutType != ''">
-      and t.inout_type = #{inoutType}
-    </if>
-    <if test="instrumentId != null">
-      and t.instrument_id = #{instrumentId}
-    </if>
-    <if test="departmentId != null">
-      and t.department_id = #{departmentId}
-    </if>
-    <if test="startTime != null">
-      and t.occur_time &gt;= #{startTime}
-    </if>
-    <if test="endTime != null">
-      and t.occur_time &lt;= #{endTime}
-    </if>
-    <if test="roleCode == 'DEPT_MANAGER'">
-      and t.department_id = #{scopeDepartmentId}
     </if>
   </select>
 

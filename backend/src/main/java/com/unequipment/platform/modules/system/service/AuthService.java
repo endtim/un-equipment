@@ -58,6 +58,7 @@ public class AuthService {
             throw new BizException(ErrorCodes.UNAUTHORIZED, "账号已停用，请联系管理员");
         }
         String storedPassword = user.getPassword();
+        // 登录统一走加密比对，避免明文密码参与任何业务判断。
         boolean validPassword = storedPassword != null && passwordEncoder.matches(request.getPassword(), storedPassword);
         if (!validPassword) {
             throw new BizException(ErrorCodes.AUTH_INVALID_CREDENTIALS, "用户名或密码错误");
@@ -83,6 +84,7 @@ public class AuthService {
         }
         SysDepartment department = departmentRepository.findByDeptCode(defaultDepartmentCode);
         if (department == null) {
+            // 默认部门缺失时退化到首个部门，避免测试环境初始化不完整导致注册全量失败。
             department = departmentRepository.findFirst();
         }
         if (department == null) {
@@ -128,6 +130,7 @@ public class AuthService {
         account.setStatus("ENABLED");
         account.setCreateTime(LocalDateTime.now());
         account.setUpdateTime(LocalDateTime.now());
+        // 注册阶段即初始化资金账户，保证后续充值/下单链路不再做“账户是否存在”分支判断。
         accountRepository.insert(account);
 
         Map<String, Object> result = new HashMap<>();
@@ -148,6 +151,7 @@ public class AuthService {
             throw new BizException(ErrorCodes.UNAUTHORIZED, "未登录或登录已失效");
         }
         SysUser dbUser = userRepository.findById(currentUser.getId());
+        // 每次都从库里取最新数据，确保角色/部门调整后立即反映到当前会话视图。
         if (dbUser == null || !"ENABLED".equalsIgnoreCase(dbUser.getStatus())) {
             throw new BizException(ErrorCodes.UNAUTHORIZED, "用户不存在或已停用");
         }

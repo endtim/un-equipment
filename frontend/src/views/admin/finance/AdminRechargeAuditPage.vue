@@ -51,7 +51,7 @@
           @change="onQueryChange"
         />
         <el-button type="primary" @click="onQueryChange">查询</el-button>
-        <el-button type="success" plain @click="exportCsv">导出CSV</el-button>
+        <el-button type="success" plain @click="exportCsv">导出报表</el-button>
         <el-button @click="resetQuery">重置</el-button>
         </div>
       </template>
@@ -174,6 +174,7 @@ export default {
     },
     buildParams() {
       const [startTime, endTime] = this.query.timeRange || []
+      // 统一在此处理空值，避免把空字符串传到后端造成筛选条件歧义。
       return {
         keyword: this.query.keyword || undefined,
         status: this.query.status || undefined,
@@ -223,7 +224,7 @@ export default {
         link.click()
         document.body.removeChild(link)
         window.URL.revokeObjectURL(url)
-        ElMessage.success('CSV导出成功')
+        ElMessage.success('报表导出成功')
       })
     },
     async audit(row, action) {
@@ -243,6 +244,7 @@ export default {
           comment = String(value || '').trim()
         }
         const result = await auditRecharge(row.id, { action, comment })
+        // 大额充值初审通过后会进入 REVIEW_PENDING，这里区分提示避免误以为已完成入账。
         if (action === 'APPROVE' && result && result.status === 'REVIEW_PENDING') {
           ElMessage.success('审核已通过，充值单已进入复核流程')
         } else {

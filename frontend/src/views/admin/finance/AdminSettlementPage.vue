@@ -58,7 +58,7 @@
           v-model="query.orderId"
           :min="1"
           :controls="false"
-          placeholder="订单ID"
+          placeholder="订单编号"
           class="admin-filter--xs"
         />
         <el-button @click="advancedFilterVisible = !advancedFilterVisible">
@@ -388,22 +388,50 @@ export default {
       ]
     }
   },
-  async created() {
-    await this.executeSafely(async () => {
-      if (this.isSettlementMode) {
-        const routeOrderId = Number(this.$route.query.orderId || '')
-        if (Number.isFinite(routeOrderId) && routeOrderId > 0) {
-          this.query.orderId = routeOrderId
-        }
-        this.departments = await getAdminDepartments()
-        await this.load()
-        await this.loadOverview()
-        return
+  watch: {
+    mode: {
+      immediate: true,
+      async handler() {
+        // 页面支持“结算管理/异常账清单”双模式，切换时必须重走初始化，避免沿用旧模式查询条件。
+        await this.initializeByMode()
       }
-      await this.loadAnomalies()
-    })
+    },
+    '$route.query.orderId': {
+      async handler() {
+        if (!this.isSettlementMode) {
+          return
+        }
+        // 允许从订单列表携带 orderId 跳转并自动过滤，便于财务定位单笔结算链路。
+        const routeOrderId = Number(this.$route.query.orderId || '')
+        this.query.orderId = Number.isFinite(routeOrderId) && routeOrderId > 0 ? routeOrderId : null
+        this.query.pageNum = 1
+        await this.load()
+      }
+    }
   },
   methods: {
+    async initializeByMode() {
+      await this.executeSafely(async () => {
+        await this.ensureDepartmentsLoaded()
+        if (this.isSettlementMode) {
+          // 结算模式需同时加载列表和概览指标，保证表格与顶部看板口径一致。
+          const routeOrderId = Number(this.$route.query.orderId || '')
+          this.query.orderId = Number.isFinite(routeOrderId) && routeOrderId > 0 ? routeOrderId : null
+          this.query.pageNum = 1
+          await this.load()
+          await this.loadOverview()
+          return
+        }
+        this.anomalyQuery.pageNum = 1
+        await this.loadAnomalies()
+      })
+    },
+    async ensureDepartmentsLoaded() {
+      if (this.departments.length > 0) {
+        return
+      }
+      this.departments = await getAdminDepartments()
+    },
     formatDateTime,
     statusLabel(value) {
       return STATUS_LABEL[value] || '未知状态'
@@ -494,6 +522,7 @@ export default {
         return
       }
       this.query.pageNum = 1
+      // 结算列表与概览看板共用筛选条件，查询时需要同步刷新，保证口径一致。
       await this.load()
       await this.loadOverview()
     },
@@ -520,6 +549,7 @@ export default {
     },
     async onAnomalyFilterChange() {
       this.anomalyQuery.pageNum = 1
+      // 异常账筛选变更后回到第一页，避免高页码下出现“看似无数据”的误解。
       await this.loadAnomalies()
     },
     async onAnomalyTimeRangeChange() {
@@ -539,6 +569,7 @@ export default {
       }
       const [createStart, createEnd] = this.query.createRange || []
       const [settledStart, settledEnd] = this.query.settledRange || []
+      // 对账概览优先使用创建区间，其次兜底结算区间，避免两个时间筛选都为空时发无意义参数。
       const startTime = createStart || settledStart
       const endTime = createEnd || settledEnd
       return {
@@ -569,6 +600,7 @@ export default {
           end.format('YYYY-MM-DDTHH:mm:ss')
         ]
       }
+      // 快捷时间只作用于“创建时间”筛选，需清空结算时间以避免双时间轴叠加导致结果不可预期。
       this.query.settledRange = []
       await this.onQueryChange()
     },
@@ -614,6 +646,7 @@ export default {
     },
     async requestRefund(row) {
       await this.executeSafely(async () => {
+        // 退款申请要求填写原因，作为后续审批与审计追踪依据。
         const { value } = await ElMessageBox.prompt('请输入退款申请原因', '申请退款', {
           confirmButtonText: '提交申请',
           cancelButtonText: '取消',
@@ -631,6 +664,7 @@ export default {
     },
     async approveRefund(row) {
       await this.executeSafely(async () => {
+        // 退款审批同样保留意见，便于对账异常回溯审批决策链路。
         const { value } = await ElMessageBox.prompt('请输入退款审批意见', '审批退款（全额）', {
           confirmButtonText: '确认退款',
           cancelButtonText: '取消',
@@ -649,6 +683,7 @@ export default {
     },
     async handleAnomaly(row, handleStatus) {
       await this.executeSafely(async () => {
+        // 异常账状态更新强制走弹窗备注，便于后续审计回溯处理人意图。
         const { value } = await ElMessageBox.prompt(
           '请输入处理备注（可选）',
           '更新异常账处理状态',

@@ -5,6 +5,7 @@
         <div>欢迎访问高校大型仪器共享平台</div>
         <div class="topbar-links">
           <span>服务时间：周一至周五 08:30-17:30</span>
+          <span class="topbar-action" @click="aboutVisible = true">关于系统</span>
           <span v-if="!user" class="topbar-action" @click="$router.push('/login')">用户登录</span>
           <template v-else>
             <span class="topbar-action" @click="$router.push('/center')">{{ user.realName }}</span>
@@ -30,6 +31,9 @@
           <div class="brand-university">
             <div class="uni-cn">南昌大学</div>
             <div class="uni-en">NANCHANG UNIVERSITY</div>
+            <div class="brand-meta-line">{{ siteInfo.college }}</div>
+            <div class="brand-meta-line">指导老师：{{ siteInfo.supervisorName }}</div>
+            <div class="brand-meta-line">设计者：{{ siteInfo.designerName }}</div>
           </div>
         </div>
         <div class="brand-title">大型仪器预约共享管理平台</div>
@@ -74,22 +78,64 @@
 
     <footer class="portal-footer">
       <div class="portal-container">
-        <div class="footer-title">高校大型仪器共享平台</div>
-        <div class="footer-meta">版权所有：高校大型仪器共享平台建设项目组</div>
-        <div class="footer-meta">地址：江西省南昌市高新区学府大道 999 号 | 电话：0791-88886666</div>
+        <div class="footer-title">{{ siteInfo.systemName }}</div>
+        <div class="footer-meta">{{ siteInfo.school }} · {{ siteInfo.college }}</div>
+        <div class="footer-meta">指导老师：{{ siteInfo.supervisorName }} | 设计者：{{ siteInfo.designerName }}</div>
+        <div class="footer-meta">版本：{{ siteInfo.version }} | 设计时间：{{ siteInfo.designTime }}</div>
+        <div class="footer-meta">地址：{{ siteInfo.address }} | 电话：{{ siteInfo.phone }}</div>
+        <div class="footer-meta">{{ siteInfo.copyright }}</div>
       </div>
     </footer>
+
+    <el-dialog v-model="aboutVisible" title="关于系统" width="720px">
+      <div class="about-dialog">
+        <div class="about-dialog__header">
+          <div class="about-dialog__logo-wrap">
+            <img
+              v-if="!logoLoadFailed"
+              :src="schoolLogoSrc"
+              alt="学校校徽"
+              class="about-dialog__logo"
+              @error="logoLoadFailed = true"
+            />
+            <div v-else class="about-dialog__logo-fallback">校</div>
+          </div>
+          <div class="about-dialog__title-group">
+            <div class="about-dialog__title">{{ siteInfo.systemName }}</div>
+            <div class="about-dialog__subtitle">{{ siteInfo.school }} · {{ siteInfo.college }}</div>
+            <div class="about-dialog__desc">{{ siteInfo.description }}</div>
+          </div>
+        </div>
+        <div class="about-grid">
+          <div class="about-item"><span>系统名称</span><strong>{{ siteInfo.systemName }}</strong></div>
+          <div class="about-item"><span>版本号</span><strong>{{ siteInfo.version }}</strong></div>
+          <div class="about-item"><span>指导老师</span><strong>{{ siteInfo.supervisorName }}</strong></div>
+          <div class="about-item"><span>设计者</span><strong>{{ siteInfo.designerName }}</strong></div>
+          <div class="about-item"><span>年级班级</span><strong>{{ siteInfo.gradeClass }}</strong></div>
+          <div class="about-item"><span>专业</span><strong>{{ siteInfo.major }}</strong></div>
+          <div class="about-item"><span>学校</span><strong>{{ siteInfo.school }}</strong></div>
+          <div class="about-item"><span>设计时间</span><strong>{{ siteInfo.designTime }}</strong></div>
+          <div class="about-item about-item--wide"><span>版权信息</span><strong>{{ siteInfo.copyright }}</strong></div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script>
+import siteInfo from '../../config/siteInfo'
+
 export default {
   data() {
     return {
-      logoLoadFailed: false
+      logoLoadFailed: false,
+      aboutVisible: false
     }
   },
   computed: {
+    siteInfo() {
+      return siteInfo
+    },
     schoolLogoSrc() {
       return `${process.env.BASE_URL || '/'}school-logo.png`
     },
@@ -120,6 +166,7 @@ export default {
       return this.pageMeta.showBreadcrumb !== false && Array.isArray(this.pageMeta.breadcrumb)
     },
     showPageHeader() {
+      // 首页和入口页不展示二级页头，其余业务页统一走页面头信息，保持导航体验一致。
       return (
         this.pageMeta.pageType &&
         this.pageMeta.pageType !== 'landing' &&
@@ -128,6 +175,7 @@ export default {
     },
     breadcrumbItems() {
       const raw = this.pageMeta.breadcrumb || []
+      // 面包屑只在可回退节点生成跳转，最后一级保持当前页文本。
       return raw.map((label, index) => ({
         label,
         to: this.resolveBreadcrumbTo(index, raw.length)
@@ -148,6 +196,7 @@ export default {
       }
     },
     isNavActive(item) {
+      // 预约服务下有详情页，需用 startsWith 覆盖“列表 + 详情”高亮场景。
       if (item.path === '/instruments') {
         return this.$route.path.startsWith('/instruments')
       }
@@ -284,6 +333,12 @@ export default {
   gap: 2px;
 }
 
+.brand-meta-line {
+  font-size: 13px;
+  line-height: 1.6;
+  opacity: 0.92;
+}
+
 .uni-cn {
   font-size: 38px;
   line-height: 1;
@@ -396,6 +451,104 @@ export default {
   line-height: 1.8;
 }
 
+.about-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.about-dialog__header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 4px 0 12px;
+  border-bottom: 1px solid #e5ecf4;
+}
+
+.about-dialog__logo-wrap {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #f6f9fd;
+  border: 1px solid #d7e3f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.about-dialog__logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+}
+
+.about-dialog__logo-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 700;
+  color: #0b4ea2;
+}
+
+.about-dialog__title-group {
+  min-width: 0;
+}
+
+.about-dialog__title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #123f78;
+}
+
+.about-dialog__subtitle {
+  margin-top: 6px;
+  font-size: 15px;
+  color: #4f6888;
+}
+
+.about-dialog__desc {
+  margin-top: 10px;
+  line-height: 1.8;
+  color: #5a6f8d;
+}
+
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.about-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: #f8fbff;
+  border: 1px solid #dbe7f5;
+  border-radius: 10px;
+}
+
+.about-item span {
+  font-size: 13px;
+  color: #70849e;
+}
+
+.about-item strong {
+  font-size: 15px;
+  color: #153e76;
+  line-height: 1.6;
+}
+
+.about-item--wide {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 1200px) {
   .header-inner {
     height: auto;
@@ -426,6 +579,17 @@ export default {
 
   .nav-inner {
     overflow-x: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .about-dialog__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .about-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
