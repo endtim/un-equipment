@@ -25,6 +25,7 @@ public class MessageService {
         message.setMsgType("SYSTEM");
         message.setTitle(title);
         message.setContent(content);
+        // 新消息默认未读，用户中心据此统计未读数量并提示用户处理。
         message.setReadStatus(0);
         message.setCreateTime(LocalDateTime.now());
         userMessageRepository.insert(message);
@@ -51,6 +52,7 @@ public class MessageService {
      */
     public void markRead(SysUser user, Long id) {
         if (userMessageRepository.findByIdAndUserId(id, user.getId()) == null) {
+            // 已读操作先校验消息归属，防止用户通过构造 ID 修改他人的站内消息。
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "消息不存在");
         }
         userMessageRepository.markRead(id, user.getId(), LocalDateTime.now());

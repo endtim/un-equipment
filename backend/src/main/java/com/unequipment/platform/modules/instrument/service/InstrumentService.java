@@ -6,6 +6,7 @@ import com.unequipment.platform.common.exception.ErrorCodes;
 import com.unequipment.platform.common.util.BizNoGenerator;
 import com.unequipment.platform.common.util.RoleAuthUtils;
 import com.unequipment.platform.modules.instrument.dto.InstrumentSaveRequest;
+import com.unequipment.platform.modules.instrument.dto.MaintenanceRecordSaveRequest;
 import com.unequipment.platform.modules.instrument.dto.OpenRuleSaveRequest;
 import com.unequipment.platform.modules.instrument.entity.Instrument;
 import com.unequipment.platform.modules.instrument.entity.InstrumentAttachment;
@@ -51,6 +52,12 @@ public class InstrumentService {
     ));
     private static final Set<String> BOOKING_UNIT_SET = new HashSet<>(Arrays.asList(
         "HOUR", "ITEM"
+    ));
+    private static final Set<String> MAINTENANCE_TYPE_SET = new HashSet<>(Arrays.asList(
+        "FAULT", "REPAIR", "MAINTENANCE", "CALIBRATION"
+    ));
+    private static final Set<String> MAINTENANCE_STATUS_SET = new HashSet<>(Arrays.asList(
+        "PENDING", "PROCESSING", "FINISHED"
     ));
 
     private final InstrumentRepository instrumentRepository;
@@ -100,6 +107,7 @@ public class InstrumentService {
     public Map<String, Object> detail(Long id) {
         Instrument instrument = getById(id);
         Map<String, Object> result = toSummary(instrument);
+        // 详情页同时承担展示和预约入口职责，因此聚合开放方式、预约规则、附件和运行状态等关键字段。
         result.put("description", instrument.getIntro());
         result.put("usageDesc", instrument.getUsageDesc());
         result.put("sampleDesc", instrument.getSampleDesc());
@@ -249,12 +257,14 @@ public class InstrumentService {
     @Transactional
     public InstrumentOpenRule saveRule(Long id, OpenRuleSaveRequest request, SysUser operator) {
         Instrument instrument = getById(request.getInstrumentId());
+        // 开放规则会直接影响可预约时段，必须先确认操作者具备该仪器的管理权限。
         assertInstrumentManagePermission(instrument, operator);
         InstrumentOpenRule rule = id == null ? new InstrumentOpenRule() : openRuleRepository.findById(id);
         if (id != null && rule == null) {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "开放规则不存在");
         }
         if (id != null && (rule.getInstrumentId() == null || !rule.getInstrumentId().equals(request.getInstrumentId()))) {
+            // 编辑已有规则时禁止切换所属仪器，避免历史预约解释口径被后续修改破坏。
             throw new BizException(ErrorCodes.INVALID_REQUEST, "已有开放规则不允许修改仪器");
         }
         List<Integer> weekDays = resolveWeekDays(request);
@@ -265,6 +275,7 @@ public class InstrumentService {
         }
         Integer stepMinutes = defaultInt(request.getStepMinutes(), 30);
         Integer maxReserveMinutes = defaultInt(request.getMaxReserveMinutes(), 480);
+        // 规则保存前统一校验步长和最长预约时长，保证预约端按同一粒度生成可选时间。
         validateReserveRuleConfig(stepMinutes, maxReserveMinutes, stepMinutes);
         if (maxReserveMinutes % stepMinutes != 0) {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "开放规则中最长预约时长必须与时间步长对齐");
@@ -276,6 +287,7 @@ public class InstrumentService {
         assertOpenRuleNoOverlap(id, instrument.getId(), weekDays, startTime, endTime,
             request.getEffectiveStartDate(), request.getEffectiveEndDate());
 
+        // 通过冲突校验后再落库，确保同一仪器在同一星期和同一生效期内不会出现重叠开放时段。
         rule.setInstrumentId(instrument.getId());
         rule.setWeekDay(weekDays.get(0));
         rule.setWeekDays(joinWeekDays(weekDays));
@@ -448,6 +460,27 @@ public class InstrumentService {
         return new PageResponse<>(list, total, safePageNum, safePageSize);
     }
 
+    public PageResponse<MaintenanceRecord> pageMaintenanceRecords(Long instrumentId, String status,
+                                                                  int pageNum, int pageSize,
+                                                                  SysUser operator) {
+        assertAdminOrInstrumentManager(operator);
+        int safePageNum = Math.max(pageNum, 1);
+        int safePageSize = pageSize <= 0 ? 10 : Math.min(pageSize, 100);
+        int offset = (safePageNum - 1) * safePageSize;
+        String roleCode = resolveManageRoleCode(operator);
+        String normalizedStatus = trimToNull(status);
+        if (normalizedStatus != null) {
+            normalizedStatus = validateMaintenanceStatus(normalizedStatus);
+        }
+        List<MaintenanceRecord> list = maintenanceRecordRepository.findPageByScope(
+            instrumentId, normalizedStatus, roleCode, operator.getId(), operator.getDepartmentId(), offset, safePageSize
+        );
+        long total = maintenanceRecordRepository.countPageByScope(
+            instrumentId, normalizedStatus, roleCode, operator.getId(), operator.getDepartmentId()
+        );
+        return new PageResponse<>(list, total, safePageNum, safePageSize);
+    }
+
     @Transactional
     public InstrumentAttachment saveAttachment(Long id, InstrumentAttachment request, SysUser operator) {
         Instrument instrument = getById(request.getInstrumentId());
@@ -477,6 +510,41 @@ public class InstrumentService {
     }
 
     @Transactional
+    public MaintenanceRecord saveMaintenanceRecord(Long id, MaintenanceRecordSaveRequest request, SysUser operator) {
+        Instrument instrument = getById(request.getInstrumentId());
+        assertInstrumentManagePermission(instrument, operator);
+        MaintenanceRecord record = id == null ? new MaintenanceRecord() : maintenanceRecordRepository.findById(id);
+        if (id != null && record == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "维护记录不存在");
+        }
+        if (id != null && (record.getInstrumentId() == null || !record.getInstrumentId().equals(request.getInstrumentId()))) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "已有维护记录不允许修改所属仪器");
+        }
+
+        validateMaintenanceRecordRequest(request);
+        LocalDateTime now = LocalDateTime.now();
+        record.setInstrumentId(instrument.getId());
+        record.setMaintType(validateMaintenanceType(request.getMaintType()));
+        record.setTitle(request.getTitle().trim());
+        record.setContent(trimToNull(request.getContent()));
+        record.setStartTime(request.getStartTime());
+        record.setEndTime(request.getEndTime());
+        record.setStatus(validateMaintenanceStatus(request.getStatus()));
+        record.setOperatorUserId(operator.getId());
+        record.setUpdateTime(now);
+        if (id == null) {
+            record.setCreateTime(now);
+            maintenanceRecordRepository.insert(record);
+        } else {
+            maintenanceRecordRepository.update(record);
+        }
+        operationLogService.save(operator, "INSTRUMENT",
+            id == null ? "CREATE_MAINTENANCE_RECORD" : "UPDATE_MAINTENANCE_RECORD",
+            "maintenanceRecordId:" + record.getId() + ",instrumentId:" + record.getInstrumentId());
+        return maintenanceRecordRepository.findById(record.getId());
+    }
+
+    @Transactional
     public void deleteOpenRule(Long id, SysUser operator) {
         InstrumentOpenRule rule = openRuleRepository.findById(id);
         if (rule == null) {
@@ -498,6 +566,19 @@ public class InstrumentService {
         assertInstrumentManagePermission(instrument, operator);
         attachmentRepository.softDelete(id, LocalDateTime.now());
         operationLogService.save(operator, "INSTRUMENT", "DELETE_ATTACHMENT", "attachmentId:" + id);
+    }
+
+    @Transactional
+    public void deleteMaintenanceRecord(Long id, SysUser operator) {
+        MaintenanceRecord record = maintenanceRecordRepository.findById(id);
+        if (record == null) {
+            throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "维护记录不存在");
+        }
+        Instrument instrument = getById(record.getInstrumentId());
+        assertInstrumentManagePermission(instrument, operator);
+        maintenanceRecordRepository.deleteById(id);
+        operationLogService.save(operator, "INSTRUMENT", "DELETE_MAINTENANCE_RECORD",
+            "maintenanceRecordId:" + id + ",instrumentId:" + instrument.getId());
     }
 
     private Map<String, Object> toSummary(Instrument instrument) {
@@ -566,6 +647,14 @@ public class InstrumentService {
         return value == null || value.trim().isEmpty() ? defaultValue : value.trim();
     }
 
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     private Integer defaultInt(Integer value, Integer defaultValue) {
         return value == null ? defaultValue : value;
     }
@@ -626,6 +715,47 @@ public class InstrumentService {
             throw new BizException(ErrorCodes.INVALID_REQUEST, "预约计费单位不合法");
         }
         return normalized;
+    }
+
+    private String validateMaintenanceType(String maintType) {
+        String normalized = trimToNull(maintType);
+        if (normalized == null) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "维护类型不能为空");
+        }
+        normalized = normalized.toUpperCase();
+        if (!MAINTENANCE_TYPE_SET.contains(normalized)) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "维护类型不合法");
+        }
+        return normalized;
+    }
+
+    private String validateMaintenanceStatus(String status) {
+        String normalized = trimToNull(status);
+        if (normalized == null) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "维护状态不能为空");
+        }
+        normalized = normalized.toUpperCase();
+        if (!MAINTENANCE_STATUS_SET.contains(normalized)) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "维护状态不合法");
+        }
+        return normalized;
+    }
+
+    /**
+     * 维护记录既用于后台留痕，也会直接影响前台“当前是否可预约”的提示，
+     * 所以这里必须统一约束时间区间和完结状态，避免出现“已完成但仍显示停约”的脏数据。
+     */
+    private void validateMaintenanceRecordRequest(MaintenanceRecordSaveRequest request) {
+        if (request.getStartTime() == null) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "维护开始时间不能为空");
+        }
+        if (request.getEndTime() != null && !request.getEndTime().isAfter(request.getStartTime())) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "维护结束时间必须晚于开始时间");
+        }
+        String normalizedStatus = validateMaintenanceStatus(request.getStatus());
+        if ("FINISHED".equals(normalizedStatus) && request.getEndTime() == null) {
+            throw new BizException(ErrorCodes.INVALID_REQUEST, "已完成维护必须填写结束时间");
+        }
     }
 
     private Map<String, Object> buildMetrics(Long instrumentId) {
@@ -774,10 +904,12 @@ public class InstrumentService {
             if (rule.getStartTime() == null || rule.getEndTime() == null) {
                 continue;
             }
+            // 时间段采用左闭右开口径判断重叠，允许一个规则结束时间等于另一个规则开始时间。
             boolean timeOverlap = startTime.isBefore(rule.getEndTime()) && endTime.isAfter(rule.getStartTime());
             if (!timeOverlap) {
                 continue;
             }
+            // 只有星期、时间段、生效日期三者同时重叠时才认为冲突，避免误拦截不同周期的开放规则。
             if (isEffectiveDateOverlap(effectiveStartDate, effectiveEndDate, rule.getEffectiveStartDate(), rule.getEffectiveEndDate())) {
                 throw new BizException(ErrorCodes.INVALID_REQUEST, "开放规则与已有规则冲突");
             }

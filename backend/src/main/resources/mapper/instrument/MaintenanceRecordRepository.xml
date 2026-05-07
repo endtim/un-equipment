@@ -9,6 +9,67 @@
     select * from biz_maintenance_record where instrument_id = #{instrumentId} order by create_time desc
   </select>
 
+  <select id="findPageByScope" resultType="com.unequipment.platform.modules.instrument.entity.MaintenanceRecord">
+    <!--
+      维护记录分页按仪器管理范围裁剪：
+      - 负责人只能看到本人负责仪器
+      - 部门管理员只能看到本部门仪器
+      这样可以避免前端通过传参越权查看其他仪器的维护计划。
+    -->
+    select m.*,
+           i.instrument_name as instrumentName,
+           i.instrument_no as instrumentNo,
+           u.real_name as operatorUserName
+    from biz_maintenance_record m
+    inner join biz_instrument i on i.id = m.instrument_id and i.deleted = 0
+    left join sys_user u on u.id = m.operator_user_id
+    where 1 = 1
+    <if test="instrumentId != null">
+      and m.instrument_id = #{instrumentId}
+    </if>
+    <if test="status != null and status != ''">
+      and m.status = #{status}
+    </if>
+    <if test="roleCode == 'INSTRUMENT_OWNER'">
+      and i.owner_user_id = #{operatorId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and i.department_id = #{departmentId}
+    </if>
+    order by m.start_time desc, m.id desc
+    limit #{offset}, #{pageSize}
+  </select>
+
+  <select id="countPageByScope" resultType="long">
+    select count(1)
+    from biz_maintenance_record m
+    inner join biz_instrument i on i.id = m.instrument_id and i.deleted = 0
+    where 1 = 1
+    <if test="instrumentId != null">
+      and m.instrument_id = #{instrumentId}
+    </if>
+    <if test="status != null and status != ''">
+      and m.status = #{status}
+    </if>
+    <if test="roleCode == 'INSTRUMENT_OWNER'">
+      and i.owner_user_id = #{operatorId}
+    </if>
+    <if test="roleCode == 'DEPT_MANAGER'">
+      and i.department_id = #{departmentId}
+    </if>
+  </select>
+
+  <select id="findById" resultType="com.unequipment.platform.modules.instrument.entity.MaintenanceRecord">
+    select m.*,
+           i.instrument_name as instrumentName,
+           i.instrument_no as instrumentNo,
+           u.real_name as operatorUserName
+    from biz_maintenance_record m
+    inner join biz_instrument i on i.id = m.instrument_id and i.deleted = 0
+    left join sys_user u on u.id = m.operator_user_id
+    where m.id = #{id}
+  </select>
+
   <insert id="insert" useGeneratedKeys="true" keyProperty="id">
     insert into biz_maintenance_record(
       instrument_id, maint_type, title, content, start_time, end_time, operator_user_id, status, create_time, update_time
@@ -16,5 +77,21 @@
       #{instrumentId}, #{maintType}, #{title}, #{content}, #{startTime}, #{endTime}, #{operatorUserId}, #{status}, #{createTime}, #{updateTime}
     )
   </insert>
+
+  <update id="update">
+    update biz_maintenance_record
+    set maint_type = #{maintType},
+        title = #{title},
+        content = #{content},
+        start_time = #{startTime},
+        end_time = #{endTime},
+        status = #{status},
+        update_time = #{updateTime}
+    where id = #{id}
+  </update>
+
+  <delete id="deleteById">
+    delete from biz_maintenance_record where id = #{id}
+  </delete>
 
 </mapper>

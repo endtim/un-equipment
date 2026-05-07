@@ -3,14 +3,16 @@ package com.unequipment.platform.modules.instrument.controller;
 import com.unequipment.platform.common.api.ApiResponse;
 import com.unequipment.platform.common.api.PageResponse;
 import com.unequipment.platform.modules.instrument.dto.InstrumentSaveRequest;
+import com.unequipment.platform.modules.instrument.dto.MaintenanceRecordSaveRequest;
 import com.unequipment.platform.modules.instrument.dto.OpenRuleSaveRequest;
 import com.unequipment.platform.modules.instrument.entity.Instrument;
 import com.unequipment.platform.modules.instrument.entity.InstrumentAttachment;
 import com.unequipment.platform.modules.instrument.entity.InstrumentCategory;
 import com.unequipment.platform.modules.instrument.entity.InstrumentOpenRule;
+import com.unequipment.platform.modules.instrument.entity.MaintenanceRecord;
 import com.unequipment.platform.modules.instrument.service.InstrumentService;
-import com.unequipment.platform.modules.system.entity.SysUser;
 import com.unequipment.platform.security.CurrentUser;
+import com.unequipment.platform.modules.system.entity.SysUser;
 import javax.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -85,6 +87,18 @@ public class InstrumentAdminController {
         @RequestParam(defaultValue = "10") int pageSize,
         @CurrentUser SysUser operator) {
         return ApiResponse.success(instrumentService.pageAttachments(operator, pageNum, pageSize));
+    }
+
+    @GetMapping("/maintenance-records")
+    public ApiResponse<PageResponse<MaintenanceRecord>> maintenanceRecordPage(
+        @RequestParam(required = false) Long instrumentId,
+        @RequestParam(required = false) String status,
+        @RequestParam(defaultValue = "1") int pageNum,
+        @RequestParam(defaultValue = "10") int pageSize,
+        @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.pageMaintenanceRecords(
+            instrumentId, status, pageNum, pageSize, operator
+        ));
     }
 
     @PostMapping
@@ -162,9 +176,30 @@ public class InstrumentAdminController {
         return ApiResponse.success(instrumentService.saveAttachment(id, request, operator));
     }
 
+    @PostMapping("/maintenance-records")
+    public ApiResponse<MaintenanceRecord> createMaintenanceRecord(
+        @Valid @RequestBody MaintenanceRecordSaveRequest request,
+        @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.saveMaintenanceRecord(null, request, operator));
+    }
+
+    @PutMapping("/maintenance-records/{id}")
+    public ApiResponse<MaintenanceRecord> updateMaintenanceRecord(
+        @PathVariable Long id,
+        @Valid @RequestBody MaintenanceRecordSaveRequest request,
+        @CurrentUser SysUser operator) {
+        return ApiResponse.success(instrumentService.saveMaintenanceRecord(id, request, operator));
+    }
+
     @DeleteMapping("/attachments/{id}")
     public ApiResponse<?> deleteAttachment(@PathVariable Long id, @CurrentUser SysUser operator) {
         instrumentService.deleteAttachment(id, operator);
+        return ApiResponse.success("成功");
+    }
+
+    @DeleteMapping("/maintenance-records/{id}")
+    public ApiResponse<?> deleteMaintenanceRecord(@PathVariable Long id, @CurrentUser SysUser operator) {
+        instrumentService.deleteMaintenanceRecord(id, operator);
         return ApiResponse.success("成功");
     }
 }

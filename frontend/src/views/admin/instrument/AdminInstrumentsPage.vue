@@ -54,9 +54,10 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="goOpenRules(row)">开放规则</el-button>
+            <el-button link type="primary" @click="goMaintenanceRecords(row)">维护记录</el-button>
             <el-button link @click="openEdit(row)">编辑</el-button>
             <el-button link type="danger" @click="remove(row)">删除</el-button>
           </template>
@@ -397,6 +398,12 @@ export default {
     goOpenRules(row) {
       this.$router.push({
         path: '/admin/open-rules',
+        query: { instrumentId: String(row.id) }
+      })
+    },
+    goMaintenanceRecords(row) {
+      this.$router.push({
+        path: '/admin/maintenance-records',
         query: { instrumentId: String(row.id) }
       })
     },

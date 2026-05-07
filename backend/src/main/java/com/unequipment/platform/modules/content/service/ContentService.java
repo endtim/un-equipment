@@ -155,10 +155,12 @@ public class ContentService {
             notice.setCreateTime(LocalDateTime.now());
             notice.setDeleted(0);
             notice.setCreateBy(user == null ? null : user.getId());
+            // 新增公告保留创建人，便于后台追溯发布来源和后续审计。
             noticeRepository.insert(notice);
         } else {
             noticeRepository.update(notice);
         }
+        // 保存公告后记录操作日志，便于管理员排查公告内容变更来源。
         operationLogService.save(user, "CONTENT", id == null ? "CREATE_NOTICE" : "UPDATE_NOTICE", "notice:" + notice.getTitle());
         return notice;
     }

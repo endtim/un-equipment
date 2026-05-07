@@ -51,6 +51,7 @@ public class AuthService {
         if (user == null) {
             throw new BizException(ErrorCodes.AUTH_INVALID_CREDENTIALS, "用户名或密码错误");
         }
+        // 登录阶段先拦截待审核和停用账号，避免未激活账号拿到 JWT 后访问受限接口。
         if ("PENDING".equalsIgnoreCase(user.getStatus())) {
             throw new BizException(ErrorCodes.UNAUTHORIZED, "账号待审核，请联系管理员完成审核");
         }
@@ -65,6 +66,7 @@ public class AuthService {
         }
         userRepository.updateLastLoginTime(user.getId(), LocalDateTime.now());
         Map<String, Object> result = new HashMap<>();
+        // 令牌只在账号状态和密码均通过后签发，保证后续接口基于可信身份上下文鉴权。
         result.put("token", tokenService.generate(user));
         result.put("user", UserView.from(user));
         return result;
@@ -117,6 +119,7 @@ public class AuthService {
         userRole.setUserId(user.getId());
         userRole.setRoleId(externalRole.getId());
         userRole.setCreateTime(LocalDateTime.now());
+        // 自助注册只授予校外用户基础角色，校内/管理员权限必须由后台审核后再分配。
         userRoleRepository.insert(userRole);
         user.setPrimaryRoleCode("EXTERNAL_USER");
         user.setDepartmentName(department.getDeptName());

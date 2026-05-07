@@ -26,6 +26,7 @@ import AdminRolesPage from '../views/admin/system/AdminRolesPage.vue'
 import AdminDepartmentsPage from '../views/admin/system/AdminDepartmentsPage.vue'
 import AdminCategoriesPage from '../views/admin/instrument/AdminCategoriesPage.vue'
 import AdminInstrumentsPage from '../views/admin/instrument/AdminInstrumentsPage.vue'
+import AdminMaintenanceRecordsPage from '../views/admin/instrument/AdminMaintenanceRecordsPage.vue'
 import AdminOpenRulesPage from '../views/admin/instrument/AdminOpenRulesPage.vue'
 import AdminMachineOrdersPage from '../views/admin/orders/AdminMachineOrdersPage.vue'
 import AdminSampleOrdersPage from '../views/admin/orders/AdminSampleOrdersPage.vue'
@@ -239,6 +240,17 @@ const router = createRouter({
             description: '配置仪器可预约星期与时段，支持多星期规则与生效区间控制。',
             pageType: 'operation',
             breadcrumb: ['管理平台', '仪器管理', '开放规则'],
+            roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER']
+          }
+        },
+        {
+          path: 'maintenance-records',
+          component: AdminMaintenanceRecordsPage,
+          meta: {
+            title: '维护记录',
+            description: '登记仪器维护计划、处理进度和恢复时间，保证停约原因与运行状态展示一致。',
+            pageType: 'operation',
+            breadcrumb: ['管理平台', '仪器管理', '维护记录'],
             roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER']
           }
         },

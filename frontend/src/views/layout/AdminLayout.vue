@@ -101,6 +101,11 @@ const ADMIN_GROUPS = [
         label: '开放规则',
         path: '/admin/open-rules',
         roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER']
+      },
+      {
+        label: '维护记录',
+        path: '/admin/maintenance-records',
+        roles: ['ADMIN', 'INSTRUMENT_OWNER', 'DEPT_MANAGER']
       }
     ]
   },

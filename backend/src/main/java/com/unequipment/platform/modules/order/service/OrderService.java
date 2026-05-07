@@ -115,6 +115,7 @@ public class OrderService {
     @Transactional
     public ReservationOrder createMachineOrder(SysUser user, MachineReservationRequest request) {
         Instrument instrument = instrumentService.getById(request.getInstrumentId());
+        // 预约入口先复用仪器侧状态、开放类型和时间规则，避免订单层绕过仪器配置直接建单。
         instrumentService.ensureReservable(instrument);
         instrumentService.ensureOrderTypeSupported(instrument, TYPE_MACHINE, user);
         instrumentService.validateMachineReserveWindow(instrument, request.getReservedStart(), request.getReservedEnd());
@@ -160,6 +161,7 @@ public class OrderService {
                 if (ex.getCode() != ErrorCodes.ORDER_TIME_CONFLICT) {
                     throw ex;
                 }
+                // 只有时间冲突属于可重试场景，余额不足、权限异常等业务错误必须立即返回给调用方。
                 lastConflict = ex;
                 if (attempt >= CREATE_RETRY_TIMES) {
                     break;
@@ -223,8 +225,10 @@ public class OrderService {
         ReservationOrder order = getOrderForUpdate(orderId);
         assertManageable(order, auditor);
         if (auditor != null && order.getUserId() != null && order.getUserId().equals(auditor.getId())) {
+            // 审核人与申请人不能相同，防止用户绕过负责人/管理员审核形成自批自用。
             throw new BizException(ErrorCodes.PERMISSION_DENIED, "不能审核自己提交的订单");
         }
+        // 审核动作必须受订单状态机约束，避免已取消、已完成订单被重复审批。
         assertActionAllowed(order, ACTION_AUDIT);
 
         String action = request.getAction() == null ? "" : request.getAction().trim().toUpperCase();
@@ -742,6 +746,7 @@ public class OrderService {
         if (excludeOrderId == null) {
             conflict = orderRepository.countMachineConflict(instrumentId, reserveEnd, reserveStart);
         } else {
+            // 审核/编辑场景需要排除当前订单自身，只比较其他未终止订单的占用时段。
             conflict = orderRepository.countMachineConflictExcludeOrder(instrumentId, reserveEnd, reserveStart, excludeOrderId);
         }
         if (conflict > 0) {

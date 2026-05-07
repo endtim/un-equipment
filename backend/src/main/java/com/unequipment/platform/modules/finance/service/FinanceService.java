@@ -120,12 +120,14 @@ public class FinanceService {
         order.setAmount(request.getAmount());
         order.setPayMethod("OFFLINE");
         order.setVoucherUrl(request.getProofUrl());
+        // 用户提交充值后只生成待审核单据，实际余额必须等财务审核通过后再入账。
         order.setStatus("PENDING");
         order.setReviewStatus("NONE");
         order.setRemark(request.getRemark());
         order.setCreateTime(LocalDateTime.now());
         order.setUpdateTime(LocalDateTime.now());
         rechargeOrderRepository.insert(order);
+        // 新充值单会影响财务待办和统计数据，提交后立即清理相关缓存。
         clearFinanceCache();
         operationLogService.save(user, "FINANCE", "SUBMIT_RECHARGE", "recharge:" + order.getRechargeNo());
         return order;
@@ -138,6 +140,7 @@ public class FinanceService {
             throw new BizException(ErrorCodes.RESOURCE_NOT_FOUND, "充值单不存在");
         }
         if (!canManageRecharge(order, auditor)) {
+            // 财务审核必须再次校验数据范围，不能只依赖前端菜单权限控制。
             throw new BizException(ErrorCodes.PERMISSION_DENIED, "无权审核该充值单");
         }
 
@@ -154,6 +157,7 @@ public class FinanceService {
             }
             targetStatus = "REJECT";
             targetRemark = request.getComment().trim();
+            // 驳回也采用条件更新，防止同一充值单被多人同时审核后重复写入结果。
             int rejected = rechargeOrderRepository.rejectIfPendingOrReviewPending(
                 order.getId(),
                 targetStatus,
@@ -246,6 +250,7 @@ public class FinanceService {
         if ("PASS".equals(targetStatus)) {
             Account account = getAccount(order.getUserId());
             BigDecimal before = nullSafe(account.getBalance());
+            // 只有最终审核通过后才增加账户余额，初审进入复核阶段不会真实入账。
             int updated = accountRepository.increaseBalanceForRecharge(account.getId(), order.getAmount(), now);
             if (updated <= 0) {
                 throw new BizException(ErrorCodes.BIZ_ERROR, "账户更新失败，请稍后重试");
@@ -277,6 +282,7 @@ public class FinanceService {
     @Transactional
     public void deductForOrder(ReservationOrder order, SysUser operator) {
         Account account = getAccount(order.getUserId());
+        // 结算金额与冻结金额分开计算，便于处理预估金额和最终金额不一致的情况。
         BigDecimal amount = settlementAmount(order);
         BigDecimal frozenAmount = frozenAmount(order);
         BigDecimal accountFrozen = nullSafe(account.getFrozenAmount());
@@ -297,6 +303,7 @@ public class FinanceService {
             throw new BizException(ErrorCodes.FINANCE_INSUFFICIENT_BALANCE, "可用余额不足，无法完成结算");
         }
 
+        // 扣费成功后再写资金流水，确保流水记录与账户余额变动保持一致。
         recordTransaction(
             order.getUserId(),
             order.getId(),

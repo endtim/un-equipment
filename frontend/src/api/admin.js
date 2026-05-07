@@ -269,6 +269,14 @@ export function getAdminAttachmentsPage(params) {
   })
 }
 
+export function getAdminMaintenanceRecordsPage(params) {
+  return request({
+    url: '/api/admin/instruments/maintenance-records',
+    method: 'get',
+    params
+  })
+}
+
 export function createAttachment(data) {
   return request({
     url: '/api/admin/instruments/attachments',
@@ -288,6 +296,29 @@ export function updateAttachment(id, data) {
 export function deleteAttachment(id) {
   return request({
     url: `/api/admin/instruments/attachments/${id}`,
+    method: 'delete'
+  })
+}
+
+export function createMaintenanceRecord(data) {
+  return request({
+    url: '/api/admin/instruments/maintenance-records',
+    method: 'post',
+    data
+  })
+}
+
+export function updateMaintenanceRecord(id, data) {
+  return request({
+    url: `/api/admin/instruments/maintenance-records/${id}`,
+    method: 'put',
+    data
+  })
+}
+
+export function deleteMaintenanceRecord(id) {
+  return request({
+    url: `/api/admin/instruments/maintenance-records/${id}`,
     method: 'delete'
   })
 }
